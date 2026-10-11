@@ -4,7 +4,7 @@
 #
 # Produit deux fichiers horodatés dans $BACKUP_DIR :
 #   db-<horodatage>.dump       — dump PostgreSQL au format custom (compressé)
-#   files-<horodatage>.tar.gz  — data/uploads (images des notes)
+#   files-<horodatage>.tar.gz  — data/uploads (images des notes) + data/documents (documents de projet)
 #
 #
 # Exécuté :
@@ -40,6 +40,7 @@ mv "$db_tmp" "$BACKUP_DIR/db-$STAMP.dump"
 files_tmp="$BACKUP_DIR/files-$STAMP.tar.gz.part"
 targets=()
 [ -d "$REPO_DIR/data/uploads" ] && targets+=(uploads)
+[ -d "$REPO_DIR/data/documents" ] && targets+=(documents)
 if [ ${#targets[@]} -gt 0 ]; then
   tar czf "$files_tmp" -C "$REPO_DIR/data" "${targets[@]}"
   mv "$files_tmp" "$BACKUP_DIR/files-$STAMP.tar.gz"

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getProject } from "@/lib/projects";
 import { ApiError } from "@/lib/api";
-import { ProjectBoard } from "@/components/projects/ProjectBoard";
+import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -14,11 +14,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   }
-  return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-      <ProjectBoard initial={project} />
-    </div>
-  );
+  return <ProjectWorkspace initial={project} currentUserId={user.id} />;
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {

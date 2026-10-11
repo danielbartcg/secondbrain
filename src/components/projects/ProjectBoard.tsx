@@ -1,103 +1,23 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, ArrowUp, CalendarDays, Check, ChevronDown, ChevronRight, Circle, CircleDot, Layers, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Layers, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ActivityDto, ProjectDto, StageDto, TaskDto } from "@/lib/projects";
 import type { TaskStatus } from "@prisma/client";
-import { Button, InlineEdit, ProgressBar, QuickAdd, formatDate, toInputDate } from "@/components/ui";
-import { STATUS_LABEL } from "./ProjectList";
+import { Avatar, Button, InlineEdit, ProgressBar, QuickAdd, formatDate } from "@/components/ui";
+import { DateField, type Resp, type Run } from "./ProjectWorkspace";
 
 /**
- * Tableau de bord d'un projet : étapes › activités (facultatives) › tâches.
- * Toute mutation renvoie le projet recalculé par l'API (avancements agrégés) :
- * l'état local est simplement remplacé par la réponse.
+ * Plan du projet : étapes › activités (facultatives) › tâches, avec saisie
+ * d'avancement, statut, responsable et accès à la fiche tâche.
  */
-
-type Resp = { project: ProjectDto };
-const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
-
-export function ProjectBoard({ initial }: { initial: ProjectDto }) {
-  const [project, setProject] = useState(initial);
-  const [saving, setSaving] = useState(0);
-  const [showAddStage, setShowAddStage] = useState(initial.stages.length === 0);
-
-  const run = useCallback(async (fn: () => Promise<Resp>) => {
-    setSaving((s) => s + 1);
-    try {
-      const { project } = await fn();
-      setProject(project);
-    } catch (e) {
-      console.error(e);
-      const { project } = await api.get<Resp>(`/projects/${initial.id}`).catch(() => ({ project: null }));
-      if (project) setProject(project);
-    } finally {
-      setSaving((s) => s - 1);
-    }
-  }, [initial.id]);
-
-  const patchProject = (data: Record<string, unknown>) => run(() => api.patch<Resp>(`/projects/${project.id}`, data));
-
+export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }) {
+  const [showAddStage, setShowAddStage] = useState(project.stages.length === 0);
   return (
     <div>
-      {/* En-tête du projet */}
-      <div className="mb-2 flex items-center gap-2 text-sm text-muted">
-        <Link href="/projects" className="flex items-center gap-1 hover:text-ink">
-          <ArrowLeft className="h-4 w-4" /> Projets
-        </Link>
-        <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`}>{saving ? "Enregistrement…" : "Enregistré"}</span>
-      </div>
-
-      <div className="rounded-2xl border border-line bg-surface p-5">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="flex items-center gap-1" title="Couleur">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => patchProject({ color: c })}
-                style={{ backgroundColor: c }}
-                className={`h-4 w-4 rounded-full ${project.color === c ? "ring-2 ring-brand-500 ring-offset-1" : "opacity-60 hover:opacity-100"}`}
-              />
-            ))}
-          </div>
-          <select
-            value={project.status}
-            onChange={(e) => patchProject({ status: e.target.value })}
-            className="ml-auto rounded-lg border border-line-strong bg-surface px-2 py-1 text-xs font-medium"
-          >
-            {Object.entries(STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </div>
-        <InlineEdit value={project.name} onSave={(name) => patchProject({ name })} as="h1" className="-mx-1.5 mt-2 block text-2xl font-semibold tracking-tight" />
-        <InlineEdit
-          value={project.description}
-          onSave={(description) => patchProject({ description })}
-          as="div"
-          multiline
-          placeholder="Ajouter une description…"
-          className="-mx-1.5 mt-1 block whitespace-pre-wrap text-sm text-ink-2"
-        />
-        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-          <DateField label="Début" value={project.startDate} onChange={(v) => patchProject({ startDate: v })} />
-          <DateField label="Échéance" value={project.dueDate} onChange={(v) => patchProject({ dueDate: v })} />
-        </div>
-        <div className="mt-4 flex items-center gap-3">
-          <ProgressBar percent={project.progress.percent} color={project.color} className="h-3" />
-          <span className="shrink-0 text-sm font-semibold tabular-nums">{project.progress.percent}%</span>
-        </div>
-        <p className="mt-1 text-xs text-muted">
-          {project.progress.done}/{project.progress.total} tâche{project.progress.total > 1 ? "s" : ""} terminée{project.progress.done > 1 ? "s" : ""} ·{" "}
-          {project.stages.length} étape{project.stages.length > 1 ? "s" : ""}
-        </p>
-      </div>
-
-      {/* Étapes */}
-      <div className="mt-6 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
           <Layers className="h-5 w-5 text-brand-600" /> Étapes
         </h2>
@@ -115,10 +35,9 @@ export function ProjectBoard({ initial }: { initial: ProjectDto }) {
           }}
         />
       )}
-
       <div className="mt-3 space-y-3">
         {project.stages.map((stage, i) => (
-          <StageCard key={stage.id} stage={stage} index={i} count={project.stages.length} color={project.color} run={run} />
+          <StageCard key={stage.id} stage={stage} index={i} count={project.stages.length} project={project} run={run} />
         ))}
         {project.stages.length === 0 && !showAddStage && (
           <p className="rounded-2xl border border-dashed border-line-strong p-6 text-center text-sm text-muted">Aucune étape : commencez par en ajouter une.</p>
@@ -128,24 +47,7 @@ export function ProjectBoard({ initial }: { initial: ProjectDto }) {
   );
 }
 
-function DateField({ label, value, onChange }: { label: string; value: string | null; onChange: (v: string | null) => void }) {
-  return (
-    <label className="flex items-center gap-2 text-muted">
-      <CalendarDays className="h-4 w-4" />
-      <span>{label}</span>
-      <input
-        type="date"
-        value={toInputDate(value)}
-        onChange={(e) => onChange(e.target.value || null)}
-        className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink"
-      />
-    </label>
-  );
-}
-
-type Run = (fn: () => Promise<Resp>) => Promise<void>;
-
-function StageCard({ stage, index, count, color, run }: { stage: StageDto; index: number; count: number; color: string | null; run: Run }) {
+function StageCard({ stage, index, count, project, run }: { stage: StageDto; index: number; count: number; project: ProjectDto; run: Run }) {
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState<"task" | "activity" | null>(null);
   const patch = (data: Record<string, unknown>) => run(() => api.patch<Resp>(`/stages/${stage.id}`, data));
@@ -163,7 +65,7 @@ function StageCard({ stage, index, count, color, run }: { stage: StageDto; index
             <InlineEdit value={stage.name} onSave={(name) => patch({ name })} as="h3" className="-mx-1.5 font-semibold" />
           </div>
           <div className="mt-2 flex items-center gap-3">
-            <ProgressBar percent={stage.progress.percent} color={color} />
+            <ProgressBar percent={stage.progress.percent} color={project.color} />
             <span className="shrink-0 text-xs font-medium tabular-nums text-ink-2">
               {stage.progress.percent}% · {stage.progress.done}/{total}
             </span>
@@ -195,13 +97,13 @@ function StageCard({ stage, index, count, color, run }: { stage: StageDto; index
       {open && (
         <div className="border-t border-line px-3 pb-3 sm:px-4 sm:pb-4">
           {stage.activities.map((activity, ai) => (
-            <ActivityBlock key={activity.id} activity={activity} index={ai} count={stage.activities.length} color={color} run={run} />
+            <ActivityBlock key={activity.id} activity={activity} index={ai} count={stage.activities.length} project={project} run={run} />
           ))}
 
           {stage.tasks.length > 0 && (
             <div className="mt-3">
               {stage.activities.length > 0 && <p className="mb-1 text-xs font-medium text-muted">Tâches directes de l&apos;étape</p>}
-              <TaskList tasks={stage.tasks} run={run} />
+              <TaskList tasks={stage.tasks} project={project} run={run} />
             </div>
           )}
 
@@ -240,7 +142,7 @@ function StageCard({ stage, index, count, color, run }: { stage: StageDto; index
   );
 }
 
-function ActivityBlock({ activity, index, count, color, run }: { activity: ActivityDto; index: number; count: number; color: string | null; run: Run }) {
+function ActivityBlock({ activity, index, count, project, run }: { activity: ActivityDto; index: number; count: number; project: ProjectDto; run: Run }) {
   const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const patch = (data: Record<string, unknown>) => run(() => api.patch<Resp>(`/activities/${activity.id}`, data));
@@ -257,7 +159,7 @@ function ActivityBlock({ activity, index, count, color, run }: { activity: Activ
             <InlineEdit value={activity.name} onSave={(name) => patch({ name })} as="h4" className="-mx-1.5 text-sm font-medium" />
           </div>
           <div className="mt-1.5 flex items-center gap-3">
-            <ProgressBar percent={activity.progress.percent} color={color} className="h-1.5" />
+            <ProgressBar percent={activity.progress.percent} color={project.color} className="h-1.5" />
             <span className="shrink-0 text-[11px] tabular-nums text-muted">
               {activity.progress.percent}% · {activity.progress.done}/{activity.tasks.length}
             </span>
@@ -283,7 +185,7 @@ function ActivityBlock({ activity, index, count, color, run }: { activity: Activ
       </div>
       {open && (
         <div className="mt-2 pl-6">
-          <TaskList tasks={activity.tasks} run={run} />
+          <TaskList tasks={activity.tasks} project={project} run={run} />
           {adding ? (
             <QuickAdd
               autoFocus
@@ -304,12 +206,12 @@ function ActivityBlock({ activity, index, count, color, run }: { activity: Activ
   );
 }
 
-function TaskList({ tasks, run }: { tasks: TaskDto[]; run: Run }) {
+function TaskList({ tasks, project, run }: { tasks: TaskDto[]; project: ProjectDto; run: Run }) {
   if (tasks.length === 0) return null;
   return (
     <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
       {tasks.map((t, i) => (
-        <TaskRow key={t.id} task={t} index={i} count={tasks.length} run={run} />
+        <TaskRow key={t.id} task={t} index={i} count={tasks.length} project={project} run={run} />
       ))}
     </ul>
   );
@@ -317,9 +219,15 @@ function TaskList({ tasks, run }: { tasks: TaskDto[]; run: Run }) {
 
 const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { TODO: "IN_PROGRESS", IN_PROGRESS: "DONE", DONE: "TODO" };
 
-function TaskRow({ task, index, count, run }: { task: TaskDto; index: number; count: number; run: Run }) {
+function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: number; count: number; project: ProjectDto; run: Run }) {
   const [progress, setProgress] = useState(task.progress);
   const [open, setOpen] = useState(false);
+  const [lastServer, setLastServer] = useState(task.progress);
+  if (task.progress !== lastServer) {
+    setLastServer(task.progress);
+    setProgress(task.progress);
+  }
+  const patch = (data: Record<string, unknown>) => run(() => api.patch<Resp>(`/tasks/${task.id}`, data));
   const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Le curseur envoie sa valeur 400 ms après le dernier mouvement. */
   const onProgress = (value: number) => {
@@ -329,14 +237,9 @@ function TaskRow({ task, index, count, run }: { task: TaskDto; index: number; co
       if (value !== task.progress) void patch({ progress: value });
     }, 400);
   };
-  // Resynchronise le curseur quand le serveur renvoie une nouvelle valeur.
-  const [lastServer, setLastServer] = useState(task.progress);
-  if (task.progress !== lastServer) {
-    setLastServer(task.progress);
-    setProgress(task.progress);
-  }
-  const patch = (data: Record<string, unknown>) => run(() => api.patch<Resp>(`/tasks/${task.id}`, data));
   const done = task.status === "DONE";
+  const assignee = task.assigneeId ? project.members.find((m) => m.id === task.assigneeId) : null;
+  const sheetHref = `/projects/${project.id}/tasks/${task.id}`;
 
   return (
     <li className="px-2 py-2 sm:px-3">
@@ -348,45 +251,35 @@ function TaskRow({ task, index, count, run }: { task: TaskDto; index: number; co
         >
           {done ? <Check className="h-5 w-5" /> : task.status === "IN_PROGRESS" ? <CircleDot className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
         </button>
-        <InlineEdit
-          value={task.name}
-          onSave={(name) => patch({ name })}
-          className={`-mx-1.5 min-w-0 flex-1 text-sm ${done ? "text-muted line-through" : ""}`}
-        />
+        <InlineEdit value={task.name} onSave={(name) => patch({ name })} className={`-mx-1.5 min-w-0 flex-1 text-sm ${done ? "text-muted line-through" : ""}`} />
+        {task.commentCount > 0 && (
+          <Link href={sheetHref} className="hidden items-center gap-0.5 text-xs text-muted sm:flex" title="Commentaires">
+            <MessageSquare className="h-3.5 w-3.5" /> {task.commentCount}
+          </Link>
+        )}
         <div className="hidden items-center gap-2 sm:flex">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={progress}
-            onChange={(e) => onProgress(Number(e.target.value))}
-            className="w-28 accent-brand-600"
-            title="Avancement"
-          />
+          <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-28 accent-brand-600" title="Avancement" />
           <span className="w-9 text-right text-xs tabular-nums text-ink-2">{progress}%</span>
         </div>
         {task.dueDate && (
-          <span className={`hidden shrink-0 text-xs md:inline ${!done && new Date(task.dueDate) < new Date() ? "text-danger" : "text-muted"}`}>
-            {formatDate(task.dueDate)}
-          </span>
+          <span className={`hidden shrink-0 text-xs md:inline ${!done && new Date(task.dueDate) < new Date() ? "text-danger" : "text-muted"}`}>{formatDate(task.dueDate)}</span>
         )}
-        <button onClick={() => setOpen((v) => !v)} className="rounded p-1 text-muted hover:bg-surface-2" title="Détails">
+        {assignee ? (
+          <Avatar id={assignee.id} name={assignee.name} color={assignee.color} size={24} />
+        ) : (
+          <span className="hidden h-6 w-6 shrink-0 rounded-full border border-dashed border-line-strong sm:inline-block" title="Non affectée" />
+        )}
+        <Link href={sheetHref} className="rounded p-1 text-muted hover:bg-surface-2" title="Ouvrir la fiche tâche">
+          <ExternalLink className="h-4 w-4" />
+        </Link>
+        <button onClick={() => setOpen((v) => !v)} className="rounded p-1 text-muted hover:bg-surface-2" title="Détails rapides">
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
       </div>
 
       {/* Avancement visible sur mobile */}
       <div className="mt-1.5 flex items-center gap-2 pl-7 sm:hidden">
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={5}
-          value={progress}
-          onChange={(e) => onProgress(Number(e.target.value))}
-          className="flex-1 accent-brand-600"
-        />
+        <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="flex-1 accent-brand-600" />
         <span className="w-9 text-right text-xs tabular-nums text-ink-2">{progress}%</span>
       </div>
 
@@ -401,6 +294,18 @@ function TaskRow({ task, index, count, run }: { task: TaskDto; index: number; co
             className="-mx-1.5 block whitespace-pre-wrap text-ink-2"
           />
           <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-muted">
+              Responsable
+              <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink">
+                <option value="">— Personne —</option>
+                {project.members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <DateField label="Début" value={task.startDate} onChange={(v) => patch({ startDate: v })} />
             <DateField label="Échéance" value={task.dueDate} onChange={(v) => patch({ dueDate: v })} />
             <div className="ml-auto flex items-center">
               <IconBtn title="Monter" disabled={index === 0} onClick={() => patch({ order: index - 1 })}>

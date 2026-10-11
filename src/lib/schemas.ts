@@ -18,6 +18,7 @@ const isoDate = z
   .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
   .nullable()
   .optional();
+const nullableId = z.string().min(1).nullable().optional();
 
 // --- Authentification --------------------------------------------------------
 export const registerSchema = z.object({
@@ -60,6 +61,7 @@ export const moveNodeSchema = z.object({
 // --- Projets -----------------------------------------------------------------
 export const projectStatusSchema = z.enum(["ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"]);
 export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "DONE"]);
+export const deliverableStatusSchema = z.enum(["PLANNED", "IN_PROGRESS", "DELIVERED", "VALIDATED"]);
 
 export const createProjectSchema = z.object({
   name: title,
@@ -91,13 +93,61 @@ export const createTaskSchema = z.object({
   description: longText,
   status: taskStatusSchema.optional(),
   progress: z.number().int().min(0).max(100).optional(),
+  startDate: isoDate,
   dueDate: isoDate,
+  /** Membre de l'équipe projet affecté. */
+  assigneeId: nullableId,
 });
 export const updateTaskSchema = createTaskSchema.partial().extend({
   order: z.number().int().min(0).optional(),
   /** Déplacer la tâche : vers une activité (id) ou directement sous l'étape (null). */
-  activityId: z.string().min(1).nullable().optional(),
+  activityId: nullableId,
   stageId: z.string().min(1).optional(),
+});
+
+// --- Équipe ------------------------------------------------------------------
+export const createMemberSchema = z
+  .object({
+    /** Compte de l'application à inviter (prioritaire sur name/email). */
+    userId: z.string().min(1).optional(),
+    name: z.string().trim().min(1).max(100).optional(),
+    email: z.string().trim().toLowerCase().email().max(200).nullable().optional(),
+    role: z.string().trim().max(100).nullable().optional(),
+    color,
+  })
+  .refine((v) => v.userId || v.name, { message: "userId ou name requis", path: ["name"] });
+export const updateMemberSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  email: z.string().trim().toLowerCase().email().max(200).nullable().optional(),
+  role: z.string().trim().max(100).nullable().optional(),
+  color,
+});
+
+// --- Livrables ---------------------------------------------------------------
+export const createDeliverableSchema = z.object({
+  name: title,
+  description: longText,
+  status: deliverableStatusSchema.optional(),
+  stageId: nullableId,
+  assigneeId: nullableId,
+  expectedStart: isoDate,
+  expectedEnd: isoDate,
+  deliveredAt: isoDate,
+});
+export const updateDeliverableSchema = createDeliverableSchema.partial().extend({
+  order: z.number().int().min(0).optional(),
+});
+
+// --- Documents ---------------------------------------------------------------
+export const updateDocumentSchema = z.object({
+  name: title.optional(),
+  deliverableId: nullableId,
+});
+
+// --- Commentaires ------------------------------------------------------------
+export const createCommentSchema = z.object({
+  /** Texte avec mentions `@[Nom](memberId)`. */
+  body: z.string().trim().min(1, "Commentaire vide").max(10_000),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -113,3 +163,9 @@ export type CreateActivityInput = z.infer<typeof createActivitySchema>;
 export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+export type CreateMemberInput = z.infer<typeof createMemberSchema>;
+export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
+export type CreateDeliverableInput = z.infer<typeof createDeliverableSchema>;
+export type UpdateDeliverableInput = z.infer<typeof updateDeliverableSchema>;
+export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
+export type CreateCommentInput = z.infer<typeof createCommentSchema>;

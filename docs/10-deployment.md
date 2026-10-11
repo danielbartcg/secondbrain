@@ -12,24 +12,28 @@ les deux applications (dépôt, base, conteneurs, sauvegardes distincts).
 | Base | conteneur `boutique-db-1` | conteneur `secondbrain-db-1` |
 | Sauvegardes | `/home/deploy/backups` | `/home/deploy/backups-secondbrain` (cron 3h25) |
 
+Domaine : `secondbrain.danielbar-tcg.fr` (enregistrement A dans la zone DNS
+OVH de `danielbar-tcg.fr`). Certificat Let's Encrypt automatique par Caddy.
+
 ## Configuration locale
 
 Les scripts `ops/` lisent `.env.deploy` (gitignoré) : hôte, utilisateur, clé
 SSH, domaine, dépôt, port. Modèle : `.env.deploy.example`.
 
-## Première installation
+## Première installation / mise à jour de l'infrastructure
 
 ```bash
 npm run prod:setup
 ```
 
-Idempotent. Sur un serveur déjà provisionné pour la boutique, il se contente
-d'ajouter : le site Caddy du domaine, le clone du dépôt, le `.env` (secrets
-générés), le répertoire `data/uploads`, le cron de sauvegarde.
+Idempotent. Sur un serveur déjà provisionné, il se contente d'ajouter ou de
+réécrire : le site Caddy du domaine (limite de corps 30 Mo), le clone du dépôt,
+le `.env` (secrets générés, laissé intact s'il existe), les répertoires
+`data/uploads` et `data/documents` (uid 1001), le cron de sauvegarde.
+**À relancer chaque fois que `ops/server/provision.sh` change.**
 
-Prérequis : le DNS `secondbrain.danielbar-tcg.fr` → IP du serveur (enregistrement
-A). Caddy obtient le certificat Let's Encrypt automatiquement dès que le
-domaine résout ; avant cela, le site répond en erreur TLS.
+`apt-get update` est non bloquant : le dépôt apt de Caddy (cloudsmith)
+répond parfois 402 ; Caddy étant déjà installé, on continue.
 
 ## Mettre en production
 
@@ -39,8 +43,8 @@ npm run prod:deploy
 ```
 
 Séquence : sauvegarde (si la base tourne) → `git pull` → build des images →
-`prisma migrate deploy` (conteneur `tools`) → recréation du conteneur `app` →
-contrôle de santé HTTPS.
+`prisma migrate deploy` (conteneur `tools`) → `chown` des données →
+recréation du conteneur `app` → contrôle de santé HTTPS (2 min).
 
 Options : `--skip-backup`, `--force` (déployer malgré des commits non poussés —
 inutile, le serveur tire GitHub).
@@ -54,10 +58,10 @@ inutile, le serveur tire GitHub).
 | `npm run prod:exec -- "npx tsx scripts/create-user.ts --email=… --password=… --name=…"` | commande dans le conteneur `tools` |
 | `npm run prod:exec -- --service=db "psql -U secondbrain secondbrain -c '\dt'"` | SQL direct |
 | `npm run prod:env` / `-- --set CLE=valeur --restart` | lire / modifier le `.env` serveur (jamais à la main) |
-| `npm run prod:backup [-- --pull]` | sauvegarde immédiate (dump + uploads), rapatriement optionnel |
+| `npm run prod:backup [-- --pull]` | sauvegarde immédiate (dump + uploads + documents), rapatriement optionnel |
 | `npm run prod:restore -- --file=db-….dump --yes` | restauration (destructive, sauvegarde préalable automatique) |
 
-Fermer les inscriptions une fois votre compte créé :
+Fermer les inscriptions une fois les comptes créés :
 
 ```bash
 npm run prod:env -- --set ALLOW_REGISTRATION=false --restart
@@ -67,18 +71,29 @@ npm run prod:env -- --set ALLOW_REGISTRATION=false --restart
 
 - `db` : PostgreSQL 16, volume `postgres_data`, publié sur `127.0.0.1:55432`
   en production (`DB_PORT`) — jamais exposé publiquement.
-- `app` : image standalone Next.js, port `APP_PORT:3000`, volume
-  `./data/uploads`.
+- `app` : image standalone Next.js, port `APP_PORT:3000`, volumes
+  `./data/uploads` et `./data/documents`.
 - `tools` (profil `tools`) : étage `builder` de la même image, pour les
   migrations et les scripts. Même uid 1001 que l'application.
+
+## Sauvegardes
+
+`ops/server/backup.sh` (cron quotidien 3h25 + `prod:backup`) produit
+`db-<date>.dump` (pg_dump format custom) et `files-<date>.tar.gz`
+(`data/uploads` + `data/documents`), rotation 14 jours. Copie hors-site
+Backblaze possible si un profil rclone `b2` et `~/.config/secondbrain/backup.env`
+existent (non configuré pour l'instant).
 
 ## Pièges connus
 
 - Les commandes distantes sont encodées en base64 (`ops/lib/ssh.ts`) : pas
   d'échappement à gérer, et `docker compose run` ne peut pas avaler le reste du
   script.
-- `data/uploads` doit exister **avant** le premier `docker compose up`, sinon
-  Docker le crée en root et l'application (uid 1001) ne peut plus écrire.
-  `provision.sh` et `deploy.ts` s'en chargent.
+- `data/uploads` et `data/documents` doivent exister **avant** le premier
+  `docker compose up`, sinon Docker les crée en root et l'application
+  (uid 1001) ne peut plus écrire. `provision.sh` et `deploy.ts` s'en chargent.
+- Un fichier `.sh` modifié sous Windows doit rester en LF (`.gitattributes`).
 - Le cache de build Docker est plafonné (`/etc/docker/daemon.json`, posé par
   le provisionnement de la boutique).
+- Le contrôle de santé échoue tant que le DNS ne pointe pas sur le serveur ;
+  les conteneurs tournent quand même (`curl http://localhost:3001` sur le VPS).

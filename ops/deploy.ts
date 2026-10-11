@@ -82,7 +82,7 @@ sshOrDie(
       `docker compose up -d db`,
       // Migrations AVANT de basculer l'application.
       `docker compose run --rm tools node node_modules/prisma/build/index.js migrate deploy`,
-      `mkdir -p data/uploads`,
+      `mkdir -p data/uploads data/documents`,
       `sudo chown -R 1001:1001 data`,
       `docker compose up -d --build --force-recreate --no-deps app`,
       `docker compose ps`,

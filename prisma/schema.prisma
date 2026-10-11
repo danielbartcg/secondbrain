@@ -15,16 +15,19 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   passwordHash String
   name         String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  sessions Session[]
-  mindMaps MindMap[]
-  projects Project[]
+  sessions    Session[]
+  mindMaps    MindMap[]
+  projects    Project[]
+  memberships ProjectMember[]
+  comments    TaskComment[]
+  documents   Document[]
 }
 
 /// Session opaque : le même jeton sert de cookie `session` (web) et de
@@ -82,6 +85,7 @@ model MindNode {
 
 // ---------------------------------------------------------------------------
 // Gestion de projet : Projet > Étape > (Activité) > Tâche
+//                     + équipe, livrables, documents, commentaires
 // ---------------------------------------------------------------------------
 
 enum ProjectStatus {
@@ -97,6 +101,13 @@ enum TaskStatus {
   DONE
 }
 
+enum DeliverableStatus {
+  PLANNED
+  IN_PROGRESS
+  DELIVERED
+  VALIDATED
+}
+
 model Project {
   id          String        @id @default(cuid())
   ownerId     String
@@ -110,9 +121,35 @@ model Project {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  stages Stage[]
+  stages       Stage[]
+  members      ProjectMember[]
+  deliverables Deliverable[]
+  documents    Document[]
 
   @@index([ownerId])
+}
+
+/// Membre de l'équipe projet : soit un compte de l'application (`userId`),
+/// soit un simple nom saisi en dur. Les tâches et livrables lui sont affectés.
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  email     String?
+  /// Rôle dans le projet (libre : « Chef de projet », « Développeur »…)
+  role      String?
+  color     String?
+  createdAt DateTime @default(now())
+
+  tasks        Task[]
+  deliverables Deliverable[]
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
 }
 
 model Stage {
@@ -127,8 +164,9 @@ model Stage {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  activities Activity[]
-  tasks      Task[]
+  activities   Activity[]
+  tasks        Task[]
+  deliverables Deliverable[]
 
   @@index([projectId])
 }
@@ -151,21 +189,92 @@ model Activity {
 }
 
 model Task {
-  id          String     @id @default(cuid())
+  id          String         @id @default(cuid())
   stageId     String
-  stage       Stage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  stage       Stage          @relation(fields: [stageId], references: [id], onDelete: Cascade)
   activityId  String?
-  activity    Activity?  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activity    Activity?      @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    ProjectMember? @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
   name        String
-  description String     @default("")
-  status      TaskStatus @default(TODO)
+  description String         @default("")
+  status      TaskStatus     @default(TODO)
   /// Avancement 0..100 ; DONE force 100.
-  progress    Int        @default(0)
-  order       Int        @default(0)
+  progress    Int            @default(0)
+  order       Int            @default(0)
+  startDate   DateTime?
   dueDate     DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  comments TaskComment[]
 
   @@index([stageId])
   @@index([activityId])
+  @@index([assigneeId])
+}
+
+/// Commentaire sur une tâche. `body` contient des mentions au format
+/// `@[Nom](memberId)` ; `mentions` liste les identifiants de membres cités.
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  mentions  String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+}
+
+/// Livrable attendu du projet, éventuellement rattaché à une étape.
+model Deliverable {
+  id            String            @id @default(cuid())
+  projectId     String
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId       String?
+  stage         Stage?            @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  assigneeId    String?
+  assignee      ProjectMember?    @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  name          String
+  description   String            @default("")
+  status        DeliverableStatus @default(PLANNED)
+  expectedStart DateTime?
+  expectedEnd   DateTime?
+  deliveredAt   DateTime?
+  order         Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  documents Document[]
+
+  @@index([projectId])
+  @@index([stageId])
+}
+
+/// Document du projet (fichier stocké sous DATA_DIR/documents), pouvant
+/// matérialiser un livrable.
+model Document {
+  id            String       @id @default(cuid())
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deliverableId String?
+  deliverable   Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: SetNull)
+  uploadedById  String?
+  uploadedBy    User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  /// Nom affiché (modifiable)
+  name          String
+  /// Nom d'origine du fichier téléversé
+  originalName  String
+  mimeType      String
+  size          Int
+  /// Chemin relatif à DATA_DIR/documents (nom aléatoire)
+  storagePath   String
+  createdAt     DateTime     @default(now())
+
+  @@index([projectId])
+  @@index([deliverableId])
 }

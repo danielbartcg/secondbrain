@@ -23,6 +23,7 @@
     "prod:backup": "tsx ops/backup.ts"
   },
   "dependencies": {
+    "@amcharts/amcharts4": "^4.10.40",
     "@prisma/client": "6.19.3",
     "@tiptap/extension-image": "^2.27.3",
     "@tiptap/extension-link": "2.27.3",

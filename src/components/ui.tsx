@@ -177,3 +177,69 @@ export function formatDate(iso: string | null | undefined): string {
 export function toInputDate(iso: string | null | undefined): string {
   return iso ? iso.slice(0, 10) : "";
 }
+
+export const MEMBER_PALETTE = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
+
+/** Couleur stable dérivée d'un identifiant (membre sans couleur choisie). */
+export function colorFor(id: string, explicit?: string | null): string {
+  if (explicit) return explicit;
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return MEMBER_PALETTE[h % MEMBER_PALETTE.length];
+}
+
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Pastille d'initiales d'un membre. */
+export function Avatar({ name, color, id, size = 28, className = "", title }: { name: string; color?: string | null; id: string; size?: number; className?: string; title?: string }) {
+  return (
+    <span
+      title={title ?? name}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${className}`}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.4), backgroundColor: colorFor(id, color) }}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+export function Badge({ children, tone = "neutral", className = "" }: { children: React.ReactNode; tone?: "neutral" | "brand" | "ok" | "warn" | "danger" | "violet"; className?: string }) {
+  const tones = {
+    neutral: "bg-surface-3 text-ink-2",
+    brand: "bg-brand-50 text-brand-700",
+    ok: "bg-green-50 text-green-700",
+    warn: "bg-amber-50 text-amber-700",
+    danger: "bg-red-50 text-red-700",
+    violet: "bg-violet-50 text-violet-700",
+  }[tone];
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tones} ${className}`}>{children}</span>;
+}
+
+export const selectClass = "rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+export const inputClass = "rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} Mo`;
+}
+
+export function relativeDays(days: number): string {
+  if (days === 0) return "aujourd'hui";
+  if (days === 1) return "demain";
+  if (days === -1) return "hier";
+  if (days < 0) return `il y a ${-days} j`;
+  return `dans ${days} j`;
+}
+
+export const TASK_STATUS_LABEL = { TODO: "À faire", IN_PROGRESS: "En cours", DONE: "Terminée" } as const;
+export const TASK_STATUS_TONE = { TODO: "neutral", IN_PROGRESS: "brand", DONE: "ok" } as const;
+export const DELIVERABLE_STATUS_LABEL = { PLANNED: "Prévu", IN_PROGRESS: "En cours", DELIVERED: "Livré", VALIDATED: "Validé" } as const;
+export const DELIVERABLE_STATUS_TONE = { PLANNED: "neutral", IN_PROGRESS: "brand", DELIVERED: "warn", VALIDATED: "ok" } as const;
+export const DELIVERABLE_STATUS_COLOR = { PLANNED: "#94a3b8", IN_PROGRESS: "#4f5ff0", DELIVERED: "#d98a0b", VALIDATED: "#1f9d55" } as const;
+export const TASK_STATUS_COLOR = { TODO: "#94a3b8", IN_PROGRESS: "#4f5ff0", DONE: "#1f9d55" } as const;

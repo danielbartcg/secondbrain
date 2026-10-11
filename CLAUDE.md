@@ -1,53 +1,88 @@
 # Instructions pour Claude Code — Second Brain
 
+## Avant toute chose : lire, puis tenir à jour la documentation
+
+Les markdowns de `docs/` sont la mémoire du projet et se réutilisent d'un
+projet à l'autre. **Lire au début de chaque session** :
+
+1. [docs/01-architecture.md](docs/01-architecture.md) — briques, décisions, conventions ;
+2. [docs/02-data-model.md](docs/02-data-model.md) — modèle Prisma et invariants ;
+3. [docs/03-screens.md](docs/03-screens.md) — écrans et composants ;
+4. [docs/04-api.md](docs/04-api.md) — contrat REST `/api/v1` (web + mobile) ;
+5. [docs/10-deployment.md](docs/10-deployment.md) — exploitation du VPS.
+
+**Toute évolution DOIT être répercutée** dans ces fichiers **avant** de
+considérer la tâche terminée : nouveau modèle → 02, nouvel écran/composant →
+03, nouvel endpoint ou champ → 04, nouvelle brique ou décision → 01, nouveau
+script/volume/variable → 10 et README. Un script npm ajouté apparaît dans le
+README.
+
 ## Architecture : l'API d'abord
 
 - **Toute mutation passe par `/api/v1`** (route handlers `src/app/api/v1/**`),
   jamais par des Server Actions : la même API sert au web (cookie) et servira
   à l'application mobile (`Authorization: Bearer`). Le client web appelle
   l'API via `src/lib/client.ts`.
-- **Logique métier dans `src/lib/`** (`mindmaps.ts`, `projects.ts`, `auth.ts`,
-  `uploads.ts`) ; les route handlers restent minces : validation zod
-  (`src/lib/schemas.ts`) → appel métier → JSON.
+- **Logique métier dans `src/lib/`** (`projects.ts`, `tasks.ts`, `documents.ts`,
+  `dashboard.ts`, `mindmaps.ts`, `auth.ts`, `uploads.ts`) ; les route handlers
+  restent minces : validation zod (`src/lib/schemas.ts`) → métier → JSON.
 - Les pages serveur lisent directement `src/lib/*` (pas de fetch interne).
-- Tout nouvel endpoint ou champ doit être documenté dans `docs/04-api.md`,
-  tout changement de `prisma/schema.prisma` dans `docs/02-data-model.md`.
+- Les mutations d'un projet renvoient **le projet complet recalculé** ; le
+  client remplace son état (`ProjectWorkspace.run`).
+
+## Graphiques : amCharts 4, toujours
+
+Tout graphique utilise `@amcharts/amcharts4` via l'enveloppe
+`src/components/charts/AmChart.tsx` (import dynamique côté client, disposal au
+démontage, couleurs du thème résolues par `themeColor()`). Composants
+existants : `StatusDonut`, `ProgressBarsChart`, `PlanningChart` (Gantt).
+Pas de Recharts, Chart.js, d3 custom ni SVG maison pour un graphique. Le petit
+logo amCharts reste affiché (licence gratuite).
 
 ## Sécurité
 
 1. Route authentifiée = `withUser(...)` (`src/lib/api.ts`) ; route publique =
-   `withPublic(...)`. Jamais de handler nu.
-2. **Anti-IDOR** : toute fonction métier reçoit `userId` et vérifie la
-   propriété de la ressource (`ownedMap`, `ownedProject`, `ownedStage`…) avant
-   d'agir. Ne jamais manipuler une ressource par id seul.
+   `withPublic(...)`. Jamais de handler nu (sauf téléchargements binaires, qui
+   appellent `getCurrentUser()` eux-mêmes).
+2. **Anti-IDOR** : toute fonction métier reçoit `userId` et vérifie l'accès
+   (`requireProjectAccess` = propriétaire ou membre rattaché à un compte ;
+   `requireProjectOwner` pour supprimer / gérer l'équipe ; `ownedMap` pour les
+   cartes). Ne jamais manipuler une ressource par id seul.
 3. Validation zod de toute entrée ; bornes sur longueurs et nombres.
-4. HTML des notes : `sanitizeNotes()` (`src/lib/sanitize.ts`) à
-   l'enregistrement **et** au rendu. Pas de `dangerouslySetInnerHTML` sur du
-   contenu non assaini. Ne jamais remplacer `sanitize-html` par des regex.
-5. Uploads : allowlist MIME, taille bornée, nom aléatoire, pas de SVG ; accès
-   disque borné par `resolveMediaPath`.
-6. Prisma uniquement ; pas de SQL concaténé.
+4. HTML des notes : `sanitizeNotes()` à l'enregistrement **et** au rendu. Pas
+   de `dangerouslySetInnerHTML` sur du contenu non assaini. Jamais de regex à
+   la place de `sanitize-html`.
+5. Fichiers : allowlist MIME, taille bornée, nom aléatoire, pas de SVG ; accès
+   disque borné (`resolveMediaPath`, `resolveDocumentPath`). Les documents de
+   projet se téléchargent via une route authentifiée, jamais par URL publique.
+6. Prisma uniquement ; `$queryRaw` seulement en template literal paramétré.
 7. Secrets uniquement en variables d'environnement (`.env` gitignoré).
 8. Sessions opaques en base, cookie `httpOnly` + `sameSite=lax` + `secure` en
-   production ; bcrypt coût 12 ; rate limiting sur l'authentification.
+   production ; bcrypt coût 12 ; rate limiting sur l'authentification et la
+   recherche d'utilisateurs.
 9. Les requêtes mutantes authentifiées par cookie vérifient l'en-tête `Origin`
    (fait dans `withUser` / `withPublic`).
 
 ## Conventions
 
-- UI en français, **responsive** (mobile-first, Tailwind). Tester les écrans
-  en largeur mobile : barre latérale → tiroir, panneau de détails → tiroir bas.
+- UI en français, **responsive** (mobile-first, Tailwind). Tester en largeur
+  mobile : barre latérale → tiroir, panneau de détails → tiroir bas, onglets
+  défilants, curseurs sous la ligne de tâche.
 - Éditeur riche : `src/components/RichTextEditor.tsx` (collage d'image
   optimiste : aperçu blob immédiat, upload en arrière-plan). Conserver ce
   comportement dans toute évolution.
-- Vérifier `npm run typecheck` puis `npm run build` avant de conclure.
+- Mutations concurrentes : toujours dans `mutateProject` / `mutateMap`
+  (verrou de ligne), sinon interblocage PostgreSQL.
+- Vérifier `npm run typecheck` puis `npm run build` avant de conclure ; tester
+  dans le navigateur (dev server) les parcours touchés.
 
 ## Production
 
 - Config dans `.env.deploy` (gitignoré) ; mode d'emploi dans
   `docs/10-deployment.md`.
 - **Déployer = `git push` puis `npm run prod:deploy`** : le serveur tire le
-  code depuis GitHub.
+  code depuis GitHub. Si `ops/server/provision.sh` change (Caddy, répertoires),
+  relancer `npm run prod:setup` (idempotent) avant.
 - Commandes nécessitant `scripts/`, `tsx` ou le CLI Prisma :
   `npm run prod:exec -- "…"` (conteneur `tools`).
 - Ne jamais éditer le `.env` du serveur à la main :

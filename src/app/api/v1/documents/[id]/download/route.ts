@@ -1,0 +1,33 @@
+import fs from "node:fs/promises";
+import { NextResponse, type NextRequest } from "next/server";
+import { errorResponse } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
+import { documentForDownload } from "@/lib/documents";
+
+/**
+ * GET /api/v1/documents/:id/download — téléchargement authentifié (cookie ou
+ * Bearer) d'un document de projet. `?inline=1` pour un affichage dans le
+ * navigateur (PDF, images) au lieu d'un téléchargement.
+ */
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("UNAUTHENTICATED");
+    const { id } = await ctx.params;
+    const doc = await documentForDownload(user.id, id);
+    const data = await fs.readFile(doc.path);
+    const inline = req.nextUrl.searchParams.get("inline") === "1";
+    const safeName = doc.fileName.replace(/["\r\n]/g, "_");
+    return new NextResponse(new Uint8Array(data), {
+      headers: {
+        "Content-Type": doc.mimeType,
+        "Content-Length": String(data.byteLength),
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(doc.fileName)}`,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+      },
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
