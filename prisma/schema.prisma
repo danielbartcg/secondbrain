@@ -1,0 +1,171 @@
+// Second Brain — modèle de données.
+// Documentation : docs/02-data-model.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Comptes et sessions
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions Session[]
+  mindMaps MindMap[]
+  projects Project[]
+}
+
+/// Session opaque : le même jeton sert de cookie `session` (web) et de
+/// `Authorization: Bearer` (application mobile).
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Libellé libre du client (« Web », « iPhone de Daniel »…)
+  label     String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Cartes mentales
+// ---------------------------------------------------------------------------
+
+model MindMap {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nodes MindNode[]
+
+  @@index([ownerId])
+}
+
+/// Nœud d'une carte : arbre par `parentId` (null = racine), ordonné par `order`.
+model MindNode {
+  id        String     @id @default(cuid())
+  mapId     String
+  map       MindMap    @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    MindNode?  @relation("MindNodeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  MindNode[] @relation("MindNodeTree")
+  title     String
+  /// Notes au format HTML (assainies à l'enregistrement ET au rendu).
+  notes     String     @default("")
+  color     String?
+  collapsed Boolean    @default(false)
+  order     Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([mapId])
+  @@index([parentId])
+}
+
+// ---------------------------------------------------------------------------
+// Gestion de projet : Projet > Étape > (Activité) > Tâche
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  DONE
+  ARCHIVED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  ownerId     String
+  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  description String        @default("")
+  color       String?
+  status      ProjectStatus @default(ACTIVE)
+  startDate   DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  stages Stage[]
+
+  @@index([ownerId])
+}
+
+model Stage {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String    @default("")
+  order       Int       @default(0)
+  startDate   DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  activities Activity[]
+  tasks      Task[]
+
+  @@index([projectId])
+}
+
+/// Niveau intermédiaire facultatif : une tâche peut être rattachée
+/// directement à l'étape (activityId null).
+model Activity {
+  id          String   @id @default(cuid())
+  stageId     String
+  stage       Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  name        String
+  description String   @default("")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks Task[]
+
+  @@index([stageId])
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  stageId     String
+  stage       Stage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  activityId  String?
+  activity    Activity?  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  name        String
+  description String     @default("")
+  status      TaskStatus @default(TODO)
+  /// Avancement 0..100 ; DONE force 100.
+  progress    Int        @default(0)
+  order       Int        @default(0)
+  dueDate     DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([stageId])
+  @@index([activityId])
+}

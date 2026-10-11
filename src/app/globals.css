@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* ==========================================================================
+   Thème Second Brain — sobre, lisible, mobile-first.
+   ========================================================================== */
+@theme {
+  --color-canvas: #f6f5f2;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f2ee;
+  --color-surface-3: #e9e7e1;
+
+  --color-line: #e3e1db;
+  --color-line-strong: #c8c5bc;
+
+  --color-ink: #17171a;
+  --color-ink-2: #3b3b40;
+  --color-muted: #6d6c72;
+  --color-faint: #9a999f;
+
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #dbe3ff;
+  --color-brand-500: #4f5ff0;
+  --color-brand-600: #3f4ee0;
+  --color-brand-700: #3340bf;
+  --color-on-brand: #ffffff;
+
+  --color-ok: #1f9d55;
+  --color-warn: #d98a0b;
+  --color-danger: #d13b3b;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-canvas text-ink antialiased;
+}
+
+/* --- Éditeur de notes (TipTap) ------------------------------------------- */
+.ProseMirror {
+  @apply min-h-(--editor-min-height,200px) rounded-b-lg border border-t-0 border-line-strong bg-surface px-4 py-3 outline-none;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none float-left h-0 text-faint;
+}
+.ProseMirror img {
+  @apply my-2 max-w-full rounded-md;
+}
+.ProseMirror img.ProseMirror-selectednode {
+  @apply ring-2 ring-brand-500;
+}
+.ProseMirror ul[data-type="taskList"] {
+  @apply list-none pl-0;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  @apply flex items-start gap-2;
+}
+.ProseMirror ul[data-type="taskList"] li > label {
+  @apply mt-1 shrink-0;
+}
+.ProseMirror ul[data-type="taskList"] li > div {
+  @apply flex-1;
+}
+
+/* --- Carte mentale (React Flow) ------------------------------------------ */
+.react-flow__attribution {
+  display: none;
+}
+.mind-node {
+  @apply rounded-xl border-2 bg-surface px-3 py-2 text-sm shadow-sm transition-shadow;
+  min-width: 80px;
+  max-width: 260px;
+}
+.mind-node.is-selected {
+  @apply shadow-md ring-2 ring-brand-500 ring-offset-2 ring-offset-canvas;
+}
+.mind-node.is-root {
+  @apply rounded-2xl px-5 py-3 text-base font-semibold;
+}
+.mind-node input {
+  @apply w-full bg-transparent outline-none;
+}
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Masque la barre de défilement tout en gardant le défilement (listes horizontales mobiles). */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

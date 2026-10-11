@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+!.env.deploy.example
+backups
+node_modules
+.next
+out
+*.tsbuildinfo
+.git
+.gitignore
+.claude
+docs
+README.md
+CLAUDE.md
