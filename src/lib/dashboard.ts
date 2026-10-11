@@ -72,8 +72,8 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
     }),
   ]);
 
-  const statusCounts: Record<TaskStatus, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0 };
-  const myStatusCounts: Record<TaskStatus, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0 };
+  const statusCounts: Record<TaskStatus, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0, CLOSED: 0 };
+  const myStatusCounts: Record<TaskStatus, number> = { TODO: 0, IN_PROGRESS: 0, DONE: 0, CLOSED: 0 };
   const myTasks: DashboardTask[] = [];
   const deadlines: Deadline[] = [];
   let overdueCount = 0;
@@ -93,7 +93,7 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
         assigneeName: t.assignee?.name ?? null,
       });
     }
-    if (t.dueDate && t.status !== "DONE") {
+    if (t.dueDate && t.status !== "DONE" && t.status !== "CLOSED") {
       const left = daysLeft(t.dueDate, now);
       if (left < 0) overdueCount++;
       if (left <= horizon) {
@@ -141,8 +141,9 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
   deadlines.sort((a, b) => a.daysLeft - b.daysLeft);
 
   // Mes tâches : les non terminées d'abord, par échéance.
+  const finished = (s: TaskStatus) => s === "DONE" || s === "CLOSED";
   myTasks.sort((a, b) => {
-    if ((a.status === "DONE") !== (b.status === "DONE")) return a.status === "DONE" ? 1 : -1;
+    if (finished(a.status) !== finished(b.status)) return finished(a.status) ? 1 : -1;
     return (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999");
   });
 

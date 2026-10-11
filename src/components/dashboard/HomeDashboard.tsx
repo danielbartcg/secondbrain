@@ -14,7 +14,9 @@ import {
   TASK_STATUS_COLOR,
   TASK_STATUS_LABEL,
   TASK_STATUS_TONE,
+  TASK_STATUSES,
   formatDate,
+  isFinished,
   relativeDays,
 } from "@/components/ui";
 
@@ -23,7 +25,7 @@ import {
  * répartitions (amCharts 4) et avancement par projet.
  */
 export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; maps: MindMapSummary[]; userName: string }) {
-  const openMine = data.myTasks.filter((t) => t.status !== "DONE");
+  const openMine = data.myTasks.filter((t) => !isFinished(t.status));
   const next7 = data.deadlines.filter((d) => d.daysLeft >= 0 && d.daysLeft <= 7).length;
   const activeProjects = data.projects.filter((p) => p.status === "ACTIVE");
 
@@ -34,7 +36,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
 
       {/* Indicateurs */}
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi icon={<ListTodo className="h-5 w-5" />} label="Mes tâches ouvertes" value={openMine.length} hint={`${data.myStatusCounts.DONE} terminée${data.myStatusCounts.DONE > 1 ? "s" : ""}`} />
+        <Kpi icon={<ListTodo className="h-5 w-5" />} label="Mes tâches ouvertes" value={openMine.length} hint={`${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED} terminée${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED > 1 ? "s" : ""}`} />
         <Kpi icon={<AlertTriangle className="h-5 w-5" />} label="En retard" value={data.overdueCount} tone={data.overdueCount > 0 ? "danger" : "ok"} hint="tâches et livrables" />
         <Kpi icon={<CalendarClock className="h-5 w-5" />} label="Échéances sous 7 jours" value={next7} tone={next7 > 0 ? "warn" : "neutral"} />
         <Kpi icon={<CheckCircle2 className="h-5 w-5" />} label="Avancement global" value={`${data.globalProgress.percent}%`} hint={`${data.globalProgress.done}/${data.globalProgress.total} tâches · ${activeProjects.length} projet${activeProjects.length > 1 ? "s" : ""} actif${activeProjects.length > 1 ? "s" : ""}`} />
@@ -83,7 +85,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
           <h2 className="font-semibold">Mes tâches par statut</h2>
           <StatusDonut
             height={220}
-            slices={(["TODO", "IN_PROGRESS", "DONE"] as const).map((s) => ({ label: TASK_STATUS_LABEL[s], value: data.myStatusCounts[s], color: TASK_STATUS_COLOR[s] }))}
+            slices={TASK_STATUSES.map((s) => ({ label: TASK_STATUS_LABEL[s], value: data.myStatusCounts[s], color: TASK_STATUS_COLOR[s] }))}
           />
         </section>
 

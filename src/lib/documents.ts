@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { deleteDocumentFile, resolveDocumentPath, saveDocumentFile } from "@/lib/uploads";
 import {
+  checkFolder,
   mutateProject,
   projectAccessWhere,
   requireProjectAccess,
@@ -38,9 +39,13 @@ export async function uploadDocument(
   userId: string,
   projectId: string,
   file: File,
-  options: { name?: string; deliverableId?: string | null },
+  options: { name?: string; deliverableId?: string | null; folderId?: string | null },
 ): Promise<ProjectDto> {
   await requireProjectAccess(userId, projectId);
+  if (options.folderId) {
+    const f = await prisma.folder.findFirst({ where: { id: options.folderId, projectId }, select: { id: true } });
+    if (!f) throw badRequest("Ce dossier n'appartient pas au projet.");
+  }
   if (options.deliverableId) {
     const d = await prisma.deliverable.findFirst({ where: { id: options.deliverableId, projectId }, select: { id: true } });
     if (!d) throw badRequest("Ce livrable n'appartient pas au projet.");
@@ -52,6 +57,7 @@ export async function uploadDocument(
       await tx.document.create({
         data: {
           projectId,
+          folderId: options.folderId ?? null,
           deliverableId: options.deliverableId ?? null,
           uploadedById: userId,
           name: (options.name?.trim() || originalName).slice(0, 200),
@@ -75,7 +81,8 @@ export async function updateDocument(userId: string, documentId: string, input: 
       const d = await tx.deliverable.findFirst({ where: { id: input.deliverableId, projectId }, select: { id: true } });
       if (!d) throw badRequest("Ce livrable n'appartient pas au projet.");
     }
-    await tx.document.update({ where: { id: documentId }, data: { name: input.name, deliverableId: input.deliverableId } });
+    await checkFolder(tx, projectId, input.folderId);
+    await tx.document.update({ where: { id: documentId }, data: { name: input.name, deliverableId: input.deliverableId, folderId: input.folderId } });
   });
 }
 

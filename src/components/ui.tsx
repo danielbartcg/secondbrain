@@ -237,9 +237,12 @@ export function relativeDays(days: number): string {
   return `dans ${days} j`;
 }
 
-export const TASK_STATUS_LABEL = { TODO: "À faire", IN_PROGRESS: "En cours", DONE: "Terminée" } as const;
-export const TASK_STATUS_TONE = { TODO: "neutral", IN_PROGRESS: "brand", DONE: "ok" } as const;
+export const TASK_STATUS_LABEL = { TODO: "À faire", IN_PROGRESS: "En cours", DONE: "Terminée", CLOSED: "Clôturée" } as const;
+export const TASK_STATUS_TONE = { TODO: "neutral", IN_PROGRESS: "brand", DONE: "ok", CLOSED: "violet" } as const;
 export const DELIVERABLE_STATUS_LABEL = { PLANNED: "Prévu", IN_PROGRESS: "En cours", DELIVERED: "Livré", VALIDATED: "Validé" } as const;
 export const DELIVERABLE_STATUS_TONE = { PLANNED: "neutral", IN_PROGRESS: "brand", DELIVERED: "warn", VALIDATED: "ok" } as const;
 export const DELIVERABLE_STATUS_COLOR = { PLANNED: "#94a3b8", IN_PROGRESS: "#4f5ff0", DELIVERED: "#d98a0b", VALIDATED: "#1f9d55" } as const;
-export const TASK_STATUS_COLOR = { TODO: "#94a3b8", IN_PROGRESS: "#4f5ff0", DONE: "#1f9d55" } as const;
+export const TASK_STATUS_COLOR = { TODO: "#94a3b8", IN_PROGRESS: "#4f5ff0", DONE: "#1f9d55", CLOSED: "#6b5fa8" } as const;
+export const TASK_STATUSES = ["TODO", "IN_PROGRESS", "DONE", "CLOSED"] as const;
+/** Terminée ou clôturée : sort du flux des tâches ouvertes. */
+export const isFinished = (s: string) => s === "DONE" || s === "CLOSED";

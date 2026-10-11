@@ -5,6 +5,8 @@ import { badRequest, forbidden, notFound } from "@/lib/api";
 import type {
   CreateActivityInput,
   CreateDeliverableInput,
+  CreateFolderInput,
+  UpdateFolderInput,
   CreateMemberInput,
   CreateProjectInput,
   CreateStageInput,
@@ -82,8 +84,11 @@ export type StageDto = {
   tasks: TaskDto[];
 };
 
+export type FolderDto = { id: string; parentId: string | null; name: string };
+
 export type DocumentDto = {
   id: string;
+  folderId: string | null;
   deliverableId: string | null;
   name: string;
   originalName: string;
@@ -131,6 +136,7 @@ export type ProjectDto = ProjectSummary & {
   members: MemberDto[];
   deliverables: DeliverableDto[];
   documents: DocumentDto[];
+  folders: FolderDto[];
 };
 
 type Tx = Prisma.TransactionClient;
@@ -166,6 +172,7 @@ export const PROJECT_INCLUDE = {
     include: { documents: { orderBy: { createdAt: "desc" }, include: DOCUMENT_INCLUDE } },
   },
   documents: { orderBy: { createdAt: "desc" }, include: DOCUMENT_INCLUDE },
+  folders: { orderBy: [{ name: "asc" }] },
 } satisfies Prisma.ProjectInclude;
 
 type ProjectRow = Prisma.ProjectGetPayload<{ include: typeof PROJECT_INCLUDE }>;
@@ -197,6 +204,7 @@ export function toMemberDto(m: { id: string; userId: string | null; name: string
 export function toDocumentDto(d: DocumentRow): DocumentDto {
   return {
     id: d.id,
+    folderId: d.folderId,
     deliverableId: d.deliverableId,
     name: d.name,
     originalName: d.originalName,
@@ -267,6 +275,7 @@ function toProjectDto(p: ProjectRow): ProjectDto {
       documents: d.documents.map(toDocumentDto),
     })),
     documents: p.documents.map(toDocumentDto),
+    folders: p.folders.map((f) => ({ id: f.id, parentId: f.parentId, name: f.name })),
   };
 }
 
@@ -386,11 +395,12 @@ async function checkMember(tx: Tx, projectId: string, memberId: string | null | 
 export async function listProjects(userId: string): Promise<ProjectSummary[]> {
   const rows = await prisma.project.findMany({ where: projectAccessWhere(userId), orderBy: { updatedAt: "desc" }, include: PROJECT_INCLUDE });
   return rows.map((p) => {
-    const { stages: _s, members: _m, deliverables: _d, documents: _doc, ...summary } = toProjectDto(p);
+    const { stages: _s, members: _m, deliverables: _d, documents: _doc, folders: _f, ...summary } = toProjectDto(p);
     void _s;
     void _m;
     void _d;
     void _doc;
+    void _f;
     return summary;
   });
 }
@@ -551,7 +561,12 @@ export async function deleteActivity(userId: string, activityId: string): Promis
 
 // --- Tâches ------------------------------------------------------------------
 
-/** Cohérence statut / avancement : DONE ⇔ 100 %, TODO ⇔ 0 %, sinon IN_PROGRESS. */
+/**
+ * Cohérence statut / avancement : DONE ⇔ 100 %, TODO ⇔ 0 %, sinon IN_PROGRESS.
+ * CLOSED (clôture manuelle, après DONE) force 100 % ; une tâche clôturée dont
+ * on rabaisse l'avancement est rouverte (IN_PROGRESS) ; 100 % sur une tâche
+ * déjà clôturée la laisse clôturée.
+ */
 export function reconcile(
   current: { status: TaskStatus; progress: number },
   input: { status?: TaskStatus; progress?: number },
@@ -559,11 +574,12 @@ export function reconcile(
   let { status, progress } = current;
   if (input.progress !== undefined) {
     progress = input.progress;
-    status = progress >= 100 ? "DONE" : progress <= 0 ? "TODO" : "IN_PROGRESS";
+    if (progress >= 100) status = status === "CLOSED" ? "CLOSED" : "DONE";
+    else status = progress <= 0 ? "TODO" : "IN_PROGRESS";
   }
   if (input.status !== undefined) {
     status = input.status;
-    if (status === "DONE") progress = 100;
+    if (status === "DONE" || status === "CLOSED") progress = 100;
     else if (status === "TODO") progress = 0;
     else if (progress <= 0 || progress >= 100) progress = 50;
   }
@@ -739,5 +755,56 @@ export async function deleteDeliverable(userId: string, deliverableId: string): 
   return mutateProject(projectId, async (tx) => {
     await tx.deliverable.delete({ where: { id: deliverableId } });
     await resequence(tx, "deliverable", { projectId });
+  });
+}
+
+// --- Dossiers documentaires --------------------------------------------------
+
+export async function folderProjectId(userId: string, folderId: string): Promise<string> {
+  const f = await prisma.folder.findFirst({ where: { id: folderId, project: projectAccessWhere(userId) }, select: { projectId: true } });
+  if (!f) throw notFound("Dossier");
+  return f.projectId;
+}
+
+/** Un dossier référencé doit appartenir au projet. */
+export async function checkFolder(tx: Tx, projectId: string, folderId: string | null | undefined) {
+  if (!folderId) return;
+  const f = await tx.folder.findFirst({ where: { id: folderId, projectId }, select: { id: true } });
+  if (!f) throw badRequest("Ce dossier n'appartient pas au projet.");
+}
+
+export async function createFolder(userId: string, projectId: string, input: CreateFolderInput): Promise<ProjectDto> {
+  await requireProjectAccess(userId, projectId);
+  return mutateProject(projectId, async (tx) => {
+    await checkFolder(tx, projectId, input.parentId);
+    await tx.folder.create({ data: { projectId, parentId: input.parentId ?? null, name: input.name } });
+  });
+}
+
+export async function updateFolder(userId: string, folderId: string, input: UpdateFolderInput): Promise<ProjectDto> {
+  const projectId = await folderProjectId(userId, folderId);
+  return mutateProject(projectId, async (tx) => {
+    if (input.parentId !== undefined) {
+      await checkFolder(tx, projectId, input.parentId);
+      if (input.parentId === folderId) throw badRequest("Un dossier ne peut pas être son propre parent.");
+      // Interdit : déplacer un dossier dans sa propre descendance.
+      const all = await tx.folder.findMany({ where: { projectId }, select: { id: true, parentId: true } });
+      const parentOf = new Map(all.map((f) => [f.id, f.parentId]));
+      for (let cur: string | null = input.parentId; cur; cur = parentOf.get(cur) ?? null) {
+        if (cur === folderId) throw badRequest("Impossible de déplacer un dossier dans sa propre arborescence.");
+      }
+    }
+    await tx.folder.update({ where: { id: folderId }, data: { name: input.name, parentId: input.parentId } });
+  });
+}
+
+/** Supprime un dossier : ses documents et sous-dossiers remontent dans le dossier parent. */
+export async function deleteFolder(userId: string, folderId: string): Promise<ProjectDto> {
+  const projectId = await folderProjectId(userId, folderId);
+  return mutateProject(projectId, async (tx) => {
+    const f = await tx.folder.findUniqueOrThrow({ where: { id: folderId }, select: { parentId: true } });
+    await tx.document.updateMany({ where: { folderId }, data: { folderId: f.parentId } });
+    await tx.folder.updateMany({ where: { parentId: folderId }, data: { parentId: f.parentId } });
+    await tx.folder.delete({ where: { id: folderId } });
   });
 }

@@ -78,17 +78,18 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 ```ts
 type Progress = { percent; total; done };
 type Member   = { id; userId: string | null; name; email; role; color };
-type Task     = { id; stageId; activityId; assigneeId; name; description; status: "TODO"|"IN_PROGRESS"|"DONE";
+type Task     = { id; stageId; activityId; assigneeId; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
                   progress: 0..100; order; startDate; dueDate; commentCount; updatedAt };
 type Activity = { id; stageId; name; description; order; progress; tasks: Task[] };
 type Stage    = { id; projectId; name; description; order; startDate; dueDate; progress; activities: Activity[]; tasks: Task[] };
-type Document = { id; deliverableId; name; originalName; mimeType; size; uploadedBy: {id,name}|null; createdAt;
-                  url: "/api/v1/documents/:id/download" };
+type Folder   = { id; parentId: string | null; name };     // arborescence documentaire (null = racine)
+type Document = { id; folderId: string | null; deliverableId; name; originalName; mimeType; size;
+                  uploadedBy: {id,name}|null; createdAt; url: "/api/v1/documents/:id/download" };
 type Deliverable = { id; stageId; assigneeId; name; description; status: "PLANNED"|"IN_PROGRESS"|"DELIVERED"|"VALIDATED";
                      expectedStart; expectedEnd; deliveredAt; order; documents: Document[] };
 type ProjectSummary = { id; ownerId; name; description; color; status; startDate; dueDate; progress;
                         stageCount; memberCount; deliverableCount; createdAt; updatedAt };
-type Project = ProjectSummary & { stages: Stage[]; members: Member[]; deliverables: Deliverable[]; documents: Document[] };
+type Project = ProjectSummary & { stages: Stage[]; members: Member[]; deliverables: Deliverable[]; documents: Document[]; folders: Folder[] };
 ```
 
 Toute mutation sur un projet ou l'un de ses éléments **renvoie le projet
@@ -129,9 +130,12 @@ complet recalculé** (`{ project }`).
 Corps d'une tâche à la création : `{ name, description?, status?, progress?, startDate?, dueDate?, assigneeId? }`.
 `assigneeId` doit être un membre du projet (`400` sinon ; `null` désaffecte).
 
-Cohérence statut / avancement : `progress = 100 ⇒ DONE`, `progress = 0 ⇒ TODO`,
-sinon `IN_PROGRESS` ; `status = DONE ⇒ 100`, `TODO ⇒ 0`, `IN_PROGRESS`
-sans avancement cohérent ⇒ 50.
+Cohérence statut / avancement : `progress = 100 ⇒ DONE` (une tâche `CLOSED`
+le reste), `progress = 0 ⇒ TODO`, sinon `IN_PROGRESS` ; `status = DONE` ou
+`CLOSED ⇒ 100`, `TODO ⇒ 0`, `IN_PROGRESS` sans avancement cohérent ⇒ 50.
+`CLOSED` (clôture) est une action **manuelle** : `PATCH { status: "CLOSED" }`,
+proposée dans l'interface une fois la tâche terminée ; `PATCH { status: "DONE" }`
+la rouvre.
 
 ### Fiche tâche et commentaires
 
@@ -150,8 +154,11 @@ type TaskDetail  = Task & {
 | POST | `/tasks/:id/comments` | `{ body }` | `201 { task }` |
 | DELETE | `/comments/:id` | — | `{ task }` (auteur ou propriétaire) |
 
-Mentions : dans `body`, `@[Nom](memberId)`. Le serveur ne retient dans
-`mentions` que les membres du projet ; le client affiche `@Nom` en surbrillance.
+Mentions : le client envoie la forme lisible `@[Nom]` (ce que l'utilisateur
+voit dans la zone de saisie) ; le serveur la résout par nom (insensible à la
+casse) en `@[Nom](memberId)` et ne retient dans `mentions` que les membres du
+projet. La forme complète `@[Nom](memberId)` est aussi acceptée en entrée
+(identifiant vérifié). Un `@[Nom]` sans membre correspondant reste du texte.
 
 ### Livrables
 
@@ -164,13 +171,16 @@ Mentions : dans `body`, `@[Nom](memberId)`. Le serveur ne retient dans
 Passage à `DELIVERED` / `VALIDATED` sans `deliveredAt` ⇒ horodaté ; retour
 à `PLANNED` / `IN_PROGRESS` ⇒ `deliveredAt = null`.
 
-### Documents
+### Dossiers et documents
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
+| POST | `/projects/:id/folders` | `{ name, parentId? }` (`null`/absent = racine) | `201 { project }` |
+| PATCH | `/folders/:id` | `{ name?, parentId? }` (`null` = racine ; refus si cible dans sa propre arborescence) | `{ project }` |
+| DELETE | `/folders/:id` | — | `{ project }` (documents et sous-dossiers remontent dans le parent) |
 | GET | `/projects/:id/documents` | — | `{ documents }` |
-| POST | `/projects/:id/documents` | `multipart/form-data` : `file`, `name?`, `deliverableId?` | `201 { project }` |
-| PATCH | `/documents/:id` | `{ name?, deliverableId? }` (`null` détache) | `{ project }` |
+| POST | `/projects/:id/documents` | `multipart/form-data` : `file`, `name?`, `deliverableId?`, `folderId?` | `201 { project }` |
+| PATCH | `/documents/:id` | `{ name?, deliverableId?, folderId? }` (`null` détache / remet à la racine) | `{ project }` |
 | DELETE | `/documents/:id` | — | `{ project }` (auteur du dépôt ou propriétaire) |
 | GET | `/documents/:id/download[?inline=1]` | — | fichier (`Content-Disposition` attachment / inline) ; authentifié |
 

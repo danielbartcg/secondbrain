@@ -99,6 +99,8 @@ enum TaskStatus {
   TODO
   IN_PROGRESS
   DONE
+  /// Clôture manuelle, après DONE : la tâche sort du flux courant.
+  CLOSED
 }
 
 enum DeliverableStatus {
@@ -125,6 +127,7 @@ model Project {
   members      ProjectMember[]
   deliverables Deliverable[]
   documents    Document[]
+  folders      Folder[]
 
   @@index([ownerId])
 }
@@ -255,12 +258,32 @@ model Deliverable {
   @@index([stageId])
 }
 
-/// Document du projet (fichier stocké sous DATA_DIR/documents), pouvant
-/// matérialiser un livrable.
+/// Dossier de l'arborescence documentaire d'un projet (racine = parentId null).
+model Folder {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents Document[]
+
+  @@index([projectId])
+  @@index([parentId])
+}
+
+/// Document du projet (fichier stocké sous DATA_DIR/documents), rangé dans un
+/// dossier (ou à la racine) et pouvant matérialiser un livrable.
 model Document {
   id            String       @id @default(cuid())
   projectId     String
   project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folderId      String?
+  folder        Folder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
   deliverableId String?
   deliverable   Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: SetNull)
   uploadedById  String?
@@ -276,5 +299,6 @@ model Document {
   createdAt     DateTime     @default(now())
 
   @@index([projectId])
+  @@index([folderId])
   @@index([deliverableId])
 }

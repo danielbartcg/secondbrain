@@ -6,16 +6,16 @@ import type { ProjectDto } from "@/lib/projects";
 import { PlanningChart } from "@/components/charts/PlanningChart";
 import { ProgressBarsChart } from "@/components/charts/ProgressBarsChart";
 import { StatusDonut } from "@/components/charts/StatusDonut";
-import { Avatar, Badge, DELIVERABLE_STATUS_COLOR, DELIVERABLE_STATUS_LABEL, DELIVERABLE_STATUS_TONE, TASK_STATUS_COLOR, TASK_STATUS_LABEL, formatDate } from "@/components/ui";
+import { Avatar, Badge, DELIVERABLE_STATUS_COLOR, DELIVERABLE_STATUS_LABEL, DELIVERABLE_STATUS_TONE, TASK_STATUS_COLOR, TASK_STATUS_LABEL, TASK_STATUSES, formatDate, isFinished } from "@/components/ui";
 
 /** Tableau de bord d'un projet : indicateurs, planning, avancement par étape, livrables. */
 export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; onGoTo: (tab: "plan" | "livrables" | "documents" | "equipe") => void }) {
   const allTasks = project.stages.flatMap((s) => [...s.tasks, ...s.activities.flatMap((a) => a.tasks)]);
   const now = new Date();
-  const overdueTasks = allTasks.filter((t) => t.dueDate && t.status !== "DONE" && new Date(t.dueDate) < now);
+  const overdueTasks = allTasks.filter((t) => t.dueDate && !isFinished(t.status) && new Date(t.dueDate) < now);
   const overdueDeliverables = project.deliverables.filter((d) => d.expectedEnd && (d.status === "PLANNED" || d.status === "IN_PROGRESS") && new Date(d.expectedEnd) < now);
   const delivered = project.deliverables.filter((d) => d.status === "DELIVERED" || d.status === "VALIDATED").length;
-  const statusCounts = { TODO: 0, IN_PROGRESS: 0, DONE: 0 } as Record<"TODO" | "IN_PROGRESS" | "DONE", number>;
+  const statusCounts = { TODO: 0, IN_PROGRESS: 0, DONE: 0, CLOSED: 0 } as Record<"TODO" | "IN_PROGRESS" | "DONE" | "CLOSED", number>;
   for (const t of allTasks) statusCounts[t.status]++;
   const stageById = new Map(project.stages.map((s) => [s.id, s]));
   const memberById = new Map(project.members.map((m) => [m.id, m]));
@@ -81,7 +81,7 @@ export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; 
         </section>
         <section className="rounded-2xl border border-line bg-surface p-5">
           <h2 className="font-semibold">Tâches par statut</h2>
-          <StatusDonut height={220} slices={(["TODO", "IN_PROGRESS", "DONE"] as const).map((s) => ({ label: TASK_STATUS_LABEL[s], value: statusCounts[s], color: TASK_STATUS_COLOR[s] }))} />
+          <StatusDonut height={220} slices={TASK_STATUSES.map((s) => ({ label: TASK_STATUS_LABEL[s], value: statusCounts[s], color: TASK_STATUS_COLOR[s] }))} />
         </section>
       </div>
 

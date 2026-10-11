@@ -9,7 +9,7 @@ export const GET = withUser<P>(async (_req, { params, user }) => json({ document
 
 /**
  * POST /api/v1/projects/:id/documents — multipart/form-data :
- * `file` (obligatoire), `name?`, `deliverableId?`. Renvoie le projet à jour.
+ * `file` (obligatoire), `name?`, `deliverableId?`, `folderId?`. Renvoie le projet à jour.
  */
 export const POST = withUser<P>(async (req: NextRequest, { params, user }) => {
   const form = await req.formData().catch(() => null);
@@ -17,11 +17,13 @@ export const POST = withUser<P>(async (req: NextRequest, { params, user }) => {
   if (!(file instanceof File)) throw badRequest("Champ `file` manquant.");
   const name = form?.get("name");
   const deliverableId = form?.get("deliverableId");
+  const folderId = form?.get("folderId");
   return json(
     {
       project: await uploadDocument(user.id, params.id, file, {
         name: typeof name === "string" ? name : undefined,
         deliverableId: typeof deliverableId === "string" && deliverableId ? deliverableId : null,
+        folderId: typeof folderId === "string" && folderId ? folderId : null,
       }),
     },
     { status: 201 },

@@ -60,7 +60,7 @@ export const moveNodeSchema = z.object({
 
 // --- Projets -----------------------------------------------------------------
 export const projectStatusSchema = z.enum(["ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"]);
-export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "DONE"]);
+export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "DONE", "CLOSED"]);
 export const deliverableStatusSchema = z.enum(["PLANNED", "IN_PROGRESS", "DELIVERED", "VALIDATED"]);
 
 export const createProjectSchema = z.object({
@@ -138,10 +138,15 @@ export const updateDeliverableSchema = createDeliverableSchema.partial().extend(
   order: z.number().int().min(0).optional(),
 });
 
-// --- Documents ---------------------------------------------------------------
+// --- Dossiers et documents ---------------------------------------------------
+export const createFolderSchema = z.object({ name: title, parentId: nullableId });
+export const updateFolderSchema = z.object({ name: title.optional(), parentId: nullableId });
+
 export const updateDocumentSchema = z.object({
   name: title.optional(),
   deliverableId: nullableId,
+  /** Dossier de rangement ; null = racine. */
+  folderId: nullableId,
 });
 
 // --- Commentaires ------------------------------------------------------------
@@ -168,4 +173,6 @@ export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export type CreateDeliverableInput = z.infer<typeof createDeliverableSchema>;
 export type UpdateDeliverableInput = z.infer<typeof updateDeliverableSchema>;
 export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
+export type CreateFolderInput = z.infer<typeof createFolderSchema>;
+export type UpdateFolderInput = z.infer<typeof updateFolderSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;

@@ -3,11 +3,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarDays, Check, Circle, CircleDot, Flag, Layers, MessageSquare, Send, Trash2, User } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, Circle, CircleDot, Flag, Layers, Lock, MessageSquare, Send, Trash2, User } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MemberDto, ProjectDto } from "@/lib/projects";
 import type { TaskCommentDto, TaskDetailDto } from "@/lib/tasks";
-import { Avatar, Badge, Button, InlineEdit, ProgressBar, TASK_STATUS_LABEL, TASK_STATUS_TONE, formatDate, selectClass, toInputDate } from "@/components/ui";
+import { Avatar, Badge, Button, InlineEdit, ProgressBar, TASK_STATUS_LABEL, TASK_STATUS_TONE, formatDate, isFinished, selectClass, toInputDate } from "@/components/ui";
 
 /**
  * Fiche tâche : champs mis en forme (statut, avancement, responsable, dates,
@@ -55,7 +55,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
     }, 400);
   };
 
-  const late = task.dueDate && task.status !== "DONE" && new Date(task.dueDate) < new Date();
+  const late = task.dueDate && !isFinished(task.status) && new Date(task.dueDate) < new Date();
   const color = task.project.color ?? "#4f5ff0";
   const isOwner = task.project.ownerId === currentUserId;
 
@@ -99,7 +99,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
 
           {/* Avancement */}
           <div className="mt-5 flex items-center gap-3">
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {(["TODO", "IN_PROGRESS", "DONE"] as const).map((s) => (
                 <button
                   key={s}
@@ -112,6 +112,18 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
                   {TASK_STATUS_LABEL[s]}
                 </button>
               ))}
+              {/* Clôture : action manuelle, proposée une fois la tâche terminée. */}
+              {(task.status === "DONE" || task.status === "CLOSED") && (
+                <button
+                  onClick={() => patch({ status: task.status === "CLOSED" ? "DONE" : "CLOSED" })}
+                  title={task.status === "CLOSED" ? "Rouvrir (revient à Terminée)" : "Clôturer : la tâche sort du flux courant"}
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ${
+                    task.status === "CLOSED" ? "bg-violet-600 text-white ring-violet-600" : "bg-surface text-violet-700 ring-violet-200 hover:bg-violet-50"
+                  }`}
+                >
+                  <Lock className="h-3.5 w-3.5" /> {task.status === "CLOSED" ? "Clôturée" : "Clôturer"}
+                </button>
+              )}
             </div>
             <span className="ml-auto text-lg font-semibold tabular-nums">{progress}%</span>
           </div>
@@ -237,7 +249,8 @@ function StageOptions({ task }: { task: TaskDetailDto }) {
 
 // --- Commentaires et mentions ------------------------------------------------
 
-const MENTION_RE = /@\[([^\]]+)\]\(([A-Za-z0-9_-]+)\)/g;
+/** `@[Nom](memberId)` (forme stockée) ou `@[Nom]` (forme saisie). */
+const MENTION_RE = /@\[([^\]]+)\](?:\(([A-Za-z0-9_-]+)\))?/g;
 
 /** Rend un corps de commentaire en surlignant les mentions. */
 function CommentBody({ body, members }: { body: string; members: MemberDto[] }) {
@@ -246,11 +259,16 @@ function CommentBody({ body, members }: { body: string; members: MemberDto[] }) 
   for (const m of body.matchAll(MENTION_RE)) {
     const idx = m.index ?? 0;
     if (idx > last) parts.push(body.slice(last, idx));
-    const member = members.find((x) => x.id === m[2]);
+    const member = members.find((x) => x.id === m[2]) ?? members.find((x) => x.name.toLowerCase() === m[1].toLowerCase());
     parts.push(
-      <span key={idx} className="rounded bg-brand-50 px-1 font-medium text-brand-700" title={member?.role ?? undefined}>
-        @{member?.name ?? m[1]}
-      </span>,
+      member ? (
+        <span key={idx} className="rounded bg-brand-50 px-1 font-medium text-brand-700" title={member.role ?? undefined}>
+          @{member.name}
+        </span>
+      ) : (
+        // Mention sans membre correspondant : texte simple, pas de lien.
+        <span key={idx}>@{m[1]}</span>
+      ),
     );
     last = idx + m[0].length;
   }
@@ -285,7 +303,9 @@ function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetail
     if (!mention) return;
     const el = textareaRef.current;
     const caret = el?.selectionStart ?? body.length;
-    const token = `@[${member.name}](${member.id}) `;
+    // Dans la zone de saisie, seule la forme lisible `@[Nom]` apparaît ;
+    // le serveur résout l'identifiant du membre à l'envoi.
+    const token = `@[${member.name}] `;
     const next = body.slice(0, mention.start) + token + body.slice(caret);
     setBody(next);
     setMention(null);

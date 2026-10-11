@@ -40,10 +40,11 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `ProjectMember` | `id`, `projectId`, `userId?`, `name`, `email?`, `role?`, `color?`, `createdAt` | **équipe projet** : compte de l'application (`userId`) ou nom libre. `@@unique([projectId, userId])`. Le propriétaire est créé membre (« Chef de projet ») à la création du projet |
 | `Stage` | `id`, `projectId`, `name`, `description`, `order`, `startDate?`, `dueDate?`, timestamps | étape |
 | `Activity` | `id`, `stageId`, `name`, `description`, `order`, timestamps | niveau intermédiaire **facultatif** |
-| `Task` | `id`, `stageId`, `activityId?`, `assigneeId?`, `name`, `description`, `status` (`TODO` · `IN_PROGRESS` · `DONE`), `progress` 0–100, `order`, `startDate?`, `dueDate?`, timestamps | `stageId` toujours renseigné, même sous une activité ; `assigneeId` → membre **du même projet** (vérifié) |
+| `Task` | `id`, `stageId`, `activityId?`, `assigneeId?`, `name`, `description`, `status` (`TODO` · `IN_PROGRESS` · `DONE` · `CLOSED`), `progress` 0–100, `order`, `startDate?`, `dueDate?`, timestamps | `stageId` toujours renseigné, même sous une activité ; `assigneeId` → membre **du même projet** (vérifié). `CLOSED` = clôture **manuelle** après `DONE` (la tâche sort du flux courant) |
+| `Folder` | `id`, `projectId`, `parentId?`, `name`, timestamps | arborescence documentaire (racine = `parentId` null) ; supprimer un dossier remonte ses documents et sous-dossiers dans le parent |
 | `TaskComment` | `id`, `taskId`, `authorId`, `body`, `mentions String[]`, timestamps | `body` contient des mentions `@[Nom](memberId)` ; `mentions` = ids de membres cités **et** appartenant au projet (filtré côté serveur) |
 | `Deliverable` | `id`, `projectId`, `stageId?`, `assigneeId?`, `name`, `description`, `status` (`PLANNED` · `IN_PROGRESS` · `DELIVERED` · `VALIDATED`), `expectedStart?`, `expectedEnd?`, `deliveredAt?`, `order`, timestamps | `deliveredAt` posé automatiquement au passage à `DELIVERED`/`VALIDATED` (effacé en retour arrière) |
-| `Document` | `id`, `projectId`, `deliverableId?`, `uploadedById?`, `name`, `originalName`, `mimeType`, `size`, `storagePath`, `createdAt` | fichier sous `DATA_DIR/documents/<projectId>/<aléatoire>.<ext>` ; `deliverableId` ⇒ le document **matérialise** ce livrable |
+| `Document` | `id`, `projectId`, `folderId?`, `deliverableId?`, `uploadedById?`, `name`, `originalName`, `mimeType`, `size`, `storagePath`, `createdAt` | fichier sous `DATA_DIR/documents/<projectId>/<aléatoire>.<ext>` ; `folderId` = dossier de rangement (null = racine) ; `deliverableId` ⇒ le document **matérialise** ce livrable |
 
 ## Droits d'accès
 
@@ -56,8 +57,12 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 
 ## Invariants (`src/lib/projects.ts`, `tasks.ts`, `documents.ts`)
 
-- `status = DONE ⇔ progress = 100`, `status = TODO ⇔ progress = 0`
-  (`reconcile()`).
+- `status ∈ {DONE, CLOSED} ⇒ progress = 100`, `status = TODO ⇔ progress = 0`
+  (`reconcile()`). Passer `progress` à 100 donne `DONE` (ou laisse `CLOSED`) ;
+  rabaisser l'avancement d'une tâche terminée ou clôturée la rouvre
+  (`IN_PROGRESS`). `CLOSED` ne s'obtient que par une demande explicite.
+- `DONE` et `CLOSED` comptent tous deux comme « terminées » dans les agrégats
+  et sortent des échéances / tâches ouvertes.
 - Les avancements des activités, étapes et projets ne sont **pas stockés** :
   agrégés à la lecture (`aggregate()` : moyenne, total, terminées).
 - `order` renuméroté parmi les frères (étapes, activités, livrables ;
@@ -76,6 +81,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `20261011000000_init` | comptes, sessions, cartes, projets/étapes/activités/tâches |
 | `20261011204624_team_deliverables_documents_comments` | `ProjectMember`, `Deliverable`, `Document`, `TaskComment`, `Task.assigneeId/startDate` |
 | `20261011210319_backfill_owner_members` | données : chaque propriétaire devient membre de ses projets existants |
+| `20261011…_folders_and_closed_status` | `Folder`, `Document.folderId`, valeur `CLOSED` de `TaskStatus` |
 
 Développement : `npx prisma migrate dev`. Production : `npm run prod:deploy`
 exécute `prisma migrate deploy` dans le conteneur `tools` **avant** de

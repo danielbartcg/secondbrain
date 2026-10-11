@@ -26,12 +26,31 @@ export type TaskDetailDto = TaskDto & {
 };
 
 const MENTION_RE = /@\[([^\]]+)\]\(([A-Za-z0-9_-]+)\)/g;
+const BARE_MENTION_RE = /@\[([^\]]+)\](?!\()/g;
 
-/** Identifiants de membres mentionnés dans un commentaire. */
-export function extractMentions(body: string): string[] {
+/**
+ * Normalise les mentions d'un commentaire : `@[Nom]` (tel que saisi dans
+ * l'interface) devient `@[Nom](memberId)` si un membre du projet porte ce nom
+ * (insensible à la casse) ; les identifiants déjà présents sont vérifiés.
+ * Renvoie le corps normalisé et les membres effectivement mentionnés.
+ */
+export function resolveMentions(body: string, members: Array<{ id: string; name: string }>): { body: string; mentions: string[] } {
+  const byId = new Map(members.map((m) => [m.id, m]));
+  const byName = new Map(members.map((m) => [m.name.trim().toLowerCase(), m]));
   const ids = new Set<string>();
-  for (const m of body.matchAll(MENTION_RE)) ids.add(m[2]);
-  return [...ids];
+  let out = body.replace(BARE_MENTION_RE, (whole, name: string) => {
+    const m = byName.get(name.trim().toLowerCase());
+    if (!m) return whole;
+    ids.add(m.id);
+    return `@[${m.name}](${m.id})`;
+  });
+  out = out.replace(MENTION_RE, (whole, name: string, id: string) => {
+    const m = byId.get(id);
+    if (!m) return `@[${name}]`;
+    ids.add(m.id);
+    return `@[${m.name}](${m.id})`;
+  });
+  return { body: out, mentions: [...ids] };
 }
 
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
@@ -72,12 +91,10 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
 export async function addComment(userId: string, taskId: string, body: string): Promise<TaskDetailDto> {
   const t = await prisma.task.findFirst({ where: { id: taskId, stage: { project: projectAccessWhere(userId) } }, select: { id: true, stage: { select: { projectId: true } } } });
   if (!t) throw notFound("Tâche");
-  // Seules les mentions de membres du projet sont retenues.
-  const candidates = extractMentions(body);
-  const valid = candidates.length
-    ? (await prisma.projectMember.findMany({ where: { id: { in: candidates }, projectId: t.stage.projectId }, select: { id: true } })).map((m) => m.id)
-    : [];
-  await prisma.taskComment.create({ data: { taskId, authorId: userId, body, mentions: valid } });
+  // Seules les mentions de membres du projet sont retenues ; `@[Nom]` est résolu par nom.
+  const members = await prisma.projectMember.findMany({ where: { projectId: t.stage.projectId }, select: { id: true, name: true } });
+  const resolved = resolveMentions(body, members);
+  await prisma.taskComment.create({ data: { taskId, authorId: userId, body: resolved.body, mentions: resolved.mentions } });
   await prisma.task.update({ where: { id: taskId }, data: { updatedAt: new Date() } });
   return getTaskDetail(userId, taskId);
 }

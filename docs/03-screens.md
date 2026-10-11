@@ -35,7 +35,7 @@ puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) :
 | Tableau de bord | `ProjectDashboardTab` | KPIs ; **planning Gantt** (`PlanningChart`) des étapes (part réalisée en plein) et livrables 📦 avec ligne « aujourd'hui » ; avancement par étape (`ProgressBarsChart`) ; tâches par statut ; statut des livrables (anneau + liste) ; tâches en retard |
 | Plan | `ProjectBoard` | étapes › activités › tâches : avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche |
 | Livrables | `DeliverablesTab` | cartes : statut, responsable, étape, début/fin attendus, documents rattachés (téléversement direct, rattachement d'un document existant, détachement, téléchargement) |
-| Documents | `DocumentsTab` | zone de dépôt (glisser-déposer), liste, renommage, « matérialise le livrable … », téléchargement, suppression (auteur ou propriétaire) |
+| Documents | `DocumentsTab` | **explorateur à dossiers** : fil d'Ariane, sous-dossiers du dossier courant (créer, renommer, « Déplacer vers… », supprimer → contenu remonté dans le parent), documents du dossier courant (sélecteur de dossier, « matérialise le livrable … », téléchargement, suppression par l'auteur ou le propriétaire) ; dépôt (bouton ou glisser-déposer) **dans le dossier courant** |
 | Équipe | `TeamTab` | membres (avatar, rôle, couleur, nb de tâches) ; ajout en **nom libre** ou **compte de l'application** (recherche par e-mail exact) ; retrait (propriétaire uniquement, jamais le propriétaire lui-même) |
 
 État partagé : `run(fn)` exécute une mutation API, remplace le projet par la
@@ -44,14 +44,20 @@ réponse recalculée, recharge en cas d'erreur.
 ## Fiche tâche (`TaskSheet`)
 
 - Carte principale : badges (statut, retard, nb commentaires), titre éditable,
-  boutons de statut + curseur d'avancement, champs **Responsable / Début /
-  Échéance / Rattachement** (étape ou étape › activité), description,
-  suppression.
+  boutons de statut À faire / En cours / Terminée + curseur d'avancement,
+  champs **Responsable / Début / Échéance / Rattachement** (étape ou
+  étape › activité), description, suppression.
+- **Clôture** : une fois la tâche Terminée, un bouton violet « Clôturer »
+  apparaît (statut `CLOSED`, icône cadenas) ; sur une tâche clôturée il devient
+  « Clôturée » et un clic la rouvre (Terminée). Dans le Plan, l'icône de statut
+  fait tourner À faire → En cours → Terminée ; la clôture se fait par le bouton
+  « Clôturer » des détails rapides ou depuis la fiche.
 - **Échanges** : fil de commentaires (avatar, auteur, date), suppression par
   l'auteur ou le propriétaire. Zone de saisie avec **mentions** : taper `@`
   puis des lettres filtre les membres (↑/↓, Entrée/Tab pour insérer, Échap) ;
-  l'insertion produit `@[Nom](memberId)`, rendu en surbrillance. Ctrl+Entrée
-  envoie.
+  l'insertion écrit `@[Nom]` dans la zone de saisie (lisible, sans
+  identifiant) ; le serveur résout le membre à l'envoi et le commentaire
+  affiche `@Nom` en surbrillance. Ctrl+Entrée envoie.
 
 ## Éditeur de carte (`MindMapEditor`)
 

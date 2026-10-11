@@ -2,11 +2,11 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Layers, MessageSquare, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Layers, Lock, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ActivityDto, ProjectDto, StageDto, TaskDto } from "@/lib/projects";
 import type { TaskStatus } from "@prisma/client";
-import { Avatar, Button, InlineEdit, ProgressBar, QuickAdd, formatDate } from "@/components/ui";
+import { Avatar, Button, InlineEdit, ProgressBar, QuickAdd, TASK_STATUS_LABEL, formatDate, isFinished } from "@/components/ui";
 import { DateField, type Resp, type Run } from "./ProjectWorkspace";
 
 /**
@@ -217,7 +217,9 @@ function TaskList({ tasks, project, run }: { tasks: TaskDto[]; project: ProjectD
   );
 }
 
-const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { TODO: "IN_PROGRESS", IN_PROGRESS: "DONE", DONE: "TODO" };
+// Le clic sur l'icône fait tourner le cycle courant ; la clôture, elle, est
+// une action manuelle explicite (bouton « Clôturer » / fiche tâche).
+const NEXT_STATUS: Record<TaskStatus, TaskStatus> = { TODO: "IN_PROGRESS", IN_PROGRESS: "DONE", DONE: "TODO", CLOSED: "TODO" };
 
 function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: number; count: number; project: ProjectDto; run: Run }) {
   const [progress, setProgress] = useState(task.progress);
@@ -237,7 +239,8 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
       if (value !== task.progress) void patch({ progress: value });
     }, 400);
   };
-  const done = task.status === "DONE";
+  const done = isFinished(task.status);
+  const closed = task.status === "CLOSED";
   const assignee = task.assigneeId ? project.members.find((m) => m.id === task.assigneeId) : null;
   const sheetHref = `/projects/${project.id}/tasks/${task.id}`;
 
@@ -246,10 +249,10 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
       <div className="flex items-center gap-2">
         <button
           onClick={() => patch({ status: NEXT_STATUS[task.status] })}
-          title={`Statut : ${task.status === "TODO" ? "À faire" : task.status === "IN_PROGRESS" ? "En cours" : "Terminée"} (cliquer pour changer)`}
-          className={`shrink-0 rounded-full ${done ? "text-ok" : task.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
+          title={`Statut : ${TASK_STATUS_LABEL[task.status]} (cliquer pour changer)`}
+          className={`shrink-0 rounded-full ${closed ? "text-violet-600" : done ? "text-ok" : task.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
         >
-          {done ? <Check className="h-5 w-5" /> : task.status === "IN_PROGRESS" ? <CircleDot className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+          {closed ? <Lock className="h-5 w-5" /> : done ? <Check className="h-5 w-5" /> : task.status === "IN_PROGRESS" ? <CircleDot className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
         </button>
         <InlineEdit value={task.name} onSave={(name) => patch({ name })} className={`-mx-1.5 min-w-0 flex-1 text-sm ${done ? "text-muted line-through" : ""}`} />
         {task.commentCount > 0 && (
@@ -307,6 +310,16 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
             </label>
             <DateField label="Début" value={task.startDate} onChange={(v) => patch({ startDate: v })} />
             <DateField label="Échéance" value={task.dueDate} onChange={(v) => patch({ dueDate: v })} />
+            {task.status === "DONE" && (
+              <Button size="sm" variant="outline" onClick={() => patch({ status: "CLOSED" })} title="Clôturer la tâche (elle sort du flux courant)">
+                <Lock className="h-3.5 w-3.5" /> Clôturer
+              </Button>
+            )}
+            {closed && (
+              <Button size="sm" variant="outline" onClick={() => patch({ status: "DONE" })} title="Rouvrir (revient à Terminée)">
+                Rouvrir
+              </Button>
+            )}
             <div className="ml-auto flex items-center">
               <IconBtn title="Monter" disabled={index === 0} onClick={() => patch({ order: index - 1 })}>
                 <ArrowUp className="h-4 w-4" />
