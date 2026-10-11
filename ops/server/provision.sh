@@ -29,7 +29,9 @@ step() { echo; echo "=== $* ==="; }
 
 step "Paquets de base"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+# Non bloquant : un dépôt tiers défaillant (ex. cloudsmith/Caddy en 402) ne
+# doit pas empêcher un provisionnement sur un serveur déjà équipé.
+apt-get update -qq || echo "⚠ apt-get update incomplet (dépôt tiers indisponible), on continue"
 apt-get install -y -qq ca-certificates curl git gnupg ufw cron openssl
 
 step "Utilisateur applicatif : $DEPLOY_USER"

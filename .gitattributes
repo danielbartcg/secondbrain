@@ -1,0 +1,7 @@
+# Les scripts exécutés sur le serveur Linux doivent rester en LF, quel que
+# soit le poste de développement (Windows : core.autocrlf=true).
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.prisma text eol=lf
+*.sql text eol=lf
