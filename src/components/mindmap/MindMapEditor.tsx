@@ -19,12 +19,13 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, ChevronsDownUp, ChevronsUpDown, CornerDownRight, Focus, GitBranchPlus, PanelRightOpen, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, PanelRightOpen, Plus, Trash2, X } from "lucide-react";
+import type { NodeStatus } from "@prisma/client";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
 import { layoutMindMap, subtreeIds, type Side } from "@/lib/mindmap-layout";
 import { RichTextEditor } from "@/components/RichTextEditor";
-import { Button, InlineEdit } from "@/components/ui";
+import { Button, InlineEdit, NODE_STATUS_LABEL } from "@/components/ui";
 
 /**
  * Éditeur de carte mentale.
@@ -33,7 +34,9 @@ import { Button, InlineEdit } from "@/components/ui";
  *  - Clavier : Tab = enfant, Entrée = frère, Suppr = supprimer, F2 / double-clic
  *    = renommer, Échap = désélectionner, Espace = replier/déplier.
  *  - Glisser un nœud sur un autre le rattache à ce nœud.
- *  - Panneau latéral (tiroir bas sur mobile) : titre, couleur, notes riches.
+ *  - Panneau latéral (tiroir bas sur mobile) : titre, couleur, statut, notes riches.
+ *  - Statut : « à surveiller » = halo ambré ; « fermé » = hachuré, et masqué
+ *    (avec sa descendance) tant que « Afficher les nœuds fermés » est inactif.
  *  - Mises à jour **optimistes** : un nouveau nœud apparaît (et s'édite)
  *    immédiatement sous un identifiant temporaire, remplacé à la réponse du
  *    serveur. Les requêtes partent une par une (file d'attente) ; les appels
@@ -53,10 +56,14 @@ type MindData = {
   hiddenCount: number;
   collapsed: boolean;
   hasNotes: boolean;
+  status: NodeStatus;
+  /** Nœuds fermés (et leur descendance) masqués sous ce nœud. */
+  closedHidden: number;
   editing: boolean;
   onRename: (id: string, title: string) => void;
   onStopEditing: () => void;
   onToggleCollapse: (id: string) => void;
+  onShowClosed: () => void;
 };
 type MindNode = Node<MindData, "mind">;
 
@@ -78,11 +85,15 @@ const MindNodeView = memo(function MindNodeView({ id, data, selected }: NodeProp
     data.onStopEditing();
   };
 
-  const border = data.color ?? (data.isRoot ? "var(--color-brand-600)" : "var(--color-line-strong)");
+  const watch = data.status === "WATCH";
+  const closed = data.status === "CLOSED";
+  const border = watch ? "#f59e0b" : (data.color ?? (data.isRoot ? "var(--color-brand-600)" : "var(--color-line-strong)"));
+  const background = watch ? "#fffbeb" : data.isRoot && !data.color ? "var(--color-brand-50)" : undefined;
   return (
     <div
-      className={`mind-node ${selected ? "is-selected" : ""} ${data.isRoot ? "is-root" : ""}`}
-      style={{ borderColor: border, backgroundColor: data.isRoot && !data.color ? "var(--color-brand-50)" : undefined }}
+      className={`mind-node ${selected ? "is-selected" : ""} ${data.isRoot ? "is-root" : ""} ${watch ? "is-watch" : ""} ${closed ? "is-closed" : ""}`}
+      style={{ borderColor: border, backgroundColor: background }}
+      title={closed ? "Fermé" : watch ? "À surveiller" : undefined}
     >
       <Handle type="target" position={Position.Left} id="tl" />
       <Handle type="target" position={Position.Right} id="tr" />
@@ -117,10 +128,24 @@ const MindNodeView = memo(function MindNodeView({ id, data, selected }: NodeProp
         />
       ) : (
         <div className="flex items-center gap-1.5">
-          <span className="truncate" title={data.title}>
+          {watch && <Eye className="h-3.5 w-3.5 shrink-0 text-amber-600" />}
+          <span className="mind-title truncate" title={data.title}>
             {data.title}
           </span>
           {data.hasNotes && <span className="text-[10px] text-muted" title="Contient des notes">📝</span>}
+          {data.closedHidden > 0 && (
+            <button
+              type="button"
+              className="nodrag rounded-full bg-surface-3 px-1.5 text-[10px] text-muted hover:bg-surface-2"
+              title={`${data.closedHidden} nœud(s) fermé(s) masqué(s) — cliquer pour les afficher`}
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onShowClosed();
+              }}
+            >
+              ✓{data.closedHidden}
+            </button>
+          )}
           {data.hiddenCount > 0 && (
             <button
               type="button"
@@ -163,6 +188,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
   const [saving, setSaving] = useState(0);
   const [layoutTick, setLayoutTick] = useState(0);
   const { fitView, setCenter, getZoom } = useReactFlow();
@@ -171,6 +197,33 @@ function Editor({ initial }: { initial: MindMapDto }) {
 
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
+
+  // Nœuds fermés : masqués (avec leur descendance) sauf si demandé. On compte,
+  // par nœud visible, ce qui est masqué dessous pour l'indiquer.
+  const { visibleNodes, closedHidden, closedCount } = useMemo(() => {
+    const closedCount = nodes.filter((n) => n.status === "CLOSED" && n.parentId !== null).length;
+    if (showClosed) return { visibleNodes: nodes, closedHidden: new Map<string, number>(), closedCount };
+    const children = new Map<string, MindNodeDto[]>();
+    for (const n of nodes) if (n.parentId) children.set(n.parentId, [...(children.get(n.parentId) ?? []), n]);
+    const hidden = new Set<string>();
+    const closedHidden = new Map<string, number>();
+    const sizeOf = (id: string): number => 1 + (children.get(id) ?? []).reduce((a, c) => a + sizeOf(c.id), 0);
+    const walk = (id: string) => {
+      for (const c of children.get(id) ?? []) {
+        if (c.status === "CLOSED") {
+          closedHidden.set(id, (closedHidden.get(id) ?? 0) + sizeOf(c.id));
+          const stack = [c.id];
+          while (stack.length) {
+            const cur = stack.pop()!;
+            hidden.add(cur);
+            stack.push(...(children.get(cur) ?? []).map((x) => x.id));
+          }
+        } else walk(c.id);
+      }
+    };
+    walk(map.rootId);
+    return { visibleNodes: nodes.filter((n) => !hidden.has(n.id)), closedHidden, closedCount };
+  }, [nodes, showClosed, map.rootId]);
 
   // --- Réseau ----------------------------------------------------------------
   /** Identifiant temporaire → identifiant réel, résolu au moment où la requête part. */
@@ -233,6 +286,18 @@ function Editor({ initial }: { initial: MindMapDto }) {
     [byId, map.id, patchLocal, real, run],
   );
 
+  const setStatus = useCallback(
+    (id: string, status: NodeStatus) => {
+      const n = byId.get(id);
+      if (!n || n.status === status) return;
+      patchLocal(id, { status });
+      // Un nœud fermé disparaît (sauf affichage des fermés) : on sélectionne son parent.
+      if (status === "CLOSED" && !showClosed && n.parentId) setSelectedId(n.parentId);
+      void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { status }));
+    },
+    [byId, map.id, patchLocal, real, run, showClosed],
+  );
+
   const setNotes = useCallback(
     (id: string, notes: string) => {
       patchLocal(id, { notes });
@@ -264,6 +329,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
           notes: "",
           color: null,
           collapsed: false,
+          status: "OPEN",
           order: at,
           updatedAt: new Date().toISOString(),
         };
@@ -415,7 +481,8 @@ function Editor({ initial }: { initial: MindMapDto }) {
   }, []);
 
   // --- Mise en page → React Flow ------------------------------------------------
-  const { positions, edges: layoutEdges } = useMemo(() => layoutMindMap(nodes, map.rootId), [nodes, map.rootId]);
+  const { positions, edges: layoutEdges } = useMemo(() => layoutMindMap(visibleNodes, map.rootId), [visibleNodes, map.rootId]);
+  const showClosedNodes = useCallback(() => setShowClosed(true), []);
 
   const [rfNodes, setRfNodes] = useState<MindNode[]>([]);
   useEffect(() => {
@@ -438,15 +505,18 @@ function Editor({ initial }: { initial: MindMapDto }) {
             hiddenCount: p.hiddenCount,
             collapsed: n.collapsed,
             hasNotes: n.notes.replace(/<[^>]+>/g, "").trim().length > 0 || n.notes.includes("<img"),
+            status: n.status,
+            closedHidden: closedHidden.get(p.id) ?? 0,
             editing: editingId === p.id,
             onRename: rename,
             onStopEditing: stopEditing,
             onToggleCollapse: toggleCollapse,
+            onShowClosed: showClosedNodes,
           },
         };
       }),
     );
-  }, [positions, byId, selectedId, editingId, rename, stopEditing, toggleCollapse, layoutTick]);
+  }, [positions, byId, closedHidden, selectedId, editingId, rename, stopEditing, toggleCollapse, showClosedNodes, layoutTick]);
 
   const rfEdges = useMemo<Edge[]>(
     () =>
@@ -530,6 +600,16 @@ function Editor({ initial }: { initial: MindMapDto }) {
         <Button variant="ghost" size="sm" onClick={() => expandAll(true)} title="Tout replier (niveau 1)">
           <ChevronsDownUp className="h-4 w-4" />
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowClosed((v) => !v)}
+          title={showClosed ? "Masquer les nœuds fermés" : `Afficher les nœuds fermés (${closedCount})`}
+          className={showClosed ? "text-brand-700" : ""}
+        >
+          {showClosed ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          {closedCount > 0 && <span className="text-xs">{closedCount}</span>}
+        </Button>
         <Button variant="ghost" size="sm" onClick={() => fitView({ padding: 0.2, duration: 300 })} title="Recentrer">
           <Focus className="h-4 w-4" />
         </Button>
@@ -584,6 +664,30 @@ function Editor({ initial }: { initial: MindMapDto }) {
                 <Button size="sm" variant="outline" onClick={() => toggleCollapse(selected.id)} title="Replier / déplier (Espace)">
                   {selected.collapsed ? "Déplier" : "Replier"}
                 </Button>
+              )}
+              {selected.parentId && (
+                <div className="flex items-center overflow-hidden rounded-lg border border-line-strong">
+                  {(["OPEN", "WATCH", "CLOSED"] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setStatus(selected.id, st)}
+                      title={NODE_STATUS_LABEL[st]}
+                      className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium ${
+                        selected.status === st
+                          ? st === "WATCH"
+                            ? "bg-amber-100 text-amber-900"
+                            : st === "CLOSED"
+                              ? "bg-surface-3 text-ink"
+                              : "bg-brand-50 text-brand-700"
+                          : "text-ink-2 hover:bg-surface-2"
+                      }`}
+                    >
+                      {st === "OPEN" ? <Circle className="h-3.5 w-3.5" /> : st === "WATCH" ? <Eye className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      <span className="hidden sm:inline">{NODE_STATUS_LABEL[st]}</span>
+                    </button>
+                  ))}
+                </div>
               )}
               {!showPanel && (
                 <Button size="sm" variant="outline" onClick={() => setPanelOpen(true)} title="Notes et détails">
@@ -648,6 +752,35 @@ function Editor({ initial }: { initial: MindMapDto }) {
                   ))}
                 </div>
               </div>
+
+              {selected.parentId && (
+                <div className="mt-4">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">Statut</span>
+                  <div className="flex flex-wrap gap-1.5 [&_span]:inline">
+                  {(["OPEN", "WATCH", "CLOSED"] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setStatus(selected.id, st)}
+                      title={NODE_STATUS_LABEL[st]}
+                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 ring-1 ring-line text-xs font-medium ${
+                        selected.status === st
+                          ? st === "WATCH"
+                            ? "bg-amber-100 text-amber-900"
+                            : st === "CLOSED"
+                              ? "bg-surface-3 text-ink"
+                              : "bg-brand-50 text-brand-700"
+                          : "text-ink-2 hover:bg-surface-2"
+                      }`}
+                    >
+                      {st === "OPEN" ? <Circle className="h-3.5 w-3.5" /> : st === "WATCH" ? <Eye className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      <span className="hidden sm:inline">{NODE_STATUS_LABEL[st]}</span>
+                    </button>
+                  ))}
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-faint">À surveiller : mis en évidence. Fermé : hachuré et masqué par défaut (avec ses sous-nœuds).</p>
+                </div>
+              )}
 
               <div className="mt-4">
                 <span className="mb-1.5 block text-xs font-medium text-muted">Notes</span>

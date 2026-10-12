@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Flag } from "lucide-react";
 
 /** Petits composants d'interface partagés. */
 
@@ -246,3 +247,37 @@ export const TASK_STATUS_COLOR = { TODO: "#94a3b8", IN_PROGRESS: "#4f5ff0", DONE
 export const TASK_STATUSES = ["TODO", "IN_PROGRESS", "DONE", "CLOSED"] as const;
 /** Terminée ou clôturée : sort du flux des tâches ouvertes. */
 export const isFinished = (s: string) => s === "DONE" || s === "CLOSED";
+
+// --- Priorité et complexité des tâches ----------------------------------------
+export const PRIORITY_LABEL = { LOW: "Basse", MEDIUM: "Moyenne", HIGH: "Haute", CRITICAL: "Critique" } as const;
+export const PRIORITY_TONE = { LOW: "neutral", MEDIUM: "brand", HIGH: "warn", CRITICAL: "danger" } as const;
+export const PRIORITY_COLOR = { LOW: "#94a3b8", MEDIUM: "#4f5ff0", HIGH: "#d98a0b", CRITICAL: "#d13b3b" } as const;
+/** Du plus haut au plus bas. */
+export const PRIORITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
+/** Classes d'un « item tâche » nuancé selon la priorité (calendrier, matrice). */
+export const PRIORITY_CHIP = {
+  LOW: "border-slate-300 bg-slate-100 text-slate-700",
+  MEDIUM: "border-indigo-300 bg-indigo-100 text-indigo-800",
+  HIGH: "border-amber-400 bg-amber-100 text-amber-900",
+  CRITICAL: "border-red-400 bg-red-100 text-red-900",
+} as const;
+export const COMPLEXITY_LABEL = { LOW: "Basse", MEDIUM: "Moyenne", HIGH: "Forte" } as const;
+export const COMPLEXITIES = ["LOW", "MEDIUM", "HIGH"] as const;
+export type Priority = keyof typeof PRIORITY_LABEL;
+export type Complexity = keyof typeof COMPLEXITY_LABEL;
+
+/** Petit drapeau coloré selon la priorité. */
+export function PriorityFlag({ priority, className = "" }: { priority: Priority; className?: string }) {
+  return <Flag className={`h-3.5 w-3.5 shrink-0 ${className}`} style={{ color: PRIORITY_COLOR[priority] }} fill={priority === "CRITICAL" || priority === "HIGH" ? PRIORITY_COLOR[priority] : "none"} aria-label={`Priorité ${PRIORITY_LABEL[priority]}`} />;
+}
+
+// --- Statut des nœuds de carte mentale ---------------------------------------
+export const NODE_STATUS_LABEL = { OPEN: "Ouvert", WATCH: "À surveiller", CLOSED: "Fermé" } as const;
+
+/** Jour local au format AAAA-MM-JJ (sans décalage de fuseau). */
+export function ymd(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+export const todayYmd = () => ymd(new Date());

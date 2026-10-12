@@ -57,7 +57,8 @@ type DashboardDto = {
 ## Cartes mentales
 
 ```ts
-type MindNode = { id; parentId: string | null; title; notes /* HTML assaini */; color; collapsed; order; updatedAt };
+type MindNode = { id; parentId: string | null; title; notes /* HTML assaini */; color; collapsed;
+                  status: "OPEN"|"WATCH"|"CLOSED"; order; updatedAt };
 type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 ```
 
@@ -69,7 +70,7 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 | PATCH | `/mindmaps/:id` | `{ title? }` | `{ mindmap }` |
 | DELETE | `/mindmaps/:id` | — | `{ ok: true }` |
 | POST | `/mindmaps/:id/nodes` | `{ parentId, title?, index? }` | `201 { node }` |
-| PATCH | `/mindmaps/:id/nodes/:nodeId` | `{ title?, notes?, color?, collapsed? }` | `{ node }` |
+| PATCH | `/mindmaps/:id/nodes/:nodeId` | `{ title?, notes?, color?, collapsed?, status? }` | `{ node }` |
 | DELETE | `/mindmaps/:id/nodes/:nodeId` | — | `{ ok: true }` |
 | POST | `/mindmaps/:id/nodes/:nodeId/move` | `{ parentId, index? }` | `{ node }` |
 
@@ -79,7 +80,8 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 type Progress = { percent; total; done };
 type Member   = { id; userId: string | null; name; email; role; color };
 type Task     = { id; stageId; activityId; assigneeId; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
-                  progress: 0..100; order; startDate; dueDate; commentCount; updatedAt };
+                  progress: 0..100; priority: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; complexity: "LOW"|"MEDIUM"|"HIGH";
+                  order; startDate; dueDate; commentCount; updatedAt };
 type Activity = { id; stageId; name; description; order; progress; tasks: Task[] };
 type Stage    = { id; projectId; name; description; order; startDate; dueDate; progress; activities: Activity[]; tasks: Task[] };
 type Folder   = { id; parentId: string | null; name };     // arborescence documentaire (null = racine)
@@ -124,10 +126,11 @@ complet recalculé** (`{ project }`).
 | POST | `/stages/:id/tasks` | tâche directement sous l'étape |
 | POST | `/activities/:id/tasks` | tâche sous une activité |
 | GET | `/tasks/:id` | → `{ task: TaskDetail }` (voir fiche tâche) |
-| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, startDate?, dueDate?, assigneeId?, order?, activityId?, stageId? }` |
+| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, order?, activityId?, stageId? }` |
 | DELETE | `/tasks/:id` | |
 
-Corps d'une tâche à la création : `{ name, description?, status?, progress?, startDate?, dueDate?, assigneeId? }`.
+Corps d'une tâche à la création : `{ name, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId? }`
+(priorité et complexité par défaut `MEDIUM`).
 `assigneeId` doit être un membre du projet (`400` sinon ; `null` désaffecte).
 
 Cohérence statut / avancement : `progress = 100 ⇒ DONE` (une tâche `CLOSED`
@@ -140,19 +143,23 @@ la rouvre.
 ### Fiche tâche et commentaires
 
 ```ts
-type TaskComment = { id; authorId; authorName; body; mentions: string[]; createdAt };
+type TaskComment = { id; parentId: string | null; authorId; authorName; body; mentions: string[]; createdAt };
+type WorkSession = { id; date: "AAAA-MM-JJ"; userId; userName; mine: boolean; late: boolean /* après l'échéance */ };
 type TaskDetail  = Task & {
   project: { id; name; color; ownerId; members: Member[] };
   stage: { id; name }; activity: { id; name } | null; assignee: Member | null;
-  comments: TaskComment[];
+  comments: TaskComment[];        // liste plate ; le client reconstruit le fil par parentId
+  workSessions: WorkSession[];    // toutes les sessions de la tâche (tous membres)
 };
 ```
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
 | GET | `/tasks/:id` | — | `{ task }` |
-| POST | `/tasks/:id/comments` | `{ body }` | `201 { task }` |
-| DELETE | `/comments/:id` | — | `{ task }` (auteur ou propriétaire) |
+| POST | `/tasks/:id/comments` | `{ body, parentId? }` (`parentId` = commentaire de la même tâche auquel on répond ; `400` sinon) | `201 { task }` |
+| DELETE | `/comments/:id` | — | `{ task }` (auteur ou propriétaire ; supprime aussi les réponses) |
+| POST | `/tasks/:id/sessions` | `{ date: "AAAA-MM-JJ" }` (idempotent pour un même jour) | `201 { sessions: WorkSession[] }` |
+| DELETE | `/sessions/:id` | — | `{ sessions }` (ses propres sessions uniquement) |
 
 Mentions : le client envoie la forme lisible `@[Nom]` (ce que l'utilisateur
 voit dans la zone de saisie) ; le serveur la résout par nom (insensible à la
@@ -160,7 +167,43 @@ casse) en `@[Nom](memberId)` et ne retient dans `mentions` que les membres du
 projet. La forme complète `@[Nom](memberId)` est aussi acceptée en entrée
 (identifiant vérifié). Un `@[Nom]` sans membre correspondant reste du texte.
 
-### Livrables
+### Organisation personnelle (« mes tâches »)
+
+« Mes tâches » = affectées à un membre rattaché à mon compte, **ou** non
+affectées dans un projet dont je suis propriétaire. Projets actifs / en pause.
+
+```ts
+type OrganizerTask = Task & { projectId; projectName; projectColor; stageName; activityName; assigneeName;
+                              rank: number | null;                     // ordre relatif personnel
+                              sessions: { id; date; late }[] };        // mes sessions de travail
+```
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/me/tasks` | — | `{ tasks: OrganizerTask[] }` triées par rang, puis échéance, puis priorité |
+| PUT | `/me/tasks/order` | `{ taskIds: string[] }` (ordre voulu ; ids inaccessibles ignorés) | `{ ok: true }` |
+
+## Notifications
+
+```ts
+type Notification = { id; type: "ASSIGNED"|"REPLY"|"TASK_UPDATED"|"MENTION"; title; body; href;
+                      taskId; projectId; actorName; read: boolean; createdAt };
+```
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/notifications?limit=30&unread=1` | — | `{ notifications, unreadCount }` (récentes d'abord, 100 max) |
+| PATCH | `/notifications/:id` | `{ read: boolean }` | `{ notification }` |
+| POST | `/notifications/read-all` | — | `{ ok: true }` |
+| DELETE | `/notifications/:id` | — | `{ ok: true }` |
+
+Émission : `ASSIGNED` (tâche créée / ré-affectée à un membre à compte),
+`TASK_UPDATED` (tâche affectée modifiée ou commentée ; une seule non lue par
+tâche, rafraîchie), `REPLY` (réponse à mon commentaire), `MENTION`. L'auteur
+de l'action n'est jamais notifié. `href` pointe vers la fiche tâche,
+éventuellement `#comment-<id>`.
+
+## Livrables
 
 | Méthode | Route | Corps |
 | --- | --- | --- |

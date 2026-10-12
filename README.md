@@ -7,14 +7,24 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    repli/dépli, couleurs, glisser-déposer pour rattacher une branche, et
    **notes en texte riche** sur chaque nœud (titres, listes, cases à cocher,
    liens, images collées directement — aperçu immédiat, envoi en arrière-plan).
+   Chaque nœud a un **statut** : ouvert, à surveiller (mis en évidence) ou
+   fermé (hachuré, masqué par défaut avec ses sous-nœuds).
 2. **Gestion de projet** — projets › **étapes › activités › tâches** (le niveau
    activité est facultatif). L'avancement se saisit sur les tâches et remonte
    automatiquement. Chaque projet a son **équipe** (comptes de l'application ou
    noms libres) avec affectation nominative des tâches, ses **livrables**
    (statut, responsable, dates attendues), ses **documents** (téléversés,
    rattachables à un livrable) et un **tableau de bord** (planning Gantt,
-   avancement par étape, statut des livrables). Chaque tâche a sa **fiche**
-   avec un fil de commentaires et des mentions « @ ».
+   avancement par étape, statut des livrables). Chaque tâche a une
+   **priorité** (basse → critique), une **complexité**, des **sessions de
+   travail planifiées** et sa **fiche** avec un fil de commentaires
+   hiérarchique (réponses aux réponses) et des mentions « @ ».
+   **Organiser mes tâches** : vue calendaire (glisser-déposer des tâches sur
+   les jours, alerte si après l'échéance), matrice priorité × complexité,
+   tableau de synthèse réordonnable.
+   **Notifications in-app** (cloche) : tâche assignée, réponse à un
+   commentaire, tâche assignée mise à jour, mention — cliquables, lues /
+   non lues.
 3. **Tableau de bord personnel** — mes tâches, échéances à venir, retards,
    répartitions par statut, avancement des projets.
 

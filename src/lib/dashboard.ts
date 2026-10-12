@@ -1,11 +1,11 @@
 import "server-only";
 import type { DeliverableStatus, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { listProjects, projectAccessWhere, toTaskDto, type ProjectSummary, type TaskDto } from "@/lib/projects";
+import { isMyTask, listProjects, projectAccessWhere, toTaskDto, type ProjectSummary, type TaskDto } from "@/lib/projects";
 
 /**
  * Tableau de bord personnel : mes tâches (affectées à un membre rattaché à
- * mon compte), échéances à venir, répartition par statut, avancement global.
+ * mon compte, ou non affectées dans mes propres projets), échéances à venir, répartition par statut, avancement global.
  * Exposé par GET /api/v1/dashboard (web et mobile).
  */
 
@@ -81,7 +81,7 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
   for (const t of tasks) {
     statusCounts[t.status]++;
     const project = projectById.get(t.stage.projectId)!;
-    const mine = t.assignee?.userId === userId;
+    const mine = isMyTask(t, project.ownerId, userId);
     if (mine) {
       myStatusCounts[t.status]++;
       myTasks.push({

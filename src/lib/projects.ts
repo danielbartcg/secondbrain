@@ -1,7 +1,8 @@
 import "server-only";
-import type { DeliverableStatus, Prisma, ProjectStatus, TaskStatus } from "@prisma/client";
+import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPriority, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
+import { notify } from "@/lib/notifications";
 import type {
   CreateActivityInput,
   CreateDeliverableInput,
@@ -53,6 +54,10 @@ export type TaskDto = {
   description: string;
   status: TaskStatus;
   progress: number;
+  /** Basse · Moyenne · Haute · Critique. */
+  priority: TaskPriority;
+  /** Complexité estimée : Basse · Moyenne · Forte (vue « Sélection »). */
+  complexity: TaskComplexity;
   order: number;
   startDate: string | null;
   dueDate: string | null;
@@ -189,6 +194,8 @@ export function toTaskDto(t: TaskRow): TaskDto {
     description: t.description,
     status: t.status,
     progress: t.progress,
+    priority: t.priority,
+    complexity: t.complexity,
     order: t.order,
     startDate: iso(t.startDate),
     dueDate: iso(t.dueDate),
@@ -381,6 +388,27 @@ async function resequence(
     if (current.get(ids[order]) === order) continue;
     await delegate.update({ where: { id: ids[order] }, data: { order } });
   }
+}
+
+/**
+ * « Ma » tâche : affectée à un membre rattaché à mon compte, ou non affectée
+ * dans un projet dont je suis propriétaire (usage solo).
+ */
+export function isMyTask(t: { assignee: { userId: string | null } | null }, projectOwnerId: string, userId: string): boolean {
+  return t.assignee ? t.assignee.userId === userId : projectOwnerId === userId;
+}
+
+export const taskHref = (projectId: string, taskId: string) => `/projects/${projectId}/tasks/${taskId}`;
+
+/** Membre + compte rattaché (pour notifier). */
+async function memberUser(tx: Tx, memberId: string | null | undefined): Promise<{ userId: string | null } | null> {
+  if (!memberId) return null;
+  return tx.projectMember.findUnique({ where: { id: memberId }, select: { userId: true } });
+}
+
+async function actorName(tx: Tx, userId: string): Promise<string> {
+  const u = await tx.user.findUnique({ where: { id: userId }, select: { name: true } });
+  return u?.name ?? "Quelqu'un";
 }
 
 /** Un membre affecté doit appartenir au projet. */
@@ -611,7 +639,7 @@ export async function createTask(
     await checkMember(tx, projectId, input.assigneeId);
     const { status, progress } = reconcile({ status: "TODO", progress: 0 }, input);
     const count = await tx.task.count({ where: { stageId, activityId } });
-    await tx.task.create({
+    const created = await tx.task.create({
       data: {
         stageId,
         activityId,
@@ -620,11 +648,20 @@ export async function createTask(
         description: input.description,
         status,
         progress,
+        priority: input.priority ?? "MEDIUM",
+        complexity: input.complexity ?? "MEDIUM",
         order: count,
         startDate: toDate(input.startDate) ?? null,
         dueDate: toDate(input.dueDate) ?? null,
       },
     });
+    const assignee = await memberUser(tx, input.assigneeId);
+    if (assignee?.userId) {
+      const name = await actorName(tx, userId);
+      await notify(tx, [
+        { userId: assignee.userId, actorId: userId, actorName: name, type: "ASSIGNED", title: `${name} vous a assigné la tâche « ${created.name} »`, href: taskHref(projectId, created.id), taskId: created.id, projectId },
+      ]);
+    }
   });
 }
 
@@ -660,13 +697,15 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     }
     const moved = stageId !== t.stageId || activityId !== t.activityId;
 
-    await tx.task.update({
+    const updated = await tx.task.update({
       where: { id: taskId },
       data: {
         name: input.name,
         description: input.description,
         status,
         progress,
+        priority: input.priority,
+        complexity: input.complexity,
         assigneeId: input.assigneeId,
         startDate: toDate(input.startDate),
         dueDate: toDate(input.dueDate),
@@ -678,6 +717,29 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     if (moved || input.order !== undefined) {
       await resequence(tx, "task", { stageId, activityId }, taskId, input.order);
       if (moved) await resequence(tx, "task", { stageId: t.stageId, activityId: t.activityId });
+    }
+
+    // Notifications : nouvelle affectation, ou mise à jour d'une tâche affectée à quelqu'un d'autre.
+    const changes: string[] = [];
+    if (input.name !== undefined && input.name !== t.name) changes.push("nom");
+    if (input.description !== undefined && input.description !== t.description) changes.push("description");
+    if (status !== t.status) changes.push("statut");
+    else if (progress !== t.progress) changes.push("avancement");
+    if (input.priority !== undefined && input.priority !== t.priority) changes.push("priorité");
+    if (input.complexity !== undefined && input.complexity !== t.complexity) changes.push("complexité");
+    if (input.startDate !== undefined && iso(toDate(input.startDate)) !== iso(t.startDate)) changes.push("date de début");
+    if (input.dueDate !== undefined && iso(toDate(input.dueDate)) !== iso(t.dueDate)) changes.push("échéance");
+    if (moved) changes.push("rattachement");
+    const assigneeChanged = input.assigneeId !== undefined && input.assigneeId !== t.assigneeId;
+    const assignee = await memberUser(tx, updated.assigneeId);
+    if (assignee?.userId && assignee.userId !== userId && (assigneeChanged || changes.length > 0)) {
+      const name = await actorName(tx, userId);
+      const href = taskHref(projectId, taskId);
+      await notify(tx, [
+        assigneeChanged
+          ? { userId: assignee.userId, actorId: userId, actorName: name, type: "ASSIGNED", title: `${name} vous a assigné la tâche « ${updated.name} »`, href, taskId, projectId }
+          : { userId: assignee.userId, actorId: userId, actorName: name, type: "TASK_UPDATED", title: `${name} a mis à jour « ${updated.name} »`, body: `Modifié : ${changes.join(", ")}.`, href, taskId, projectId },
+      ]);
     }
   });
 }

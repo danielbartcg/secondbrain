@@ -10,6 +10,7 @@ import {
   Badge,
   DELIVERABLE_STATUS_COLOR,
   DELIVERABLE_STATUS_LABEL,
+  PriorityFlag,
   ProgressBar,
   TASK_STATUS_COLOR,
   TASK_STATUS_LABEL,
@@ -51,7 +52,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
           </h2>
           {openMine.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
-              Aucune tâche ouverte ne vous est affectée. Affectez-vous des tâches depuis un projet (onglet Plan).
+              Aucune tâche ouverte : affectez-vous des tâches depuis un projet (onglet Plan), ou créez-en dans vos propres projets.
             </p>
           ) : (
             <ul className="mt-3 divide-y divide-line">
@@ -60,7 +61,9 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
                   <Link href={`/projects/${t.projectId}/tasks/${t.id}`} className="flex items-center gap-3 py-2.5 hover:bg-surface-2 -mx-2 rounded-lg px-2">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.projectColor ?? "var(--color-brand-500)" }} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{t.name}</div>
+                      <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+                        <PriorityFlag priority={t.priority} /> <span className="truncate">{t.name}</span>
+                      </div>
                       <div className="truncate text-xs text-muted">
                         {t.projectName} · {t.stageName}
                       </div>

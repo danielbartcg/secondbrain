@@ -11,7 +11,31 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | `/mindmaps/[id]` | `mindmaps/[id]/page.tsx` | `mindmap/MindMapEditor` | éditeur de carte (plein cadre) |
 | `/projects` | `projects/page.tsx` | `projects/ProjectList` | liste, filtre par statut, création |
 | `/projects/[id]` | `projects/[id]/page.tsx` | `projects/ProjectWorkspace` | espace projet à onglets |
-| `/projects/[id]/tasks/[taskId]` | `.../tasks/[taskId]/page.tsx` → `getTaskDetail` | `projects/TaskSheet` | fiche tâche + commentaires |
+| `/projects/[id]/tasks/[taskId]` | `.../tasks/[taskId]/page.tsx` → `getTaskDetail` | `projects/TaskSheet` | fiche tâche + sessions + fil de commentaires |
+| `/organize` | `organize/page.tsx` → `getMyTasks` | `organizer/TaskOrganizer` | **Organiser mes tâches** : Calendrier / Sélection / Synthèse (menu sous « Projets ») |
+| `/notifications` | `notifications/page.tsx` | `NotificationsPage` | toutes mes notifications (filtre non lues) |
+
+## Coque (`AppShell`)
+
+Menu : Tableau de bord, Cartes mentales, Projets, **Organiser mes tâches**
+(sous-entrée de Projets). **Cloche de notifications** (`NotificationsBell`)
+à côté du logo (barre latérale) et dans l'en-tête mobile : pastille rouge =
+nombre de non lues ; panneau déroulant façon réseau social (icône par type,
+titre, extrait, « il y a … », point bleu si non lue) ; un clic marque lue et
+ouvre l'endroit concerné (fiche tâche, commentaire ciblé) ; au survol :
+bascule lue / non lue, suppression ; « Tout lu » ; lien « Voir toutes ».
+
+## Organiser mes tâches (`organizer/TaskOrganizer`)
+
+Sélecteur de vue (mémorisé dans le hash : `#calendar`, `#matrix`,
+`#synthesis`), compteurs, indicateur d'enregistrement. Items tâche colorés
+selon la priorité (rouge critique, ambre haute, indigo moyenne, gris basse).
+
+| Vue | Composant | Contenu |
+| --- | --- | --- |
+| Calendrier | `CalendarView` | liste « Tâches à planifier » (glissable ; une tâche planifiée est grisée mais reste déposable) + grille mensuelle lun→dim, navigation, aujourd'hui. Déposer sur un jour = **session de travail** ; les sessions se glissent d'un jour à l'autre, se retirent (×), sont liées à la fiche. Session après l'échéance : bordure rouge + ⚠. Drapeau rouge sur les jours d'échéance. Mobile : liste horizontale, sélection au clic puis clic sur un jour |
+| Sélection | `MatrixView` | matrice **priorité** (lignes, Critique en haut → Basse) × **complexité** (colonnes Basse / Moyenne / Forte) ; glisser une carte vers une autre zone change sa complexité (et sa priorité si la ligne change) |
+| Synthèse | `SynthesisView` | tableau : #, tâche, projet, étape, priorité (modifiable), échéance (rouge si dépassée), statut, « Prévu ? » (oui · n jours / non) ; glisser les lignes = ordre relatif personnel |
 
 ## Tableau de bord personnel (`HomeDashboard`)
 
@@ -33,7 +57,7 @@ puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) :
 | Onglet | Composant | Contenu |
 | --- | --- | --- |
 | Tableau de bord | `ProjectDashboardTab` | KPIs ; **planning Gantt** (`PlanningChart`) des étapes (part réalisée en plein) et livrables 📦 avec ligne « aujourd'hui » ; avancement par étape (`ProgressBarsChart`) ; tâches par statut ; statut des livrables (anneau + liste) ; tâches en retard |
-| Plan | `ProjectBoard` | étapes › activités › tâches : avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche |
+| Plan | `ProjectBoard` | étapes › activités › tâches : drapeau de priorité, avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche ; détails rapides : priorité, complexité, dates, clôture |
 | Livrables | `DeliverablesTab` | cartes : statut, responsable, étape, début/fin attendus, documents rattachés (téléversement direct, rattachement d'un document existant, détachement, téléchargement) |
 | Documents | `DocumentsTab` | **explorateur à dossiers** : fil d'Ariane, sous-dossiers du dossier courant (créer, renommer, « Déplacer vers… », supprimer → contenu remonté dans le parent), documents du dossier courant (sélecteur de dossier, « matérialise le livrable … », téléchargement, suppression par l'auteur ou le propriétaire) ; dépôt (bouton ou glisser-déposer) **dans le dossier courant** |
 | Équipe | `TeamTab` | membres (avatar, rôle, couleur, nb de tâches) ; ajout en **nom libre** ou **compte de l'application** (recherche par e-mail exact) ; retrait (propriétaire uniquement, jamais le propriétaire lui-même) |
@@ -43,17 +67,25 @@ réponse recalculée, recharge en cas d'erreur.
 
 ## Fiche tâche (`TaskSheet`)
 
-- Carte principale : badges (statut, retard, nb commentaires), titre éditable,
-  boutons de statut À faire / En cours / Terminée + curseur d'avancement,
-  champs **Responsable / Début / Échéance / Rattachement** (étape ou
-  étape › activité), description, suppression.
+- Carte principale : badges (statut, priorité, retard, nb commentaires),
+  titre éditable, boutons de statut À faire / En cours / Terminée + curseur
+  d'avancement, champs **Priorité / Complexité / Responsable / Début /
+  Échéance / Rattachement** (étape ou étape › activité), description,
+  suppression.
+- **Sessions de travail planifiées** : jours prévus (les miens retirables,
+  ceux des autres membres affichés avec leur nom), ajout par sélecteur de
+  date, badge et bordure rouge ⚠ pour une session après l'échéance.
 - **Clôture** : une fois la tâche Terminée, un bouton violet « Clôturer »
   apparaît (statut `CLOSED`, icône cadenas) ; sur une tâche clôturée il devient
   « Clôturée » et un clic la rouvre (Terminée). Dans le Plan, l'icône de statut
   fait tourner À faire → En cours → Terminée ; la clôture se fait par le bouton
   « Clôturer » des détails rapides ou depuis la fiche.
-- **Échanges** : fil de commentaires (avatar, auteur, date), suppression par
-  l'auteur ou le propriétaire. Zone de saisie avec **mentions** : taper `@`
+- **Échanges** : fil **hiérarchique** : chaque commentaire a un bouton
+  « Répondre » (formulaire inline, Échap annule) ; les réponses s'imbriquent
+  sans limite de profondeur (indentation plafonnée au 4e niveau, bordure
+  gauche), repliables (« Masquer / Afficher n réponses »). Suppression par
+  l'auteur ou le propriétaire (avec ses réponses). Ancre `#comment-<id>`
+  (depuis une notification) : défilement + surbrillance. Zone de saisie avec **mentions** : taper `@`
   puis des lettres filtre les membres (↑/↓, Entrée/Tab pour insérer, Échap) ;
   l'insertion écrit `@[Nom]` dans la zone de saisie (lisible, sans
   identifiant) ; le serveur résout le membre à l'envoi et le commentaire
@@ -63,14 +95,20 @@ réponse recalculée, recharge en cas d'erreur.
 
 Voir docs/01-architecture.md § Cartes mentales. Raccourcis : Tab enfant,
 Entrée frère, Suppr, F2 renommer, Espace replier, Échap. Panneau latéral
-(tiroir bas sur mobile) : titre, couleur, notes riches (`RichTextEditor`).
+(tiroir bas sur mobile) : titre, couleur, **statut** (Ouvert / À surveiller /
+Fermé, aussi dans la barre d'actions du nœud), notes riches
+(`RichTextEditor`). « À surveiller » : halo ambré + œil ; « Fermé » :
+hachuré, barré, masqué avec ses sous-nœuds ; bouton œil barré dans l'en-tête
+« Afficher les nœuds fermés (n) », badge `✓n` sur le parent (cliquable).
 
 ## Composants partagés (`src/components/ui.tsx`)
 
 `PageHeader`, `Button`, `ProgressBar`, `InlineEdit` (clic pour éditer),
 `QuickAdd`, `EmptyState`, `Avatar` (initiales, couleur stable par id),
-`Badge`, constantes de libellés/couleurs de statut (`TASK_STATUS_*`,
-`DELIVERABLE_STATUS_*`), helpers `formatDate`, `formatBytes`, `relativeDays`.
+`Badge`, `PriorityFlag`, constantes de libellés/couleurs (`TASK_STATUS_*`,
+`DELIVERABLE_STATUS_*`, `PRIORITY_*` dont `PRIORITY_CHIP`, `COMPLEXITY_*`,
+`NODE_STATUS_LABEL`), helpers `formatDate`, `formatBytes`, `relativeDays`,
+`ymd` / `todayYmd` (jour local `AAAA-MM-JJ`).
 
 ## Graphiques (`src/components/charts/`)
 

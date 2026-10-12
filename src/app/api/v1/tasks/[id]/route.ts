@@ -10,7 +10,7 @@ type P = { id: string };
 export const GET = withUser<P>(async (_req, { params, user }) => json({ task: await getTaskDetail(user.id, params.id) }));
 
 /**
- * PATCH /api/v1/tasks/:id — avancement, statut, nom, description, dates,
+ * PATCH /api/v1/tasks/:id — avancement, statut, priorité, complexité, nom, description, dates,
  * responsable (`assigneeId`), ordre, déplacement (activityId / stageId).
  * Renvoie le projet recalculé.
  */

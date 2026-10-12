@@ -3,15 +3,36 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarDays, Check, Circle, CircleDot, Flag, Layers, Lock, MessageSquare, Send, Trash2, User } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, CalendarPlus, Check, Circle, CircleDot, CornerDownRight, Flag, Gauge, Layers, Lock, MessageSquare, Plus, Send, Trash2, User, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MemberDto, ProjectDto } from "@/lib/projects";
-import type { TaskCommentDto, TaskDetailDto } from "@/lib/tasks";
-import { Avatar, Badge, Button, InlineEdit, ProgressBar, TASK_STATUS_LABEL, TASK_STATUS_TONE, formatDate, isFinished, selectClass, toInputDate } from "@/components/ui";
+import type { TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
+import {
+  Avatar,
+  Badge,
+  Button,
+  COMPLEXITIES,
+  COMPLEXITY_LABEL,
+  InlineEdit,
+  PRIORITIES,
+  PRIORITY_LABEL,
+  PRIORITY_TONE,
+  PriorityFlag,
+  ProgressBar,
+  TASK_STATUS_LABEL,
+  TASK_STATUS_TONE,
+  formatDate,
+  isFinished,
+  selectClass,
+  toInputDate,
+  todayYmd,
+} from "@/components/ui";
 
 /**
- * Fiche tâche : champs mis en forme (statut, avancement, responsable, dates,
- * description, rattachement) et fil de commentaires avec mentions « @ ».
+ * Fiche tâche : champs mis en forme (statut, avancement, priorité, complexité,
+ * responsable, dates, description, rattachement), sessions de travail
+ * planifiées, et fil de commentaires hiérarchique (réponses imbriquées) avec
+ * mentions « @ ».
  */
 
 type TaskResp = { task: TaskDetailDto };
@@ -84,6 +105,9 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
         <div className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Badge>
+            <Badge tone={PRIORITY_TONE[task.priority]}>
+              <PriorityFlag priority={task.priority} className="!h-3 !w-3" /> {PRIORITY_LABEL[task.priority]}
+            </Badge>
             {late && (
               <Badge tone="danger">
                 <Flag className="h-3 w-3" /> En retard
@@ -133,7 +157,25 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
           </div>
 
           {/* Champs */}
-          <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field icon={<Flag className="h-4 w-4" />} label="Priorité">
+              <select value={task.priority} onChange={(e) => patch({ priority: e.target.value })} className={`${selectClass} w-full`}>
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABEL[p]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field icon={<Gauge className="h-4 w-4" />} label="Complexité">
+              <select value={task.complexity} onChange={(e) => patch({ complexity: e.target.value })} className={`${selectClass} w-full`}>
+                {COMPLEXITIES.map((c) => (
+                  <option key={c} value={c}>
+                    {COMPLEXITY_LABEL[c]}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field icon={<User className="h-4 w-4" />} label="Responsable">
               <div className="flex items-center gap-2">
                 {task.assignee && <Avatar id={task.assignee.id} name={task.assignee.name} color={task.assignee.color} size={26} />}
@@ -167,6 +209,9 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
               </select>
             </Field>
           </dl>
+
+          {/* Sessions de travail planifiées */}
+          <WorkSessions task={task} onChange={(workSessions) => setTask((t) => ({ ...t, workSessions }))} />
 
           <div className="mt-6">
             <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Description</h2>
@@ -247,6 +292,79 @@ function StageOptions({ task }: { task: TaskDetailDto }) {
   );
 }
 
+// --- Sessions de travail -----------------------------------------------------
+
+function WorkSessions({ task, onChange }: { task: TaskDetailDto; onChange: (sessions: WorkSessionDto[]) => void }) {
+  const [date, setDate] = useState(todayYmd());
+  const [busy, setBusy] = useState(false);
+  const lateCount = task.workSessions.filter((s) => s.late).length;
+
+  async function add() {
+    if (!date) return;
+    setBusy(true);
+    try {
+      const { sessions } = await api.post<{ sessions: WorkSessionDto[] }>(`/tasks/${task.id}/sessions`, { date });
+      onChange(sessions);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(s: WorkSessionDto) {
+    const { sessions } = await api.delete<{ sessions: WorkSessionDto[] }>(`/sessions/${s.id}`);
+    onChange(sessions);
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-line bg-surface-2/60 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          <CalendarPlus className="h-4 w-4" /> Sessions de travail planifiées
+        </h2>
+        {lateCount > 0 && (
+          <Badge tone="danger">
+            <AlertTriangle className="h-3 w-3" /> {lateCount} après l&apos;échéance
+          </Badge>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${selectClass} py-1 text-xs`} />
+          <Button size="sm" variant="outline" onClick={add} disabled={busy || !date}>
+            <Plus className="h-3.5 w-3.5" /> Planifier
+          </Button>
+        </div>
+      </div>
+      {task.workSessions.length === 0 ? (
+        <p className="mt-2 text-xs text-muted">
+          Aucune session planifiée. Choisissez un jour ci-dessus, ou glissez la tâche sur le calendrier dans{" "}
+          <Link href="/organize#calendar" className="text-brand-700 hover:underline">
+            Organiser mes tâches
+          </Link>
+          .
+        </p>
+      ) : (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {task.workSessions.map((s) => (
+            <li
+              key={s.id}
+              className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${s.late ? "border-red-400 bg-red-50 text-red-800" : "border-line bg-surface text-ink-2"}`}
+              title={s.late ? "Cette session est après l'échéance de la tâche" : undefined}
+            >
+              {s.late && <AlertTriangle className="h-3.5 w-3.5" />}
+              <CalendarDays className="h-3.5 w-3.5 opacity-60" />
+              <span className="font-medium">{new Date(`${s.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}</span>
+              {!s.mine && <span className="text-muted">· {s.userName}</span>}
+              {s.mine && (
+                <button type="button" onClick={() => remove(s)} className="rounded p-0.5 opacity-50 hover:bg-surface-3 hover:opacity-100" title="Retirer">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // --- Commentaires et mentions ------------------------------------------------
 
 /** `@[Nom](memberId)` (forme stockée) ou `@[Nom]` (forme saisie). */
@@ -276,7 +394,35 @@ function CommentBody({ body, members }: { body: string; members: MemberDto[] }) 
   return <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{parts}</p>;
 }
 
-function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetailDto; currentUserId: string; isOwner: boolean; onChange: (t: TaskDetailDto) => void }) {
+type CommentTree = TaskCommentDto & { replies: CommentTree[] };
+
+function buildTree(comments: TaskCommentDto[]): CommentTree[] {
+  const nodes = new Map<string, CommentTree>(comments.map((c) => [c.id, { ...c, replies: [] }]));
+  const roots: CommentTree[] = [];
+  for (const n of nodes.values()) {
+    const parent = n.parentId ? nodes.get(n.parentId) : undefined;
+    if (parent) parent.replies.push(n);
+    else roots.push(n);
+  }
+  return roots;
+}
+
+/** Zone de saisie avec mentions « @ » ; sert au commentaire racine comme aux réponses. */
+function CommentComposer({
+  task,
+  parentId,
+  onPosted,
+  onCancel,
+  autoFocus = false,
+  placeholder,
+}: {
+  task: TaskDetailDto;
+  parentId?: string;
+  onPosted: (t: TaskDetailDto) => void;
+  onCancel?: () => void;
+  autoFocus?: boolean;
+  placeholder?: string;
+}) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -324,19 +470,197 @@ function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetail
     if (!text) return;
     setBusy(true);
     try {
-      const { task: updated } = await api.post<TaskResp>(`/tasks/${task.id}/comments`, { body: text });
-      onChange(updated);
+      const { task: updated } = await api.post<TaskResp>(`/tasks/${task.id}/comments`, { body: text, parentId: parentId ?? null });
+      onPosted(updated);
       setBody("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erreur");
     } finally {
       setBusy(false);
     }
   }
 
-  async function remove(c: TaskCommentDto) {
-    if (!confirm("Supprimer ce commentaire ?")) return;
-    const { task: updated } = await api.delete<TaskResp>(`/comments/${c.id}`);
+  return (
+    <form onSubmit={submit} className="relative">
+      <textarea
+        ref={textareaRef}
+        autoFocus={autoFocus}
+        value={body}
+        rows={parentId ? 2 : 3}
+        placeholder={placeholder ?? "Écrire un commentaire… « @ » pour mentionner quelqu'un, Ctrl+Entrée pour envoyer."}
+        onChange={(e) => {
+          setBody(e.target.value);
+          detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
+        }}
+        onKeyDown={(e) => {
+          if (mention && candidates.length > 0) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setHighlight((h) => (h + 1) % candidates.length);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHighlight((h) => (h - 1 + candidates.length) % candidates.length);
+              return;
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              insertMention(candidates[highlight]);
+              return;
+            }
+            if (e.key === "Escape") {
+              setMention(null);
+              return;
+            }
+          }
+          if (e.key === "Escape" && onCancel) onCancel();
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        onClick={(e) => detectMention(body, (e.target as HTMLTextAreaElement).selectionStart ?? body.length)}
+        className="w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+      />
+      {mention && candidates.length > 0 && (
+        <ul className="absolute bottom-full left-0 z-10 mb-1 w-72 overflow-hidden rounded-xl border border-line bg-surface shadow-lg">
+          {candidates.map((m, i) => (
+            <li key={m.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertMention(m)}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${i === highlight ? "bg-brand-50" : "hover:bg-surface-2"}`}
+              >
+                <Avatar id={m.id} name={m.name} color={m.color} size={24} />
+                <span className="font-medium">{m.name}</span>
+                {m.role && <span className="text-xs text-muted">{m.role}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2 flex justify-end gap-2">
+        {onCancel && (
+          <Button type="button" variant="ghost" size={parentId ? "sm" : "md"} onClick={onCancel}>
+            Annuler
+          </Button>
+        )}
+        <Button type="submit" size={parentId ? "sm" : "md"} disabled={busy || !body.trim()}>
+          <Send className="h-4 w-4" /> {parentId ? "Répondre" : "Envoyer"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function CommentNode({
+  node,
+  depth,
+  task,
+  currentUserId,
+  isOwner,
+  onChange,
+  highlightId,
+}: {
+  node: CommentTree;
+  depth: number;
+  task: TaskDetailDto;
+  currentUserId: string;
+  isOwner: boolean;
+  onChange: (t: TaskDetailDto) => void;
+  highlightId: string | null;
+}) {
+  const [replying, setReplying] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const count = countReplies(node);
+
+  async function remove() {
+    const extra = count > 0 ? ` et ses ${count} réponse${count > 1 ? "s" : ""}` : "";
+    if (!confirm(`Supprimer ce commentaire${extra} ?`)) return;
+    const { task: updated } = await api.delete<TaskResp>(`/comments/${node.id}`);
     onChange(updated);
   }
+
+  return (
+    <li id={`comment-${node.id}`} className={depth > 0 ? "mt-3" : ""}>
+      <div className="flex gap-2 sm:gap-3">
+        <Avatar id={node.authorId} name={node.authorName} size={depth === 0 ? 32 : 26} />
+        <div className="min-w-0 flex-1">
+          <div className={`rounded-2xl rounded-tl-sm px-4 py-3 ${highlightId === node.id ? "bg-amber-50 ring-2 ring-amber-300" : "bg-surface-2"}`}>
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <span className="font-medium text-ink">{node.authorName}</span>
+              <span>·</span>
+              <span>{new Date(node.createdAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</span>
+              {(node.authorId === currentUserId || isOwner) && (
+                <button onClick={remove} className="ml-auto rounded p-1 text-faint hover:bg-surface-3 hover:text-danger" title="Supprimer">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="mt-1">
+              <CommentBody body={node.body} members={task.project.members} />
+            </div>
+          </div>
+          <div className="mt-1 flex items-center gap-3 pl-2 text-xs">
+            <button type="button" onClick={() => setReplying((v) => !v)} className="flex items-center gap-1 font-medium text-brand-700 hover:underline">
+              <CornerDownRight className="h-3.5 w-3.5" /> Répondre
+            </button>
+            {count > 0 && (
+              <button type="button" onClick={() => setCollapsed((v) => !v)} className="text-muted hover:text-ink">
+                {collapsed ? `Afficher ${count} réponse${count > 1 ? "s" : ""}` : `Masquer les réponses`}
+              </button>
+            )}
+          </div>
+          {replying && (
+            <div className="mt-2">
+              <CommentComposer
+                task={task}
+                parentId={node.id}
+                autoFocus
+                placeholder={`Répondre à ${node.authorName}…`}
+                onPosted={(t) => {
+                  onChange(t);
+                  setReplying(false);
+                }}
+                onCancel={() => setReplying(false)}
+              />
+            </div>
+          )}
+          {!collapsed && node.replies.length > 0 && (
+            // Profondeur illimitée : l'indentation s'arrête visuellement au 4e niveau
+            // pour rester lisible sur mobile (une bordure gauche marque le fil).
+            <ul className={`border-l-2 border-line ${depth < 3 ? "ml-1 pl-3 sm:ml-2 sm:pl-4" : "ml-0 pl-2"}`}>
+              {node.replies.map((r) => (
+                <CommentNode key={r.id} node={r} depth={depth + 1} task={task} currentUserId={currentUserId} isOwner={isOwner} onChange={onChange} highlightId={highlightId} />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function countReplies(n: CommentTree): number {
+  return n.replies.reduce((a, r) => a + 1 + countReplies(r), 0);
+}
+
+function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetailDto; currentUserId: string; isOwner: boolean; onChange: (t: TaskDetailDto) => void }) {
+  const tree = useMemo(() => buildTree(task.comments), [task.comments]);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  // Lien depuis une notification : #comment-<id> → défilement et mise en évidence.
+  useEffect(() => {
+    const m = /^#comment-(.+)$/.exec(window.location.hash);
+    if (!m) return;
+    setHighlightId(m[1]);
+    const el = document.getElementById(`comment-${m[1]}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setHighlightId(null), 4000);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <section className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
@@ -345,97 +669,19 @@ function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetail
         <span className="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-muted">{task.comments.length}</span>
       </h2>
 
-      {task.comments.length === 0 ? (
-        <p className="mt-3 text-sm text-muted">Aucun commentaire. Lancez la discussion ci-dessous ; tapez « @ » pour mentionner un membre de l&apos;équipe.</p>
+      {tree.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">Aucun commentaire. Lancez la discussion ci-dessous ; tapez « @ » pour mentionner un membre de l&apos;équipe. Chaque commentaire peut recevoir des réponses, et chaque réponse aussi.</p>
       ) : (
-        <ul className="mt-4 space-y-4">
-          {task.comments.map((c) => (
-            <li key={c.id} className="flex gap-3">
-              <Avatar id={c.authorId} name={c.authorName} size={32} />
-              <div className="min-w-0 flex-1 rounded-2xl rounded-tl-sm bg-surface-2 px-4 py-3">
-                <div className="flex items-center gap-2 text-xs text-muted">
-                  <span className="font-medium text-ink">{c.authorName}</span>
-                  <span>·</span>
-                  <span>{new Date(c.createdAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</span>
-                  {(c.authorId === currentUserId || isOwner) && (
-                    <button onClick={() => remove(c)} className="ml-auto rounded p-1 text-faint hover:bg-surface-3 hover:text-danger" title="Supprimer">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="mt-1">
-                  <CommentBody body={c.body} members={task.project.members} />
-                </div>
-              </div>
-            </li>
+        <ul className="mt-4 space-y-5">
+          {tree.map((c) => (
+            <CommentNode key={c.id} node={c} depth={0} task={task} currentUserId={currentUserId} isOwner={isOwner} onChange={onChange} highlightId={highlightId} />
           ))}
         </ul>
       )}
 
-      <form onSubmit={submit} className="relative mt-5">
-        <textarea
-          ref={textareaRef}
-          value={body}
-          rows={3}
-          placeholder="Écrire un commentaire… « @ » pour mentionner quelqu'un, Ctrl+Entrée pour envoyer."
-          onChange={(e) => {
-            setBody(e.target.value);
-            detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
-          }}
-          onKeyDown={(e) => {
-            if (mention && candidates.length > 0) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setHighlight((h) => (h + 1) % candidates.length);
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setHighlight((h) => (h - 1 + candidates.length) % candidates.length);
-                return;
-              }
-              if (e.key === "Enter" || e.key === "Tab") {
-                e.preventDefault();
-                insertMention(candidates[highlight]);
-                return;
-              }
-              if (e.key === "Escape") {
-                setMention(null);
-                return;
-              }
-            }
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-          onClick={(e) => detectMention(body, (e.target as HTMLTextAreaElement).selectionStart ?? body.length)}
-          className="w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-        />
-        {mention && candidates.length > 0 && (
-          <ul className="absolute bottom-full left-0 z-10 mb-1 w-72 overflow-hidden rounded-xl border border-line bg-surface shadow-lg">
-            {candidates.map((m, i) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => insertMention(m)}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${i === highlight ? "bg-brand-50" : "hover:bg-surface-2"}`}
-                >
-                  <Avatar id={m.id} name={m.name} color={m.color} size={24} />
-                  <span className="font-medium">{m.name}</span>
-                  {m.role && <span className="text-xs text-muted">{m.role}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="mt-2 flex justify-end">
-          <Button type="submit" disabled={busy || !body.trim()}>
-            <Send className="h-4 w-4" /> Envoyer
-          </Button>
-        </div>
-      </form>
+      <div className="mt-5">
+        <CommentComposer task={task} onPosted={onChange} />
+      </div>
     </section>
   );
 }

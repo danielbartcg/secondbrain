@@ -83,6 +83,19 @@ body {
 .mind-node.is-root {
   @apply rounded-2xl px-5 py-3 text-base font-semibold;
 }
+/* Statut « à surveiller » : halo ambré. */
+.mind-node.is-watch {
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35), 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+/* Statut « fermé » : hachuré, estompé, barré. */
+.mind-node.is-closed {
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(23, 23, 26, 0.09) 6px 9px);
+  border-style: dashed;
+  color: var(--color-muted);
+}
+.mind-node.is-closed .mind-title {
+  text-decoration: line-through;
+}
 .mind-node input {
   @apply w-full bg-transparent outline-none;
 }

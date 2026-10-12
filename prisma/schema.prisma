@@ -22,12 +22,15 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  sessions    Session[]
-  mindMaps    MindMap[]
-  projects    Project[]
-  memberships ProjectMember[]
-  comments    TaskComment[]
-  documents   Document[]
+  sessions      Session[]
+  mindMaps      MindMap[]
+  projects      Project[]
+  memberships   ProjectMember[]
+  comments      TaskComment[]
+  documents     Document[]
+  workSessions  WorkSession[]
+  taskRanks     TaskRank[]
+  notifications Notification[]
 }
 
 /// Session opaque : le même jeton sert de cookie `session` (web) et de
@@ -62,6 +65,14 @@ model MindMap {
   @@index([ownerId])
 }
 
+/// Statut d'un nœud : à surveiller = mis en évidence ; fermé = hachuré et
+/// masqué par défaut (avec sa descendance).
+enum NodeStatus {
+  OPEN
+  WATCH
+  CLOSED
+}
+
 /// Nœud d'une carte : arbre par `parentId` (null = racine), ordonné par `order`.
 model MindNode {
   id        String     @id @default(cuid())
@@ -75,6 +86,7 @@ model MindNode {
   notes     String     @default("")
   color     String?
   collapsed Boolean    @default(false)
+  status    NodeStatus @default(OPEN)
   order     Int        @default(0)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -101,6 +113,20 @@ enum TaskStatus {
   DONE
   /// Clôture manuelle, après DONE : la tâche sort du flux courant.
   CLOSED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+/// Complexité estimée (axe horizontal de la vue « Sélection »).
+enum TaskComplexity {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 enum DeliverableStatus {
@@ -204,13 +230,18 @@ model Task {
   status      TaskStatus     @default(TODO)
   /// Avancement 0..100 ; DONE force 100.
   progress    Int            @default(0)
+  priority    TaskPriority   @default(MEDIUM)
+  complexity  TaskComplexity @default(MEDIUM)
   order       Int            @default(0)
   startDate   DateTime?
   dueDate     DateTime?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  comments TaskComment[]
+  comments      TaskComment[]
+  workSessions  WorkSession[]
+  ranks         TaskRank[]
+  notifications Notification[]
 
   @@index([stageId])
   @@index([activityId])
@@ -220,17 +251,76 @@ model Task {
 /// Commentaire sur une tâche. `body` contient des mentions au format
 /// `@[Nom](memberId)` ; `mentions` liste les identifiants de membres cités.
 model TaskComment {
+  id        String        @id @default(cuid())
+  taskId    String
+  task      Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  /// Réponse à un autre commentaire (fil de profondeur illimitée) ; null = racine.
+  parentId  String?
+  parent    TaskComment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   TaskComment[] @relation("CommentThread")
+  body      String
+  mentions  String[]      @default([])
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([taskId])
+  @@index([parentId])
+}
+
+/// Session de travail planifiée : un jour où l'utilisateur prévoit de
+/// travailler sur la tâche (vue calendaire). Plusieurs jours par tâche.
+model WorkSession {
   id        String   @id @default(cuid())
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  authorId  String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  body      String
-  mentions  String[] @default([])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  @@index([taskId])
+  @@unique([taskId, userId, date])
+  @@index([userId, date])
+}
+
+/// Ordre relatif personnel des tâches (vue « Synthèse ») : propre à chaque
+/// utilisateur, indépendant de l'ordre dans le plan du projet.
+model TaskRank {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  rank   Int
+
+  @@id([userId, taskId])
+  @@index([userId, rank])
+}
+
+enum NotificationType {
+  MENTION
+  REPLY
+  TASK_UPDATED
+  ASSIGNED
+}
+
+/// Notification in-app : destinataire, type, texte, lien ; `readAt` null = non lue.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String           @default("")
+  href      String
+  taskId    String?
+  task      Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId String?
+  actorName String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt, createdAt])
 }
 
 /// Livrable attendu du projet, éventuellement rattaché à une étape.

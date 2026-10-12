@@ -6,12 +6,12 @@ import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot
 import { api } from "@/lib/client";
 import type { ActivityDto, ProjectDto, StageDto, TaskDto } from "@/lib/projects";
 import type { TaskStatus } from "@prisma/client";
-import { Avatar, Button, InlineEdit, ProgressBar, QuickAdd, TASK_STATUS_LABEL, formatDate, isFinished } from "@/components/ui";
+import { Avatar, Button, COMPLEXITIES, COMPLEXITY_LABEL, InlineEdit, PRIORITIES, PRIORITY_LABEL, PriorityFlag, ProgressBar, QuickAdd, TASK_STATUS_LABEL, formatDate, isFinished } from "@/components/ui";
 import { DateField, type Resp, type Run } from "./ProjectWorkspace";
 
 /**
  * Plan du projet : étapes › activités (facultatives) › tâches, avec saisie
- * d'avancement, statut, responsable et accès à la fiche tâche.
+ * d'avancement, statut, priorité, complexité, responsable et accès à la fiche tâche.
  */
 export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }) {
   const [showAddStage, setShowAddStage] = useState(project.stages.length === 0);
@@ -254,6 +254,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
         >
           {closed ? <Lock className="h-5 w-5" /> : done ? <Check className="h-5 w-5" /> : task.status === "IN_PROGRESS" ? <CircleDot className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
         </button>
+        <PriorityFlag priority={task.priority} className={done ? "opacity-40" : ""} />
         <InlineEdit value={task.name} onSave={(name) => patch({ name })} className={`-mx-1.5 min-w-0 flex-1 text-sm ${done ? "text-muted line-through" : ""}`} />
         {task.commentCount > 0 && (
           <Link href={sheetHref} className="hidden items-center gap-0.5 text-xs text-muted sm:flex" title="Commentaires">
@@ -304,6 +305,26 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
                 {project.members.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted">
+              Priorité
+              <select value={task.priority} onChange={(e) => patch({ priority: e.target.value })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink">
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABEL[p]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted">
+              Complexité
+              <select value={task.complexity} onChange={(e) => patch({ complexity: e.target.value })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink">
+                {COMPLEXITIES.map((c) => (
+                  <option key={c} value={c}>
+                    {COMPLEXITY_LABEL[c]}
                   </option>
                 ))}
               </select>

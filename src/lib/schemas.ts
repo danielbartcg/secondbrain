@@ -46,11 +46,14 @@ export const createNodeSchema = z.object({
   index: z.number().int().min(0).optional(),
 });
 
+export const nodeStatusSchema = z.enum(["OPEN", "WATCH", "CLOSED"]);
 export const updateNodeSchema = z.object({
   title: title.optional(),
   notes: z.string().max(500_000).optional(),
   color,
   collapsed: z.boolean().optional(),
+  /** Ouvert / à surveiller (mis en évidence) / fermé (hachuré, masqué par défaut). */
+  status: nodeStatusSchema.optional(),
 });
 
 export const moveNodeSchema = z.object({
@@ -61,6 +64,8 @@ export const moveNodeSchema = z.object({
 // --- Projets -----------------------------------------------------------------
 export const projectStatusSchema = z.enum(["ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"]);
 export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "DONE", "CLOSED"]);
+export const taskPrioritySchema = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+export const taskComplexitySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 export const deliverableStatusSchema = z.enum(["PLANNED", "IN_PROGRESS", "DELIVERED", "VALIDATED"]);
 
 export const createProjectSchema = z.object({
@@ -93,6 +98,8 @@ export const createTaskSchema = z.object({
   description: longText,
   status: taskStatusSchema.optional(),
   progress: z.number().int().min(0).max(100).optional(),
+  priority: taskPrioritySchema.optional(),
+  complexity: taskComplexitySchema.optional(),
   startDate: isoDate,
   dueDate: isoDate,
   /** Membre de l'équipe projet affecté. */
@@ -151,9 +158,19 @@ export const updateDocumentSchema = z.object({
 
 // --- Commentaires ------------------------------------------------------------
 export const createCommentSchema = z.object({
-  /** Texte avec mentions `@[Nom](memberId)`. */
+  /** Texte avec mentions `@[Nom]` ou `@[Nom](memberId)`. */
   body: z.string().trim().min(1, "Commentaire vide").max(10_000),
+  /** Commentaire auquel on répond (fil) ; absent = commentaire racine. */
+  parentId: nullableId,
 });
+
+// --- Organisation personnelle des tâches -------------------------------------
+const dayDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date au format AAAA-MM-JJ");
+export const createWorkSessionSchema = z.object({ date: dayDate });
+export const orderMyTasksSchema = z.object({ taskIds: z.array(z.string().min(1)).max(2_000) });
+
+// --- Notifications -----------------------------------------------------------
+export const updateNotificationSchema = z.object({ read: z.boolean() });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -176,3 +193,5 @@ export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
 export type CreateFolderInput = z.infer<typeof createFolderSchema>;
 export type UpdateFolderInput = z.infer<typeof updateFolderSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+export type CreateWorkSessionInput = z.infer<typeof createWorkSessionSchema>;
+export type OrderMyTasksInput = z.infer<typeof orderMyTasksSchema>;

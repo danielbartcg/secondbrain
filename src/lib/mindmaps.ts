@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import type { NodeStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, notFound } from "@/lib/api";
 import { sanitizeNotes } from "@/lib/sanitize";
@@ -22,6 +22,8 @@ export type MindNodeDto = {
   notes: string;
   color: string | null;
   collapsed: boolean;
+  /** OPEN · WATCH (à surveiller, mis en évidence) · CLOSED (fermé, hachuré, masqué par défaut). */
+  status: NodeStatus;
   order: number;
   updatedAt: string;
 };
@@ -52,6 +54,7 @@ type NodeRow = {
   notes: string;
   color: string | null;
   collapsed: boolean;
+  status: NodeStatus;
   order: number;
   updatedAt: Date;
 };
@@ -64,6 +67,7 @@ function toNodeDto(n: NodeRow): MindNodeDto {
     notes: sanitizeNotes(n.notes),
     color: n.color,
     collapsed: n.collapsed,
+    status: n.status,
     order: n.order,
     updatedAt: n.updatedAt.toISOString(),
   };
@@ -194,6 +198,7 @@ export async function updateNode(
     if (input.notes !== undefined) data.notes = sanitizeNotes(input.notes);
     if (input.color !== undefined) data.color = input.color;
     if (input.collapsed !== undefined) data.collapsed = input.collapsed;
+    if (input.status !== undefined) data.status = input.status;
     const row = await tx.mindNode.update({ where: { id: nodeId }, data });
     if (node.parentId === null && input.title) {
       await tx.mindMap.update({ where: { id: mapId }, data: { title: input.title } });

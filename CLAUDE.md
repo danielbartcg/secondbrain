@@ -24,11 +24,16 @@ README.
   à l'application mobile (`Authorization: Bearer`). Le client web appelle
   l'API via `src/lib/client.ts`.
 - **Logique métier dans `src/lib/`** (`projects.ts`, `tasks.ts`, `documents.ts`,
-  `dashboard.ts`, `mindmaps.ts`, `auth.ts`, `uploads.ts`) ; les route handlers
+  `dashboard.ts`, `notifications.ts`, `mindmaps.ts`, `auth.ts`, `uploads.ts`) ; les route handlers
   restent minces : validation zod (`src/lib/schemas.ts`) → métier → JSON.
 - Les pages serveur lisent directement `src/lib/*` (pas de fetch interne).
 - Les mutations d'un projet renvoient **le projet complet recalculé** ; le
   client remplace son état (`ProjectWorkspace.run`).
+
+- **Notifications** : toute action qui concerne quelqu'un d'autre (affectation,
+  modification d'une tâche affectée, réponse, mention) appelle `notify()`
+  (`src/lib/notifications.ts`) **dans la transaction** ; jamais l'auteur de
+  l'action. Nouveau type ⇒ enum Prisma + icône dans `NotificationsBell` + docs.
 
 ## Graphiques : amCharts 4, toujours
 

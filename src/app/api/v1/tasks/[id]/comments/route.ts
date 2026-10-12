@@ -5,8 +5,8 @@ import { createCommentSchema } from "@/lib/schemas";
 
 type P = { id: string };
 
-/** POST /api/v1/tasks/:id/comments — `{ body }` avec mentions `@[Nom](memberId)` ; renvoie la fiche tâche. */
+/** POST /api/v1/tasks/:id/comments — `{ body, parentId? }` (mentions `@[Nom]`, réponse à un commentaire) ; renvoie la fiche tâche. */
 export const POST = withUser<P>(async (req: NextRequest, { params, user }) => {
   const input = await parseBody(req, createCommentSchema);
-  return json({ task: await addComment(user.id, params.id, input.body) }, { status: 201 });
+  return json({ task: await addComment(user.id, params.id, input.body, input.parentId) }, { status: 201 });
 });

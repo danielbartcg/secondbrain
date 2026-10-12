@@ -5,7 +5,7 @@ import { updateNodeSchema } from "@/lib/schemas";
 
 type P = { id: string; nodeId: string };
 
-/** PATCH /api/v1/mindmaps/:id/nodes/:nodeId — titre, notes, couleur, repli. */
+/** PATCH /api/v1/mindmaps/:id/nodes/:nodeId — titre, notes, couleur, repli, statut (OPEN/WATCH/CLOSED). */
 export const PATCH = withUser<P>(async (req: NextRequest, { params, user }) => {
   const input = await parseBody(req, updateNodeSchema);
   return json({ node: await updateNode(user.id, params.id, params.nodeId, input) });

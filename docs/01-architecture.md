@@ -64,6 +64,11 @@ Docker + Caddy en production.
 - Mutations optimistes avec identifiants temporaires résolus à la réponse ;
   requêtes sérialisées (file d'attente) ; verrou de ligne `MindMap` côté
   serveur.
+- **Statut de nœud** (`MindNode.status`) : `OPEN` · `WATCH` (à surveiller :
+  halo ambré, icône œil) · `CLOSED` (fermé : hachuré, barré, et **masqué
+  avec sa descendance** tant que « Afficher les nœuds fermés » est inactif ;
+  le parent affiche un badge `✓n`). Le filtrage se fait côté client avant la
+  mise en page (`visibleNodes` dans `MindMapEditor`).
 
 ## Gestion de projet
 
@@ -71,7 +76,13 @@ Docker + Caddy en production.
   (`ProjectMember`), **livrables** (`Deliverable`, rattachables à une étape,
   avec responsable, dates attendues, statut), **documents** (`Document`,
   pouvant matérialiser un livrable) et **commentaires de tâche**
-  (`TaskComment`, mentions `@[Nom](memberId)`).
+  (`TaskComment`, mentions `@[Nom](memberId)`, **fil hiérarchique** par
+  `parentId` : réponses aux réponses, profondeur libre, suppression en
+  cascade).
+- Chaque tâche porte une **priorité** (`LOW · MEDIUM · HIGH · CRITICAL`) et
+  une **complexité** estimée (`LOW · MEDIUM · HIGH`), utilisées par la vue
+  « Sélection ». Couleurs d'item nuancées par priorité : `PRIORITY_CHIP`
+  (`src/components/ui.tsx`).
 - L'avancement n'existe **que sur les tâches** (`progress`, `status`,
   `reconcile()`). Les niveaux supérieurs sont agrégés à la volée
   (`aggregate()`). Rien n'est dénormalisé.
@@ -83,10 +94,52 @@ Docker + Caddy en production.
 - Affectations et rattachements sont vérifiés comme appartenant au même
   projet (`checkMember`, `checkStage`).
 
+## « Mes tâches » et organisation personnelle (`src/lib/tasks.ts`)
+
+Définition commune (`isMyTask`) : une tâche est « à moi » si elle est
+affectée à un membre rattaché à mon compte, **ou** si elle n'est affectée à
+personne dans un projet dont je suis propriétaire (usage solo). Sert au
+tableau de bord et à la page **Organiser mes tâches** (`/organize`,
+`GET /api/v1/me/tasks`), qui propose trois vues sur les tâches ouvertes des
+projets actifs / en pause :
+
+- **Calendrier** (`CalendarView`) : grille mensuelle ; glisser une tâche sur
+  un jour crée une **session de travail** (`WorkSession`, un jour par ligne,
+  propre à l'utilisateur, `@@unique([taskId, userId, date])`). Une tâche
+  planifiée se grise mais reste déposable ; les sessions se déplacent et se
+  retirent ; une session postérieure à l'échéance est signalée (`late`).
+  Repli tactile : cliquer la tâche puis le jour.
+- **Sélection** (`MatrixView`) : matrice priorité × complexité ; déposer une
+  carte met à jour `priority` / `complexity` (`PATCH /tasks/:id`).
+- **Synthèse** (`SynthesisView`) : tableau réordonnable ; l'ordre relatif est
+  **personnel** (`TaskRank`, `PUT /me/tasks/order`), indépendant de l'ordre
+  du plan.
+
+Glisser-déposer natif HTML5 (`dataTransfer` typé `application/x-sb-*`),
+mutations optimistes avec rechargement en cas d'erreur (`TaskOrganizer`).
+
+## Notifications in-app (`src/lib/notifications.ts`)
+
+Table `Notification` (destinataire, type, titre, texte, `href`, `readAt`).
+Émises dans la transaction de l'action, jamais à l'auteur de l'action :
+
+| Type | Déclencheur | Destinataire | Lien |
+| --- | --- | --- | --- |
+| `ASSIGNED` | tâche créée ou ré-affectée | membre affecté (compte) | fiche tâche |
+| `TASK_UPDATED` | nom, description, statut/avancement, priorité, complexité, dates, rattachement, nouveau commentaire | membre affecté | fiche tâche ; **regroupée** : une seule non lue par tâche, rafraîchie |
+| `REPLY` | réponse à un commentaire | auteur du commentaire parent | fiche tâche `#comment-<id>` |
+| `MENTION` | `@[Nom]` d'un membre à compte | membre mentionné | idem |
+
+Client : magasin partagé `src/lib/notifications-store.ts` (un seul
+rafraîchissement toutes les 60 s + au focus, partagé entre la cloche de la
+barre latérale et celle de l'en-tête mobile), composant `NotificationsBell`
+(compteur, panneau, clic = marquer lue + naviguer, bascule lue / non lue,
+« Tout lu ») et page `/notifications`.
+
 ## Tableau de bord personnel (`src/lib/dashboard.ts`)
 
 Agrège, pour les projets actifs / en pause accessibles : mes tâches
-(membre rattaché à mon compte), échéances (tâches non terminées et livrables
+(`isMyTask`), échéances (tâches non terminées et livrables
 non livrés, sous un horizon de 30 jours, retards inclus), répartitions par
 statut, avancement global. Exposé par `GET /api/v1/dashboard` pour le mobile.
 
