@@ -25,6 +25,9 @@ export type MindNodeDto = {
   /** OPEN · WATCH (à surveiller, mis en évidence) · CLOSED (fermé, hachuré, masqué par défaut). */
   status: NodeStatus;
   order: number;
+  /** Position manuelle sur le canevas (null = automatique). */
+  x: number | null;
+  y: number | null;
   /** Tâches rattachées au nœud, et tâches non clôturées (terminées comprises). */
   taskCount: number;
   openTaskCount: number;
@@ -59,6 +62,8 @@ type NodeRow = {
   collapsed: boolean;
   status: NodeStatus;
   order: number;
+  x: number | null;
+  y: number | null;
   updatedAt: Date;
   tasks?: Array<{ task: { status: string } }>;
 };
@@ -76,6 +81,8 @@ function toNodeDto(n: NodeRow): MindNodeDto {
     collapsed: n.collapsed,
     status: n.status,
     order: n.order,
+    x: n.x,
+    y: n.y,
     taskCount: n.tasks?.length ?? 0,
     openTaskCount: n.tasks?.filter((t) => t.task.status !== "CLOSED").length ?? 0,
     updatedAt: n.updatedAt.toISOString(),
@@ -209,6 +216,8 @@ export async function updateNode(
     if (input.color !== undefined) data.color = input.color;
     if (input.collapsed !== undefined) data.collapsed = input.collapsed;
     if (input.status !== undefined) data.status = input.status;
+    if (input.x !== undefined) data.x = input.x;
+    if (input.y !== undefined) data.y = input.y;
     const row = await tx.mindNode.update({ where: { id: nodeId }, data, include: NODE_INCLUDE });
     if (node.parentId === null && input.title) {
       await tx.mindMap.update({ where: { id: mapId }, data: { title: input.title } });
@@ -216,6 +225,14 @@ export async function updateNode(
     return row;
   });
   return toNodeDto(updated);
+}
+
+/** « Affichage optimisé » : efface toutes les positions manuelles de la carte. */
+export async function resetLayout(userId: string, mapId: string): Promise<MindMapDto> {
+  await mutateMap(userId, mapId, async (tx) => {
+    await tx.mindNode.updateMany({ where: { mapId }, data: { x: null, y: null } });
+  });
+  return getMindMap(userId, mapId);
 }
 
 export async function deleteNode(userId: string, mapId: string, nodeId: string): Promise<void> {

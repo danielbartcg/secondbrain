@@ -54,6 +54,9 @@ export const updateNodeSchema = z.object({
   collapsed: z.boolean().optional(),
   /** Ouvert / à surveiller (mis en évidence) / fermé (hachuré, masqué par défaut). */
   status: nodeStatusSchema.optional(),
+  /** Position manuelle sur le canevas ; null = reprend la mise en page automatique. */
+  x: z.number().finite().min(-1_000_000).max(1_000_000).nullable().optional(),
+  y: z.number().finite().min(-1_000_000).max(1_000_000).nullable().optional(),
 });
 
 export const moveNodeSchema = z.object({

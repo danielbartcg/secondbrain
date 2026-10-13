@@ -113,6 +113,14 @@ Fermé, aussi dans la barre d'actions du nœud), notes riches
 hachuré, barré, masqué avec ses sous-nœuds ; bouton œil barré dans l'en-tête
 « Afficher les nœuds fermés (n) », badge `✓n` sur le parent (cliquable).
 
+**Déplacement libre** : tout nœud (racine comprise) se glisse sur le canevas ;
+déposé **sur** un autre nœud il s'y rattache, déposé ailleurs sa position est
+mémorisée et sa branche suit. Bouton **« Affichage optimisé »** dans
+l'en-tête (actif dès qu'un nœud a été déplacé, avec leur nombre) : demande
+confirmation (« Êtes-vous sûr(e) de vouloir écraser vos personnalisations liées
+à la position des éléments sur le schéma ? ») puis replace tout
+automatiquement et recadre.
+
 **Tâches d'un nœud** (`NodeTasksPanel`, dans le panneau) : liste des tâches
 rattachées (statut cliquable, projet ou « Sans projet », fiche, détachement),
 « Nouvelle » (crée une tâche sans projet rattachée au nœud), « Existante »

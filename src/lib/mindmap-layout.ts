@@ -6,6 +6,10 @@ import { hierarchy, tree } from "d3-hierarchy";
  * (alternance), sous-branches qui s'éloignent du centre. Les nœuds repliés
  * cachent leur descendance.
  *
+ * Les nœuds dotés d'une position manuelle (`x`, `y`) la conservent ; leur
+ * descendance sans position propre suit le même décalage, si bien qu'une
+ * branche déplacée reste groupée.
+ *
  * Pur (aucune dépendance React) : testable et réutilisable côté mobile.
  */
 
@@ -15,6 +19,10 @@ export type LayoutNode = {
   title: string;
   collapsed: boolean;
   order: number;
+  /** Position manuelle (null/absente = calculée). Un nœud déplacé entraîne
+   *  sa descendance non positionnée manuellement du même décalage. */
+  x?: number | null;
+  y?: number | null;
 };
 
 export type Side = "left" | "right" | "root";
@@ -124,7 +132,28 @@ export function layoutMindMap(nodes: LayoutNode[], rootId: string): { positions:
     });
   }
 
+  applyManualPositions(nodes, rootId, positions, children);
   return { positions, edges };
+}
+
+/** Applique les positions manuelles et décale la descendance non positionnée. */
+function applyManualPositions(nodes: LayoutNode[], rootId: string, positions: Map<string, Positioned>, children: Map<string, LayoutNode[]>) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const hasManual = (n: LayoutNode | undefined) => !!n && typeof n.x === "number" && typeof n.y === "number";
+  const walk = (id: string, dx: number, dy: number) => {
+    const n = byId.get(id);
+    const p = positions.get(id);
+    if (!n || !p) return;
+    let ndx = dx;
+    let ndy = dy;
+    if (hasManual(n)) {
+      ndx = n.x! - p.x;
+      ndy = n.y! - p.y;
+    }
+    if (ndx !== 0 || ndy !== 0) positions.set(id, { ...p, x: p.x + ndx, y: p.y + ndy });
+    for (const c of children.get(id) ?? []) walk(c.id, ndx, ndy);
+  };
+  walk(rootId, 0, 0);
 }
 
 /** Identifiants du sous-arbre (nœud inclus). */

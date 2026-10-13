@@ -58,7 +58,8 @@ type DashboardDto = {
 
 ```ts
 type MindNode = { id; parentId: string | null; title; notes /* HTML assaini */; color; collapsed;
-                  status: "OPEN"|"WATCH"|"CLOSED"; order; taskCount; openTaskCount; updatedAt };
+                  status: "OPEN"|"WATCH"|"CLOSED"; order; x: number | null; y: number | null /* position manuelle */;
+                  taskCount; openTaskCount; updatedAt };
 type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 ```
 
@@ -70,7 +71,8 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 | PATCH | `/mindmaps/:id` | `{ title? }` | `{ mindmap }` |
 | DELETE | `/mindmaps/:id` | — | `{ ok: true }` |
 | POST | `/mindmaps/:id/nodes` | `{ parentId, title?, index? }` | `201 { node }` |
-| PATCH | `/mindmaps/:id/nodes/:nodeId` | `{ title?, notes?, color?, collapsed?, status? }` | `{ node }` |
+| PATCH | `/mindmaps/:id/nodes/:nodeId` | `{ title?, notes?, color?, collapsed?, status?, x?, y? }` (`x`/`y` null = position automatique) | `{ node }` |
+| DELETE | `/mindmaps/:id/layout` | — | `{ mindmap }` « Affichage optimisé » : efface toutes les positions manuelles |
 | DELETE | `/mindmaps/:id/nodes/:nodeId` | — | `{ ok: true }` |
 | POST | `/mindmaps/:id/nodes/:nodeId/move` | `{ parentId, index? }` | `{ node }` |
 

@@ -37,7 +37,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | Modèle | Champs | Notes |
 | --- | --- | --- |
 | `MindMap` | `id`, `ownerId`, `title`, timestamps | `title` = titre du nœud racine (synchronisés) |
-| `MindNode` | `id`, `mapId`, `parentId?`, `title`, `notes` (HTML), `color?`, `collapsed`, `status` (`OPEN` · `WATCH` · `CLOSED`), `order`, timestamps | `parentId = null` ⇔ racine (une par carte) ; `order` renuméroté 0..n-1 parmi les frères ; `WATCH` = mis en évidence, `CLOSED` = hachuré et masqué par défaut avec sa descendance |
+| `MindNode` | `id`, `mapId`, `parentId?`, `title`, `notes` (HTML), `color?`, `collapsed`, `status` (`OPEN` · `WATCH` · `CLOSED`), `order`, `x?`, `y?` (position manuelle sur le canevas ; null = automatique), timestamps | `parentId = null` ⇔ racine (une par carte) ; `order` renuméroté 0..n-1 parmi les frères ; `WATCH` = mis en évidence, `CLOSED` = hachuré et masqué par défaut avec sa descendance |
 
 ## Projets
 
@@ -99,6 +99,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `20261011212245_folders_and_closed_status` | `Folder`, `Document.folderId`, valeur `CLOSED` de `TaskStatus` |
 | `20261012200606_organizer_threads_notifications` | `MindNode.status`, `Task.priority/complexity`, `TaskComment.parentId`, `WorkSession`, `TaskRank`, `Notification` |
 | `20261012201500_notification_task_updated` | renomme la valeur `COMMENT` → `TASK_UPDATED` de `NotificationType` (`ALTER TYPE … RENAME VALUE`) |
+| `20261013120000_node_positions` | `MindNode.x` / `y` (position manuelle) |
 | `20261013080000_orphan_tasks_node_links` | `Task.ownerId` / `projectId` (reprise : projet déduit de l'étape, propriétaire du projet), `Task.stageId` nullable, `MindNodeTask` |
 
 Développement : `npx prisma migrate dev`. Production : `npm run prod:deploy`

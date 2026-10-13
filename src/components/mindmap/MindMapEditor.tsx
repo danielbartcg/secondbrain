@@ -19,7 +19,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, ListTodo, PanelRightOpen, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, LayoutTemplate, ListTodo, PanelRightOpen, Plus, Trash2, X } from "lucide-react";
 import type { NodeStatus } from "@prisma/client";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
@@ -35,7 +35,9 @@ import { useSearchParams } from "next/navigation";
  *  - Mise en page automatique (src/lib/mindmap-layout.ts), pan/zoom React Flow.
  *  - Clavier : Tab = enfant, Entrée = frère, Suppr = supprimer, F2 / double-clic
  *    = renommer, Échap = désélectionner, Espace = replier/déplier.
- *  - Glisser un nœud sur un autre le rattache à ce nœud.
+ *  - Glisser un nœud **sur** un autre le rattache à ce nœud ; le déposer
+ *    ailleurs mémorise sa position (sa descendance suit). « Affichage
+ *    optimisé » efface ces positions après confirmation.
  *  - Panneau latéral (tiroir bas sur mobile) : titre, couleur, statut, notes riches.
  *  - Statut : « à surveiller » = halo ambré ; « fermé » = hachuré, et masqué
  *    (avec sa descendance) tant que « Afficher les nœuds fermés » est inactif.
@@ -319,6 +321,26 @@ function Editor({ initial }: { initial: MindMapDto }) {
     [byId, map.id, patchLocal, real, run, showClosed],
   );
 
+  /** Position manuelle mémorisée (null = reprend la mise en page automatique). */
+  const setPosition = useCallback(
+    (id: string, x: number | null, y: number | null) => {
+      patchLocal(id, { x, y });
+      void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { x, y }));
+    },
+    [map.id, patchLocal, real, run],
+  );
+
+  /** « Affichage optimisé » : efface toutes les positions manuelles de la carte. */
+  const resetLayout = useCallback(() => {
+    if (!confirm("Êtes-vous sûr(e) de vouloir écraser vos personnalisations liées à la position des éléments sur le schéma ?")) return;
+    setNodes((ns) => ns.map((n) => ({ ...n, x: null, y: null })));
+    void run(async () => {
+      const { mindmap } = await api.delete<{ mindmap: MindMapDto }>(`/mindmaps/${map.id}/layout`);
+      setNodes(mindmap.nodes);
+      requestAnimationFrame(() => void fitView({ padding: 0.25, duration: 400, maxZoom: 1.25 }));
+    });
+  }, [map.id, run, fitView]);
+
   const setNotes = useCallback(
     (id: string, notes: string) => {
       patchLocal(id, { notes });
@@ -352,6 +374,8 @@ function Editor({ initial }: { initial: MindMapDto }) {
           collapsed: false,
           status: "OPEN",
           order: at,
+          x: null,
+          y: null,
           taskCount: 0,
           openTaskCount: 0,
           updatedAt: new Date().toISOString(),
@@ -518,7 +542,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
           position: { x: p.x, y: p.y },
           width: p.width,
           height: p.height,
-          draggable: p.side !== "root",
+          draggable: true,
           selected: p.id === selectedId,
           data: {
             title: n.title,
@@ -542,21 +566,26 @@ function Editor({ initial }: { initial: MindMapDto }) {
     );
   }, [positions, byId, closedHidden, selectedId, editingId, rename, stopEditing, toggleCollapse, showClosedNodes, layoutTick]);
 
+  // Le côté des connecteurs suit la position réelle (un nœud déplacé à gauche de
+  // son parent se relie par la gauche).
   const rfEdges = useMemo<Edge[]>(
     () =>
       layoutEdges.map((e) => {
         const child = byId.get(e.target);
+        const ps = positions.get(e.source);
+        const pt = positions.get(e.target);
+        const right = ps && pt ? pt.x + pt.width / 2 >= ps.x + ps.width / 2 : e.side === "right";
         return {
           id: `${e.source}->${e.target}`,
           source: e.source,
           target: e.target,
-          sourceHandle: e.side === "right" ? "sr" : "sl",
-          targetHandle: e.side === "right" ? "tl" : "tr",
+          sourceHandle: right ? "sr" : "sl",
+          targetHandle: right ? "tl" : "tr",
           type: "default",
           style: { stroke: child?.color ?? DEFAULT_EDGE, strokeWidth: 2 },
         };
       }),
-    [layoutEdges, byId],
+    [layoutEdges, byId, positions],
   );
 
   const onNodesChange = useCallback((changes: NodeChange<MindNode>[]) => {
@@ -568,26 +597,36 @@ function Editor({ initial }: { initial: MindMapDto }) {
       const forbidden = subtreeIds(nodes, dragged.id);
       const cx = dragged.position.x + (dragged.width ?? 0) / 2;
       const cy = dragged.position.y + (dragged.height ?? 0) / 2;
+      // Déposé SUR un autre nœud (centre dans son cadre) : rattachement.
       let best: { id: string; d: number } | null = null;
       for (const other of rfNodes) {
         if (forbidden.has(other.id)) continue;
         const ox = other.position.x + (other.width ?? 0) / 2;
         const oy = other.position.y + (other.height ?? 0) / 2;
         const inside =
-          cx >= other.position.x - 20 &&
-          cx <= other.position.x + (other.width ?? 0) + 20 &&
-          cy >= other.position.y - 20 &&
-          cy <= other.position.y + (other.height ?? 0) + 20;
+          cx >= other.position.x - 8 &&
+          cx <= other.position.x + (other.width ?? 0) + 8 &&
+          cy >= other.position.y - 8 &&
+          cy <= other.position.y + (other.height ?? 0) + 8;
         const d = Math.hypot(cx - ox, cy - oy);
-        if (inside || d < 70) {
-          if (!best || d < best.d) best = { id: other.id, d };
-        }
+        if (inside && (!best || d < best.d)) best = { id: other.id, d };
       }
-      if (best) move(dragged.id, best.id);
-      else setLayoutTick((t) => t + 1); // remet le nœud à sa place calculée
+      if (best && dragged.id !== map.rootId) {
+        move(dragged.id, best.id);
+        setLayoutTick((t) => t + 1);
+        return;
+      }
+      // Sinon : position libre mémorisée (si le nœud a vraiment bougé).
+      const before = positions.get(dragged.id);
+      if (before && Math.hypot(dragged.position.x - before.x, dragged.position.y - before.y) < 2) {
+        setLayoutTick((t) => t + 1);
+        return;
+      }
+      setPosition(dragged.id, Math.round(dragged.position.x), Math.round(dragged.position.y));
     },
-    [move, nodes, rfNodes],
+    [move, nodes, rfNodes, positions, setPosition, map.rootId],
   );
+  const manualCount = useMemo(() => nodes.filter((n) => n.x !== null && n.y !== null).length, [nodes]);
 
   // Premier cadrage : une fois les nœuds mesurés par React Flow.
   const nodesInitialized = useNodesInitialized();
@@ -645,6 +684,16 @@ function Editor({ initial }: { initial: MindMapDto }) {
         >
           {showClosed ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           {closedCount > 0 && <span className="text-xs">{closedCount}</span>}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={resetLayout}
+          disabled={manualCount === 0}
+          title={manualCount ? `Affichage optimisé : replacer automatiquement les ${manualCount} nœud(s) déplacé(s)` : "Affichage optimisé (aucun nœud déplacé)"}
+        >
+          <LayoutTemplate className="h-4 w-4" />
+          <span className="hidden lg:inline">Affichage optimisé</span>
         </Button>
         <Button variant="ghost" size="sm" onClick={() => fitView({ padding: 0.2, duration: 300 })} title="Recentrer">
           <Focus className="h-4 w-4" />

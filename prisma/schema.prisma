@@ -89,6 +89,9 @@ model MindNode {
   collapsed Boolean    @default(false)
   status    NodeStatus @default(OPEN)
   order     Int        @default(0)
+  /// Position manuelle sur le canevas (null = calculée automatiquement).
+  x         Float?
+  y         Float?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 

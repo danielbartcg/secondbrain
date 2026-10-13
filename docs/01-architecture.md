@@ -59,8 +59,14 @@ Docker + Caddy en production.
   (`src/lib/sanitize.ts`). Images autorisées uniquement en `/media/…` ou
   `http(s)://`.
 - Mise en page côté client, `src/lib/mindmap-layout.ts` (d3-hierarchy, sans
-  React) — réutilisable dans l'application mobile. Rendu React Flow ;
-  positions imposées ; le glisser sert à **rattacher** une branche.
+  React) — réutilisable dans l'application mobile. Rendu React Flow.
+- **Positions libres** : un nœud déposé **sur** un autre s'y rattache ;
+  déposé ailleurs, sa position est mémorisée (`MindNode.x/y`). Dans la mise en
+  page, un nœud positionné manuellement entraîne sa descendance non
+  positionnée du même décalage (branche groupée) ; les connecteurs choisissent
+  leur côté selon la position réelle. « Affichage optimisé »
+  (`DELETE /mindmaps/:id/layout`) efface toutes les positions après
+  confirmation et revient à la mise en page automatique.
 - Mutations optimistes avec identifiants temporaires résolus à la réponse ;
   requêtes sérialisées (file d'attente) ; verrou de ligne `MindMap` côté
   serveur.

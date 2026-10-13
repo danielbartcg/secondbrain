@@ -4,7 +4,9 @@ Application web (responsive) de « second cerveau » pour un utilisateur connect
 en production sur https://secondbrain.danielbar-tcg.fr.
 
 1. **Cartes mentales** — mise en page automatique, branches illimitées,
-   repli/dépli, couleurs, glisser-déposer pour rattacher une branche, et
+   repli/dépli, couleurs, glisser-déposer pour rattacher une branche ou
+   **placer librement les nœuds** (positions mémorisées, « Affichage
+   optimisé » pour revenir à la mise en page automatique), et
    **notes en texte riche** sur chaque nœud (titres, listes, cases à cocher,
    liens, images collées directement — aperçu immédiat, envoi en arrière-plan).
    Chaque nœud a un **statut** : ouvert, à surveiller (mis en évidence) ou
