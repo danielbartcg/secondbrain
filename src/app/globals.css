@@ -68,6 +68,18 @@ body {
   @apply flex-1;
 }
 
+/* --- Prise de notes : document façon Notion ------------------------------- */
+.notes-document .ProseMirror {
+  @apply rounded-none border-0 bg-transparent px-0 py-4 text-base leading-relaxed;
+}
+.notes-document .prose {
+  font-size: 1.0625rem;
+}
+.notes-document > div > div:first-child {
+  /* barre d'outils de l'éditeur : fine ligne sous les boutons */
+  @apply rounded-lg border border-line bg-surface-2/60;
+}
+
 /* --- Carte mentale (React Flow) ------------------------------------------ */
 .react-flow__attribution {
   display: none;

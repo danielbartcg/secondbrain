@@ -84,10 +84,10 @@ type Member   = { id; userId: string | null; name; email; role; color };
 type Task     = { id; ownerId; projectId: string | null; stageId: string | null; activityId: string | null;  // rattachement facultatif
                   assigneeId; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
                   progress: 0..100; priority: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; complexity: "LOW"|"MEDIUM"|"HIGH";
-                  order; startDate; dueDate; commentCount; nodeIds: string[] /* nœuds de carte */; updatedAt };
+                  order; startDate; dueDate; commentCount; hasNotes; nodeIds: string[] /* nœuds de carte */; updatedAt };
 type TaskMutation = { project: Project | null; task: Task | null };   // réponse des mutations de tâche
-type Activity = { id; stageId; name; description; order; progress; tasks: Task[] };
-type Stage    = { id; projectId; name; description; order; startDate; dueDate; progress; activities: Activity[]; tasks: Task[] };
+type Activity = { id; stageId; name; description; hasNotes; order; progress; tasks: Task[] };
+type Stage    = { id; projectId; name; description; hasNotes; order; startDate; dueDate; progress; activities: Activity[]; tasks: Task[] };
 type Folder   = { id; parentId: string | null; name };     // arborescence documentaire (null = racine)
 type Document = { id; folderId: string | null; deliverableId; name; originalName; mimeType; size;
                   uploadedBy: {id,name}|null; createdAt; url: "/api/v1/documents/:id/download" };
@@ -95,7 +95,7 @@ type Deliverable = { id; stageId; assigneeId; name; description; status: "PLANNE
                      expectedStart; expectedEnd; deliveredAt; order; documents: Document[] };
 type ProjectSummary = { id; ownerId; name; description; color; status; startDate; dueDate; progress;
                         stageCount; memberCount; deliverableCount; createdAt; updatedAt };
-type Project = ProjectSummary & { stages: Stage[]; tasks: Task[] /* sans étape */; members: Member[]; deliverables: Deliverable[]; documents: Document[]; folders: Folder[] };
+type Project = ProjectSummary & { notes /* HTML assaini */; stages: Stage[]; tasks: Task[] /* sans étape */; members: Member[]; deliverables: Deliverable[]; documents: Document[]; folders: Folder[] };
 ```
 
 Toute mutation sur un projet ou l'un de ses éléments **renvoie le projet
@@ -166,6 +166,8 @@ type TaskDetail  = Task & {
   stage: { id; name }; activity: { id; name } | null; assignee: Member | null;
   comments: TaskComment[];        // liste plate ; le client reconstruit le fil par parentId
   workSessions: WorkSession[];    // toutes les sessions de la tâche (tous membres)
+  nodes: { id; title; mapId; mapTitle }[];
+  notes: string;                  // HTML assaini (« Prise de notes »)
 };
 ```
 
@@ -197,6 +199,24 @@ type NodeTasks = { nodeId; tasks: (Task & { projectName; projectColor })[]; task
 
 `MindNode` expose aussi `taskCount` et `openTaskCount`. Créer une tâche depuis
 un nœud : `POST /tasks { name, nodeId }`.
+
+## Prise de notes
+
+```ts
+type NoteRef  = "root" | `section:${"mindmaps"|"projects"|"orphans"}` | `mindmap:${id}` | `node:${id}` | `project:${id}` | `stage:${id}` | `activity:${id}` | `task:${id}`;
+type TreeItem = { ref; kind; id; title; hint?; color?; hasChildren; hasNotes };
+type NoteDocument = { ref; kind; id; title; breadcrumb: { ref; title }[]; href: string | null; notes /* HTML assaini */; editable; updatedAt };
+```
+
+| Méthode | Route | Réponse |
+| --- | --- | --- |
+| GET | `/notes/tree?parent=<NoteRef>` (défaut `root`) | `{ parent, children: TreeItem[] }` — enfants **directs** seulement (chargement paresseux) |
+| GET | `/notes/:kind/:id` | `{ document: NoteDocument }` |
+| PATCH | `/notes/:kind/:id` | `{ notes }` (HTML ≤ 500 ko, assaini) → `{ document }` ; `400` sur une section |
+
+`mindmap:<id>` lit et écrit les notes du **nœud racine** de la carte (un
+`node:<id>` racine est redirigé vers sa carte). Accès : cartes du compte,
+projets accessibles, tâches accessibles (y compris sans projet).
 
 ## Recherche
 

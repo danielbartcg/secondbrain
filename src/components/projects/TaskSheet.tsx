@@ -8,6 +8,7 @@ import { api } from "@/lib/client";
 import type { MemberDto, ProjectDto, ProjectSummary, TaskMutation } from "@/lib/projects";
 import type { TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
 import type { NodeTasksResult } from "@/lib/tasks";
+import { NotesPreview } from "@/components/notes/NotesPreview";
 import {
   Avatar,
   Badge,
@@ -211,6 +212,9 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
 
           {/* Nœuds de carte mentale */}
           <NodeLinks task={task} onChange={(nodes) => setTask((t) => ({ ...t, nodes }))} />
+
+          {/* Notes riches (éditées dans « Prise de notes ») */}
+          <NotesPreview html={task.notes} noteRef={`task:${task.id}`} className="mt-4 !rounded-xl !bg-surface-2/60 !p-3" />
 
           {/* Sessions de travail planifiées */}
           <WorkSessions task={task} onChange={(workSessions) => setTask((t) => ({ ...t, workSessions }))} />

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, X } from "lucide-react";
 import { api } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
 
@@ -12,6 +12,7 @@ const NAV = [
   { href: "/mindmaps", label: "Cartes mentales", icon: Brain },
   { href: "/projects", label: "Projets", icon: FolderKanban },
   { href: "/organize", label: "Organiser mes tâches", icon: CalendarCheck2, sub: true },
+  { href: "/notes", label: "Prise de notes", icon: NotebookPen },
 ];
 
 /**

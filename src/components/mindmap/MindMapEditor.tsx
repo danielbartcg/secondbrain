@@ -876,7 +876,12 @@ function Editor({ initial }: { initial: MindMapDto }) {
               )}
 
               <div className="mt-4">
-                <span className="mb-1.5 block text-xs font-medium text-muted">Notes</span>
+                <div className="mb-1.5 flex items-center">
+                  <span className="text-xs font-medium text-muted">Notes</span>
+                  <Link href={`/notes?ref=${selected.parentId ? "node" : "mindmap"}:${real(selected.parentId ? selected.id : map.id)}`} className="ml-auto text-[11px] text-brand-700 hover:underline" title="Ouvrir en grand dans Prise de notes">
+                    Ouvrir dans Prise de notes
+                  </Link>
+                </div>
                 <RichTextEditor
                   key={real(selected.id)}
                   documentKey={real(selected.id)}

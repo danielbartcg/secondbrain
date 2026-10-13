@@ -113,6 +113,25 @@ Docker + Caddy en production.
   (recherche). Le nœud affiche le nombre de tâches **non clôturées** (terminées
   comprises) ; la fiche tâche liste ses nœuds (détachables).
 
+## Prise de notes (`src/lib/notes.ts`)
+
+Arborescence façon Notion de **tous les objets**, chargée **de proche en
+proche** (`GET /notes/tree?parent=<ref>` ne renvoie que les enfants directs,
+avec `hasChildren` / `hasNotes`) :
+`root › section:mindmaps › mindmap:<id> › node:<id> › …` et
+`root › section:projects › project:<id> › stage:<id> › activity:<id> › task:<id>`
+(+ tâches sans étape sous le projet, tâches sans activité sous l'étape,
+`section:orphans` pour les tâches sans projet). Références `kind:id`.
+
+Chaque objet porte un **document de notes riches** (HTML TipTap, assaini à
+l'écriture et à la lecture) : `Project.notes`, `Stage.notes`,
+`Activity.notes`, `Task.notes` ; pour une carte mentale, ce sont les notes de
+son **nœud racine**, et pour un nœud la zone « Notes » déjà présente dans
+l'éditeur de carte (`MindNode.notes`). Les sections ne sont pas éditables.
+Les notes sont **visibles sur l'objet** : aperçu `NotesPreview` (projet, fiche
+tâche), icône carnet sur les étapes / activités / tâches du Plan, lien
+« Ouvrir dans Prise de notes » dans le panneau de carte ; DTO `hasNotes`.
+
 ## Recherche globale (`src/lib/search.ts`)
 
 `GET /api/v1/search?q=` : projets (nom, description), tâches (nom,

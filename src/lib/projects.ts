@@ -3,6 +3,7 @@ import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPrio
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
+import { sanitizeNotes } from "@/lib/sanitize";
 import type {
   CreateActivityInput,
   CreateDeliverableInput,
@@ -65,6 +66,8 @@ export type TaskDto = {
   startDate: string | null;
   dueDate: string | null;
   commentCount: number;
+  /** Des notes riches existent (« Prise de notes »). */
+  hasNotes: boolean;
   /** Nœuds de carte mentale auxquels la tâche est rattachée. */
   nodeIds: string[];
   updatedAt: string;
@@ -75,6 +78,7 @@ export type ActivityDto = {
   stageId: string;
   name: string;
   description: string;
+  hasNotes: boolean;
   order: number;
   progress: Progress;
   tasks: TaskDto[];
@@ -85,6 +89,7 @@ export type StageDto = {
   projectId: string;
   name: string;
   description: string;
+  hasNotes: boolean;
   order: number;
   startDate: string | null;
   dueDate: string | null;
@@ -142,6 +147,8 @@ export type ProjectSummary = {
 };
 
 export type ProjectDto = ProjectSummary & {
+  /** Notes riches du projet (HTML assaini). */
+  notes: string;
   stages: StageDto[];
   /** Tâches du projet sans étape. */
   tasks: TaskDto[];
@@ -156,6 +163,11 @@ type Tx = Prisma.TransactionClient;
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 const toDate = (v: string | null | undefined): Date | null | undefined =>
   v === undefined ? undefined : v === null ? null : new Date(v);
+
+/** Un HTML de notes contient-il quelque chose (texte ou image) ? */
+export function hasHtmlContent(html: string): boolean {
+  return html.includes("<img") || html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim().length > 0;
+}
 
 export function aggregate(progresses: number[]): Progress {
   const total = progresses.length;
@@ -210,6 +222,7 @@ export function toTaskDto(t: TaskRow): TaskDto {
     startDate: iso(t.startDate),
     dueDate: iso(t.dueDate),
     commentCount: t._count.comments,
+    hasNotes: hasHtmlContent(t.notes),
     nodeIds: t.nodes.map((n) => n.nodeId),
     updatedAt: t.updatedAt.toISOString(),
   };
@@ -243,6 +256,7 @@ function toProjectDto(p: ProjectRow): ProjectDto {
         stageId: a.stageId,
         name: a.name,
         description: a.description,
+        hasNotes: hasHtmlContent(a.notes),
         order: a.order,
         progress: aggregate(tasks.map((t) => t.progress)),
         tasks,
@@ -253,6 +267,7 @@ function toProjectDto(p: ProjectRow): ProjectDto {
       projectId: s.projectId,
       name: s.name,
       description: s.description,
+      hasNotes: hasHtmlContent(s.notes),
       order: s.order,
       startDate: iso(s.startDate),
       dueDate: iso(s.dueDate),
@@ -277,6 +292,7 @@ function toProjectDto(p: ProjectRow): ProjectDto {
     deliverableCount: p.deliverables.length,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
+    notes: sanitizeNotes(p.notes),
     stages,
     tasks: p.tasks.map(toTaskDto),
     members: p.members.map(toMemberDto),
@@ -426,8 +442,9 @@ async function checkMember(tx: Tx, projectId: string, memberId: string | null | 
 export async function listProjects(userId: string): Promise<ProjectSummary[]> {
   const rows = await prisma.project.findMany({ where: projectAccessWhere(userId), orderBy: { updatedAt: "desc" }, include: PROJECT_INCLUDE });
   return rows.map((p) => {
-    const { stages: _s, tasks: _t, members: _m, deliverables: _d, documents: _doc, folders: _f, ...summary } = toProjectDto(p);
+    const { stages: _s, tasks: _t, members: _m, deliverables: _d, documents: _doc, folders: _f, notes: _n, ...summary } = toProjectDto(p);
     void _s;
+    void _n;
     void _t;
     void _m;
     void _d;

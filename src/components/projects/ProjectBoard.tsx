@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Inbox, Layers, Lock, MessageSquare, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Inbox, Layers, Lock, MessageSquare, NotebookPen, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ActivityDto, ProjectDto, StageDto, TaskDto } from "@/lib/projects";
 import type { TaskStatus } from "@prisma/client";
@@ -93,6 +93,7 @@ function StageCard({ stage, index, count, project, run }: { stage: StageDto; ind
           <div className="flex flex-wrap items-center gap-x-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted">Étape {index + 1}</span>
             <InlineEdit value={stage.name} onSave={(name) => patch({ name })} as="h3" className="-mx-1.5 font-semibold" />
+            <NotesLink noteRef={`stage:${stage.id}`} has={stage.hasNotes} />
           </div>
           <div className="mt-2 flex items-center gap-3">
             <ProgressBar percent={stage.progress.percent} color={project.color} />
@@ -187,6 +188,7 @@ function ActivityBlock({ activity, index, count, project, run }: { activity: Act
           <div className="flex flex-wrap items-center gap-x-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Activité</span>
             <InlineEdit value={activity.name} onSave={(name) => patch({ name })} as="h4" className="-mx-1.5 text-sm font-medium" />
+            <NotesLink noteRef={`activity:${activity.id}`} has={activity.hasNotes} />
           </div>
           <div className="mt-1.5 flex items-center gap-3">
             <ProgressBar percent={activity.progress.percent} color={project.color} className="h-1.5" />
@@ -286,6 +288,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
         </button>
         <PriorityFlag priority={task.priority} className={done ? "opacity-40" : ""} />
         <InlineEdit value={task.name} onSave={(name) => patch({ name })} className={`-mx-1.5 min-w-0 flex-1 text-sm ${done ? "text-muted line-through" : ""}`} />
+        {task.hasNotes && <NotesLink noteRef={`task:${task.id}`} has />}
         {task.commentCount > 0 && (
           <Link href={sheetHref} className="hidden items-center gap-0.5 text-xs text-muted sm:flex" title="Commentaires">
             <MessageSquare className="h-3.5 w-3.5" /> {task.commentCount}
@@ -392,6 +395,15 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
         </div>
       )}
     </li>
+  );
+}
+
+/** Lien vers les notes de l'objet dans « Prise de notes » (coloré si des notes existent). */
+function NotesLink({ noteRef, has }: { noteRef: string; has: boolean }) {
+  return (
+    <Link href={`/notes?ref=${encodeURIComponent(noteRef)}`} title={has ? "Voir les notes" : "Prendre des notes"} className={`rounded p-1 hover:bg-surface-2 ${has ? "text-brand-600" : "text-faint"}`}>
+      <NotebookPen className="h-3.5 w-3.5" />
+    </Link>
   );
 }
 

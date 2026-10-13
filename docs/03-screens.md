@@ -15,16 +15,37 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | `/projects/sans-projet` | `projects/sans-projet/page.tsx` → `listOrphanTasks` | `projects/OrphanTasks` | projet virtuel **« Sans projet »** : tâches orphelines (création, statut, fiche, suppression) |
 | `/organize` | `organize/page.tsx` → `getMyTasks` | `organizer/TaskOrganizer` | **Organiser mes tâches** : Calendrier / Sélection / Synthèse (menu sous « Projets ») |
 | `/notifications` | `notifications/page.tsx` | `NotificationsPage` | toutes mes notifications (filtre non lues) |
+| `/notes` | `notes/page.tsx` → `children("root")` | `notes/NotesWorkspace` | **Prise de notes** : arborescence paresseuse + document riche par objet ; lien profond `?ref=kind:id` |
 
 ## Coque (`AppShell`)
 
 Menu : Tableau de bord, Cartes mentales, Projets, **Organiser mes tâches**
-(sous-entrée de Projets). **Cloche de notifications** (`NotificationsBell`)
+(sous-entrée de Projets), **Prise de notes**. **Cloche de notifications** (`NotificationsBell`)
 à côté du logo (barre latérale) et dans l'en-tête mobile : pastille rouge =
 nombre de non lues ; panneau déroulant façon réseau social (icône par type,
 titre, extrait, « il y a … », point bleu si non lue) ; un clic marque lue et
 ouvre l'endroit concerné (fiche tâche, commentaire ciblé) ; au survol :
 bascule lue / non lue, suppression ; « Tout lu » ; lien « Voir toutes ».
+
+## Prise de notes (`notes/NotesWorkspace`)
+
+- **Arborescence** (colonne à gauche, tiroir sur mobile) : Cartes mentales ›
+  carte › nœuds › sous-nœuds… ; Projets › projet › étapes › activités › tâches,
+  tâches sans étape, « Sans projet ». Chaque branche se charge **à
+  l'ouverture** (chevron, indicateur de chargement) ; icône par type (cerveau,
+  nœud, dossier, étape, activité, tâche), point bleu si l'élément a des
+  notes, indice (statut, nombre de nœuds…).
+- **Document** (droite) : type, bouton « Ouvrir l'objet », grand titre, date,
+  éditeur riche plein cadre façon Notion (`RichTextEditor`, images collées) ;
+  **enregistrement automatique** 800 ms après la dernière frappe, et à la
+  fermeture de la page ; fil d'Ariane cliquable ; indicateur
+  Enregistré / Enregistrement… / Erreur. Les sections (Cartes mentales,
+  Projets, Sans projet) ne sont pas éditables.
+- Les notes sont visibles sur l'objet : `NotesPreview` (projet : sous
+  l'en-tête ; fiche tâche : bloc « Notes ») avec « Modifier dans Prise de
+  notes », icône carnet (colorée si notes) sur chaque étape, activité et
+  tâche du Plan, lien « Ouvrir dans Prise de notes » dans le panneau de
+  carte. Les notes d'une carte = notes de son nœud racine.
 
 ## Organiser mes tâches (`organizer/TaskOrganizer`)
 

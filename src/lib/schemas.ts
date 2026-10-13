@@ -187,6 +187,9 @@ const dayDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date au format AAAA-MM-
 export const createWorkSessionSchema = z.object({ date: dayDate });
 export const orderMyTasksSchema = z.object({ taskIds: z.array(z.string().min(1)).max(2_000) });
 
+// --- Prise de notes ------------------------------------------------------------
+export const updateNotesSchema = z.object({ notes: z.string().max(500_000) });
+
 // --- Notifications -----------------------------------------------------------
 export const updateNotificationSchema = z.object({ read: z.boolean() });
 

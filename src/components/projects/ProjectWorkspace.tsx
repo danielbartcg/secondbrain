@@ -12,6 +12,7 @@ import { ProjectDashboardTab } from "./ProjectDashboardTab";
 import { TeamTab } from "./TeamTab";
 import { DeliverablesTab } from "./DeliverablesTab";
 import { DocumentsTab } from "./DocumentsTab";
+import { NotesPreview } from "@/components/notes/NotesPreview";
 
 /**
  * Espace projet : en-tête commun + onglets (tableau de bord, plan, livrables,
@@ -134,6 +135,9 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
           <span className="shrink-0 text-sm font-semibold tabular-nums">{project.progress.percent}%</span>
         </div>
       </div>
+
+      {/* Notes riches du projet (éditées dans « Prise de notes ») */}
+      <NotesPreview html={project.notes} noteRef={`project:${project.id}`} title="Notes du projet" className="mt-4" />
 
       {/* Onglets */}
       <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line">

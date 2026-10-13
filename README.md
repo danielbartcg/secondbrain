@@ -27,6 +27,10 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    Une tâche peut n'avoir **ni projet, ni étape, ni activité** (projet virtuel
    « Sans projet »), et se rattacher à des **nœuds de carte mentale** (qui
    affichent leurs tâches ouvertes ; création ou rattachement depuis le nœud).
+   **Prise de notes** : arborescence façon Notion de tous les objets (cartes
+   › nœuds, projets › étapes › activités › tâches), chargée au fur et à
+   mesure, avec un grand document de notes riches par objet, visible ensuite
+   sur l'objet.
    **Recherche globale** avec auto-complétion sur la page d'accueil (projets,
    tâches, nœuds, cartes).
    **Notifications in-app** (cloche) : tâche assignée, réponse à un

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
+import { sanitizeNotes } from "@/lib/sanitize";
 
 /**
  * Fiche tâche : détail enrichi (projet, étape, activité, responsable, équipe,
@@ -53,6 +54,8 @@ export type TaskDetailDto = TaskDto & {
   workSessions: WorkSessionDto[];
   /** Nœuds de carte mentale rattachés. */
   nodes: TaskNodeRef[];
+  /** Notes riches (HTML assaini), éditables dans « Prise de notes ». */
+  notes: string;
 };
 
 const MENTION_RE = /@\[([^\]]+)\]\(([A-Za-z0-9_-]+)\)/g;
@@ -128,6 +131,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
     })),
     workSessions: t.workSessions.map((s) => toSessionDto(s, userId, t.dueDate)),
     nodes: t.nodes.map((n) => ({ id: n.node.id, title: n.node.title, mapId: n.node.mapId, mapTitle: n.node.map.title })),
+    notes: sanitizeNotes(t.notes),
   };
 }
 
