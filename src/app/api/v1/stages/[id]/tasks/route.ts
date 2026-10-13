@@ -8,5 +8,5 @@ type P = { id: string };
 /** POST /api/v1/stages/:id/tasks — tâche rattachée directement à l'étape (sans activité). */
 export const POST = withUser<P>(async (req: NextRequest, { params, user }) => {
   const input = await parseBody(req, createTaskSchema);
-  return json({ project: await createTask(user.id, { stageId: params.id }, input) }, { status: 201 });
+  return json(await createTask(user.id, { stageId: params.id }, input), { status: 201 });
 });

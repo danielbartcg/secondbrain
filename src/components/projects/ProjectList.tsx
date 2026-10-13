@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, FolderKanban, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, FolderKanban, Inbox, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto, ProjectSummary } from "@/lib/projects";
 import { Button, EmptyState, PageHeader, ProgressBar, formatDate } from "@/components/ui";
@@ -24,7 +24,7 @@ const STATUS_CLASS: Record<ProjectSummary["status"], string> = {
 
 type Filter = "ALL" | ProjectSummary["status"];
 
-export function ProjectList({ initial }: { initial: ProjectSummary[] }) {
+export function ProjectList({ initial, orphanCount = 0 }: { initial: ProjectSummary[]; orphanCount?: number }) {
   const router = useRouter();
   const [projects, setProjects] = useState(initial);
   const [creating, setCreating] = useState(false);
@@ -90,6 +90,22 @@ export function ProjectList({ initial }: { initial: ProjectSummary[] }) {
           </button>
         ))}
       </div>
+
+      {/* Projet virtuel : tâches sans projet */}
+      {(filter === "ALL" || filter === "ACTIVE") && (
+        <Link href="/projects/sans-projet" className="mb-3 flex items-center gap-3 rounded-2xl border border-dashed border-line-strong bg-surface p-4 transition-shadow hover:shadow-md">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-3 text-ink-2">
+            <Inbox className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">Sans projet</span>
+            <span className="block text-xs text-muted">Vos tâches orphelines, rattachables plus tard à un projet.</span>
+          </span>
+          <span className="rounded-full bg-surface-3 px-2 py-0.5 text-xs font-medium text-ink-2">
+            {orphanCount} tâche{orphanCount > 1 ? "s" : ""}
+          </span>
+        </Link>
+      )}
 
       {visible.length === 0 ? (
         <EmptyState title="Aucun projet ici" hint="Créez un projet, puis découpez-le en étapes et en tâches.">

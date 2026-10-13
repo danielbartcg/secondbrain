@@ -1,7 +1,8 @@
 import "server-only";
 import type { DeliverableStatus, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isMyTask, listProjects, projectAccessWhere, toTaskDto, type ProjectSummary, type TaskDto } from "@/lib/projects";
+import { isMyTask, listProjects, taskAccessWhere, toTaskDto, type ProjectSummary, type TaskDto } from "@/lib/projects";
+import { NO_PROJECT_LABEL } from "@/lib/tasks";
 
 /**
  * Tableau de bord personnel : mes tâches (affectées à un membre rattaché à
@@ -10,10 +11,11 @@ import { isMyTask, listProjects, projectAccessWhere, toTaskDto, type ProjectSumm
  */
 
 export type DashboardTask = TaskDto & {
-  projectId: string;
+  /** null = sans projet. */
+  projectId: string | null;
   projectName: string;
   projectColor: string | null;
-  stageName: string;
+  stageName: string | null;
   assigneeName: string | null;
 };
 
@@ -21,7 +23,8 @@ export type Deadline = {
   kind: "task" | "deliverable";
   id: string;
   name: string;
-  projectId: string;
+  /** null = tâche sans projet. */
+  projectId: string | null;
   projectName: string;
   projectColor: string | null;
   dueDate: string;
@@ -62,8 +65,14 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
 
   const [tasks, deliverables] = await Promise.all([
     prisma.task.findMany({
-      where: { stage: { projectId: { in: activeIds }, project: projectAccessWhere(userId) } },
-      include: { _count: { select: { comments: true } }, assignee: { select: { name: true, userId: true } }, stage: { select: { name: true, projectId: true } } },
+      where: { AND: [taskAccessWhere(userId), { OR: [{ projectId: { in: activeIds } }, { projectId: null }] }] },
+      include: {
+        _count: { select: { comments: true } },
+        nodes: { select: { nodeId: true } },
+        assignee: { select: { name: true, userId: true } },
+        stage: { select: { name: true } },
+        project: { select: { id: true, name: true, color: true, ownerId: true } },
+      },
       orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
     }),
     prisma.deliverable.findMany({
@@ -80,7 +89,8 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
 
   for (const t of tasks) {
     statusCounts[t.status]++;
-    const project = projectById.get(t.stage.projectId)!;
+    // Tâche sans projet : projet virtuel « Sans projet », visible par son créateur seulement.
+    const project = t.project ?? { id: null, name: NO_PROJECT_LABEL, color: null, ownerId: t.ownerId };
     const mine = isMyTask(t, project.ownerId, userId);
     if (mine) {
       myStatusCounts[t.status]++;
@@ -89,7 +99,7 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
         projectId: project.id,
         projectName: project.name,
         projectColor: project.color,
-        stageName: t.stage.name,
+        stageName: t.stage?.name ?? null,
         assigneeName: t.assignee?.name ?? null,
       });
     }

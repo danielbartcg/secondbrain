@@ -31,6 +31,7 @@ model User {
   workSessions  WorkSession[]
   taskRanks     TaskRank[]
   notifications Notification[]
+  ownedTasks    Task[]
 }
 
 /// Session opaque : le même jeton sert de cookie `session` (web) et de
@@ -90,6 +91,9 @@ model MindNode {
   order     Int        @default(0)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
+  /// Tâches rattachées à ce nœud (avec ou sans projet).
+  tasks MindNodeTask[]
 
   @@index([mapId])
   @@index([parentId])
@@ -154,6 +158,7 @@ model Project {
   deliverables Deliverable[]
   documents    Document[]
   folders      Folder[]
+  tasks        Task[]
 
   @@index([ownerId])
 }
@@ -217,10 +222,16 @@ model Activity {
   @@index([stageId])
 }
 
+/// Tâche. Rattachements facultatifs et cohérents : activité ⇒ étape ⇒ projet.
+/// Sans projet = tâche « orpheline », visible par son créateur (`ownerId`).
 model Task {
   id          String         @id @default(cuid())
-  stageId     String
-  stage       Stage          @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  ownerId     String
+  owner       User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId     String?
+  stage       Stage?         @relation(fields: [stageId], references: [id], onDelete: Cascade)
   activityId  String?
   activity    Activity?      @relation(fields: [activityId], references: [id], onDelete: Cascade)
   assigneeId  String?
@@ -242,10 +253,26 @@ model Task {
   workSessions  WorkSession[]
   ranks         TaskRank[]
   notifications Notification[]
+  nodes         MindNodeTask[]
 
+  @@index([ownerId])
+  @@index([projectId])
   @@index([stageId])
   @@index([activityId])
   @@index([assigneeId])
+}
+
+/// Rattachement d'une tâche à un nœud de carte mentale (plusieurs nœuds
+/// possibles pour une tâche, plusieurs tâches par nœud).
+model MindNodeTask {
+  nodeId    String
+  node      MindNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([nodeId, taskId])
+  @@index([taskId])
 }
 
 /// Commentaire sur une tâche. `body` contient des mentions au format

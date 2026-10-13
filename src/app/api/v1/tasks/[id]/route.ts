@@ -12,12 +12,12 @@ export const GET = withUser<P>(async (_req, { params, user }) => json({ task: aw
 /**
  * PATCH /api/v1/tasks/:id — avancement, statut, priorité, complexité, nom, description, dates,
  * responsable (`assigneeId`), ordre, déplacement (activityId / stageId).
- * Renvoie le projet recalculé.
+ * Rattachement : projectId / stageId / activityId (null détache). Renvoie `{ project | null, task }`.
  */
 export const PATCH = withUser<P>(async (req: NextRequest, { params, user }) => {
   const input = await parseBody(req, updateTaskSchema);
-  return json({ project: await updateTask(user.id, params.id, input) });
+  return json(await updateTask(user.id, params.id, input));
 });
 
 /** DELETE /api/v1/tasks/:id */
-export const DELETE = withUser<P>(async (_req, { params, user }) => json({ project: await deleteTask(user.id, params.id) }));
+export const DELETE = withUser<P>(async (_req, { params, user }) => json(await deleteTask(user.id, params.id)));

@@ -19,13 +19,15 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, PanelRightOpen, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, ListTodo, PanelRightOpen, Plus, Trash2, X } from "lucide-react";
 import type { NodeStatus } from "@prisma/client";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
 import { layoutMindMap, subtreeIds, type Side } from "@/lib/mindmap-layout";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Button, InlineEdit, NODE_STATUS_LABEL } from "@/components/ui";
+import { NodeTasksPanel } from "./NodeTasksPanel";
+import { useSearchParams } from "next/navigation";
 
 /**
  * Éditeur de carte mentale.
@@ -57,6 +59,8 @@ type MindData = {
   collapsed: boolean;
   hasNotes: boolean;
   status: NodeStatus;
+  /** Tâches rattachées non clôturées (indicateur visuel). */
+  openTaskCount: number;
   /** Nœuds fermés (et leur descendance) masqués sous ce nœud. */
   closedHidden: number;
   editing: boolean;
@@ -133,6 +137,11 @@ const MindNodeView = memo(function MindNodeView({ id, data, selected }: NodeProp
             {data.title}
           </span>
           {data.hasNotes && <span className="text-[10px] text-muted" title="Contient des notes">📝</span>}
+          {data.openTaskCount > 0 && (
+            <span className="mind-tasks" title={`${data.openTaskCount} tâche(s) ouverte(s) rattachée(s)`}>
+              <ListTodo className="h-3 w-3" /> {data.openTaskCount}
+            </span>
+          )}
           {data.closedHidden > 0 && (
             <button
               type="button"
@@ -189,6 +198,18 @@ function Editor({ initial }: { initial: MindMapDto }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
+  const searchParams = useSearchParams();
+
+  // Arrivée depuis la recherche (?node=…) : sélectionne et ouvre le nœud (fermés affichés si besoin).
+  const initialNode = useRef(searchParams.get("node"));
+  useEffect(() => {
+    const id = initialNode.current;
+    if (!id || !initial.nodes.some((n) => n.id === id)) return;
+    setShowClosed(true);
+    setSelectedId(id);
+    setPanelOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [saving, setSaving] = useState(0);
   const [layoutTick, setLayoutTick] = useState(0);
   const { fitView, setCenter, getZoom } = useReactFlow();
@@ -331,6 +352,8 @@ function Editor({ initial }: { initial: MindMapDto }) {
           collapsed: false,
           status: "OPEN",
           order: at,
+          taskCount: 0,
+          openTaskCount: 0,
           updatedAt: new Date().toISOString(),
         };
         siblings.splice(at, 0, created);
@@ -506,6 +529,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
             collapsed: n.collapsed,
             hasNotes: n.notes.replace(/<[^>]+>/g, "").trim().length > 0 || n.notes.includes("<img"),
             status: n.status,
+            openTaskCount: n.openTaskCount,
             closedHidden: closedHidden.get(p.id) ?? 0,
             editing: editingId === p.id,
             onRename: rename,
@@ -573,6 +597,18 @@ function Editor({ initial }: { initial: MindMapDto }) {
     fitted.current = true;
     void fitView({ padding: 0.25, duration: 300, maxZoom: 1.25 });
   }, [nodesInitialized, rfNodes.length, fitView]);
+
+  // Nœud ciblé par la recherche : centrage une fois la mise en page connue.
+  const centeredOnTarget = useRef(false);
+  useEffect(() => {
+    const id = initialNode.current;
+    if (!id || centeredOnTarget.current || !nodesInitialized) return;
+    const p = positions.get(id);
+    if (!p) return;
+    centeredOnTarget.current = true;
+    fitted.current = true;
+    void setCenter(p.x + p.width / 2, p.y + p.height / 2, { zoom: 1.1, duration: 400 });
+  }, [nodesInitialized, positions, setCenter]);
 
   // Recentre sur un nouveau nœud créé hors champ.
   useEffect(() => {
@@ -780,6 +816,14 @@ function Editor({ initial }: { initial: MindMapDto }) {
                   </div>
                   <p className="mt-1.5 text-[11px] text-faint">À surveiller : mis en évidence. Fermé : hachuré et masqué par défaut (avec ses sous-nœuds).</p>
                 </div>
+              )}
+
+              {selected.parentId && !selected.id.startsWith("tmp-") && (
+                <NodeTasksPanel
+                  mapId={map.id}
+                  nodeId={selected.id}
+                  onCounts={(nodeId, counts) => patchLocal(nodeId, counts)}
+                />
               )}
 
               <div className="mt-4">

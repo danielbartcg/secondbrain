@@ -6,12 +6,13 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | Route | Page serveur | Composant client principal | Rôle |
 | --- | --- | --- | --- |
 | `/login`, `/register` | — | formulaires | authentification (API `/auth/*`) |
-| `/dashboard` | `dashboard/page.tsx` → `getDashboard` + `listMindMaps` | `dashboard/HomeDashboard` | tableau de bord personnel |
+| `/dashboard` | `dashboard/page.tsx` → `getDashboard` + `listMindMaps` | `dashboard/HomeDashboard` + `GlobalSearch` | tableau de bord personnel, **recherche globale** |
 | `/mindmaps` | `mindmaps/page.tsx` | `mindmap/MindMapList` | liste des cartes |
 | `/mindmaps/[id]` | `mindmaps/[id]/page.tsx` | `mindmap/MindMapEditor` | éditeur de carte (plein cadre) |
 | `/projects` | `projects/page.tsx` | `projects/ProjectList` | liste, filtre par statut, création |
 | `/projects/[id]` | `projects/[id]/page.tsx` | `projects/ProjectWorkspace` | espace projet à onglets |
-| `/projects/[id]/tasks/[taskId]` | `.../tasks/[taskId]/page.tsx` → `getTaskDetail` | `projects/TaskSheet` | fiche tâche + sessions + fil de commentaires |
+| `/tasks/[taskId]` | `tasks/[taskId]/page.tsx` → `getTaskDetail` | `projects/TaskSheet` | **fiche tâche** (avec ou sans projet) + sessions + fil de commentaires ; l'ancienne adresse `/projects/[id]/tasks/[taskId]` redirige |
+| `/projects/sans-projet` | `projects/sans-projet/page.tsx` → `listOrphanTasks` | `projects/OrphanTasks` | projet virtuel **« Sans projet »** : tâches orphelines (création, statut, fiche, suppression) |
 | `/organize` | `organize/page.tsx` → `getMyTasks` | `organizer/TaskOrganizer` | **Organiser mes tâches** : Calendrier / Sélection / Synthèse (menu sous « Projets ») |
 | `/notifications` | `notifications/page.tsx` | `NotificationsPage` | toutes mes notifications (filtre non lues) |
 
@@ -39,6 +40,11 @@ selon la priorité (rouge critique, ambre haute, indigo moyenne, gris basse).
 
 ## Tableau de bord personnel (`HomeDashboard`)
 
+- **Recherche globale** (`GlobalSearch`) sous le titre : auto-complétion
+  (250 ms) sur projets, tâches, nœuds de carte et cartes (titre / nom et
+  description / notes), résultats groupés par type avec surlignage, ↑ ↓ Entrée
+  Échap, pleine largeur sur mobile ; un clic ouvre la page dédiée (fiche
+  tâche, projet, carte centrée sur le nœud).
 - 4 indicateurs : mes tâches ouvertes, en retard (tâches + livrables),
   échéances sous 7 jours, avancement global.
 - **Mes tâches** (affectées à un membre rattaché à mon compte), lien vers la
@@ -57,7 +63,7 @@ puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) :
 | Onglet | Composant | Contenu |
 | --- | --- | --- |
 | Tableau de bord | `ProjectDashboardTab` | KPIs ; **planning Gantt** (`PlanningChart`) des étapes (part réalisée en plein) et livrables 📦 avec ligne « aujourd'hui » ; avancement par étape (`ProgressBarsChart`) ; tâches par statut ; statut des livrables (anneau + liste) ; tâches en retard |
-| Plan | `ProjectBoard` | étapes › activités › tâches : drapeau de priorité, avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche ; détails rapides : priorité, complexité, dates, clôture |
+| Plan | `ProjectBoard` | bloc **« Tâches sans étape »** (tâches du projet non rattachées à une étape, ajout rapide) puis étapes › activités › tâches : drapeau de priorité, avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche ; détails rapides : priorité, complexité, dates, clôture |
 | Livrables | `DeliverablesTab` | cartes : statut, responsable, étape, début/fin attendus, documents rattachés (téléversement direct, rattachement d'un document existant, détachement, téléchargement) |
 | Documents | `DocumentsTab` | **explorateur à dossiers** : fil d'Ariane, sous-dossiers du dossier courant (créer, renommer, « Déplacer vers… », supprimer → contenu remonté dans le parent), documents du dossier courant (sélecteur de dossier, « matérialise le livrable … », téléchargement, suppression par l'auteur ou le propriétaire) ; dépôt (bouton ou glisser-déposer) **dans le dossier courant** |
 | Équipe | `TeamTab` | membres (avatar, rôle, couleur, nb de tâches) ; ajout en **nom libre** ou **compte de l'application** (recherche par e-mail exact) ; retrait (propriétaire uniquement, jamais le propriétaire lui-même) |
@@ -67,11 +73,17 @@ réponse recalculée, recharge en cas d'erreur.
 
 ## Fiche tâche (`TaskSheet`)
 
+- Fil d'Ariane : projet (ou « Sans projet ») › étape › activité.
 - Carte principale : badges (statut, priorité, retard, nb commentaires),
   titre éditable, boutons de statut À faire / En cours / Terminée + curseur
-  d'avancement, champs **Priorité / Complexité / Responsable / Début /
-  Échéance / Rattachement** (étape ou étape › activité), description,
-  suppression.
+  d'avancement, champs **Priorité / Complexité / Responsable** (désactivé sans
+  projet) **/ Début / Échéance**, description, suppression.
+- **Rattachement** : trois sélecteurs **Projet › Étape › Activité**, tous
+  facultatifs (« Sans projet », « Sans étape », « Sans activité ») ; les listes
+  se chargent à la demande ; changer de projet efface étape, activité et
+  affectation.
+- **Nœuds de carte mentale** : nœuds rattachés (lien vers la carte centrée
+  sur le nœud, détachement).
 - **Sessions de travail planifiées** : jours prévus (les miens retirables,
   ceux des autres membres affichés avec leur nom), ajout par sélecteur de
   date, badge et bordure rouge ⚠ pour une session après l'échéance.
@@ -100,6 +112,14 @@ Fermé, aussi dans la barre d'actions du nœud), notes riches
 (`RichTextEditor`). « À surveiller » : halo ambré + œil ; « Fermé » :
 hachuré, barré, masqué avec ses sous-nœuds ; bouton œil barré dans l'en-tête
 « Afficher les nœuds fermés (n) », badge `✓n` sur le parent (cliquable).
+
+**Tâches d'un nœud** (`NodeTasksPanel`, dans le panneau) : liste des tâches
+rattachées (statut cliquable, projet ou « Sans projet », fiche, détachement),
+« Nouvelle » (crée une tâche sans projet rattachée au nœud), « Existante »
+(recherche puis rattachement). Indicateur visuel sur le nœud : pastille
+bleue avec le nombre de tâches **non clôturées** (terminées comprises).
+Arrivée par `?node=<id>` (recherche, fiche tâche) : nœud sélectionné, centré,
+panneau ouvert, nœuds fermés affichés si nécessaire.
 
 ## Composants partagés (`src/components/ui.tsx`)
 

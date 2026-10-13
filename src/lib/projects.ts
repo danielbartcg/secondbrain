@@ -47,7 +47,10 @@ export type MemberDto = {
 
 export type TaskDto = {
   id: string;
-  stageId: string;
+  ownerId: string;
+  /** Projet, étape, activité : facultatifs et cohérents (activité ⇒ étape ⇒ projet). null = tâche « sans projet ». */
+  projectId: string | null;
+  stageId: string | null;
   activityId: string | null;
   assigneeId: string | null;
   name: string;
@@ -62,6 +65,8 @@ export type TaskDto = {
   startDate: string | null;
   dueDate: string | null;
   commentCount: number;
+  /** Nœuds de carte mentale auxquels la tâche est rattachée. */
+  nodeIds: string[];
   updatedAt: string;
 };
 
@@ -138,6 +143,8 @@ export type ProjectSummary = {
 
 export type ProjectDto = ProjectSummary & {
   stages: StageDto[];
+  /** Tâches du projet sans étape. */
+  tasks: TaskDto[];
   members: MemberDto[];
   deliverables: DeliverableDto[];
   documents: DocumentDto[];
@@ -159,7 +166,7 @@ export function aggregate(progresses: number[]): Progress {
 
 // --- Sélections Prisma -------------------------------------------------------
 
-const TASK_INCLUDE = { _count: { select: { comments: true } } } satisfies Prisma.TaskInclude;
+const TASK_INCLUDE = { _count: { select: { comments: true } }, nodes: { select: { nodeId: true } } } satisfies Prisma.TaskInclude;
 
 const DOCUMENT_INCLUDE = { uploadedBy: { select: { id: true, name: true } } } satisfies Prisma.DocumentInclude;
 
@@ -171,6 +178,7 @@ export const PROJECT_INCLUDE = {
       tasks: { orderBy: [{ order: "asc" }, { createdAt: "asc" }], include: TASK_INCLUDE },
     },
   },
+  tasks: { where: { stageId: null }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], include: TASK_INCLUDE },
   members: { orderBy: { createdAt: "asc" } },
   deliverables: {
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -187,6 +195,8 @@ type DocumentRow = Prisma.DocumentGetPayload<{ include: typeof DOCUMENT_INCLUDE 
 export function toTaskDto(t: TaskRow): TaskDto {
   return {
     id: t.id,
+    ownerId: t.ownerId,
+    projectId: t.projectId,
     stageId: t.stageId,
     activityId: t.activityId,
     assigneeId: t.assigneeId,
@@ -200,6 +210,7 @@ export function toTaskDto(t: TaskRow): TaskDto {
     startDate: iso(t.startDate),
     dueDate: iso(t.dueDate),
     commentCount: t._count.comments,
+    nodeIds: t.nodes.map((n) => n.nodeId),
     updatedAt: t.updatedAt.toISOString(),
   };
 }
@@ -250,7 +261,7 @@ function toProjectDto(p: ProjectRow): ProjectDto {
       tasks: s.tasks.filter((t) => t.activityId === null).map(toTaskDto),
     };
   });
-  const allTasks = p.stages.flatMap((s) => s.tasks);
+  const allTasks = [...p.stages.flatMap((s) => s.tasks), ...p.tasks];
   return {
     id: p.id,
     ownerId: p.ownerId,
@@ -267,6 +278,7 @@ function toProjectDto(p: ProjectRow): ProjectDto {
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     stages,
+    tasks: p.tasks.map(toTaskDto),
     members: p.members.map(toMemberDto),
     deliverables: p.deliverables.map((d) => ({
       id: d.id,
@@ -325,15 +337,6 @@ export async function activityProjectId(userId: string, activityId: string): Pro
   });
   if (!a) throw notFound("Activité");
   return a.stage.projectId;
-}
-
-export async function taskProjectId(userId: string, taskId: string): Promise<string> {
-  const t = await prisma.task.findFirst({
-    where: { id: taskId, stage: { project: projectAccessWhere(userId) } },
-    select: { stage: { select: { projectId: true } } },
-  });
-  if (!t) throw notFound("Tâche");
-  return t.stage.projectId;
 }
 
 export async function memberProjectId(userId: string, memberId: string): Promise<string> {
@@ -398,7 +401,7 @@ export function isMyTask(t: { assignee: { userId: string | null } | null }, proj
   return t.assignee ? t.assignee.userId === userId : projectOwnerId === userId;
 }
 
-export const taskHref = (projectId: string, taskId: string) => `/projects/${projectId}/tasks/${taskId}`;
+export const taskHref = (taskId: string) => `/tasks/${taskId}`;
 
 /** Membre + compte rattaché (pour notifier). */
 async function memberUser(tx: Tx, memberId: string | null | undefined): Promise<{ userId: string | null } | null> {
@@ -423,8 +426,9 @@ async function checkMember(tx: Tx, projectId: string, memberId: string | null | 
 export async function listProjects(userId: string): Promise<ProjectSummary[]> {
   const rows = await prisma.project.findMany({ where: projectAccessWhere(userId), orderBy: { updatedAt: "desc" }, include: PROJECT_INCLUDE });
   return rows.map((p) => {
-    const { stages: _s, members: _m, deliverables: _d, documents: _doc, folders: _f, ...summary } = toProjectDto(p);
+    const { stages: _s, tasks: _t, members: _m, deliverables: _d, documents: _doc, folders: _f, ...summary } = toProjectDto(p);
     void _s;
+    void _t;
     void _m;
     void _d;
     void _doc;
@@ -614,35 +618,112 @@ export function reconcile(
   return { status, progress };
 }
 
+/** Tâches visibles : celles de mes projets (propriétaire ou membre) + mes tâches sans projet. */
+export function taskAccessWhere(userId: string): Prisma.TaskWhereInput {
+  return { OR: [{ project: projectAccessWhere(userId) }, { projectId: null, ownerId: userId }] };
+}
+
+export type TaskMutation = { project: ProjectDto | null; task: TaskDto | null };
+
+/** Rattachement résolu et cohérent : activité ⇒ étape ⇒ projet. */
+type Attachment = { projectId: string | null; stageId: string | null; activityId: string | null };
+
+/**
+ * Résout un rattachement demandé (activityId / stageId / projectId) en
+ * vérifiant l'accès à chaque niveau. Le niveau le plus précis l'emporte.
+ */
+async function resolveAttachment(
+  userId: string,
+  target: { projectId?: string | null; stageId?: string | null; activityId?: string | null },
+): Promise<Attachment> {
+  if (target.activityId) {
+    const a = await prisma.activity.findFirst({
+      where: { id: target.activityId, stage: { project: projectAccessWhere(userId) } },
+      select: { id: true, stageId: true, stage: { select: { projectId: true } } },
+    });
+    if (!a) throw notFound("Activité");
+    return { projectId: a.stage.projectId, stageId: a.stageId, activityId: a.id };
+  }
+  if (target.stageId) {
+    const s = await prisma.stage.findFirst({ where: { id: target.stageId, project: projectAccessWhere(userId) }, select: { id: true, projectId: true } });
+    if (!s) throw notFound("Étape");
+    return { projectId: s.projectId, stageId: s.id, activityId: null };
+  }
+  if (target.projectId) {
+    await requireProjectAccess(userId, target.projectId);
+    return { projectId: target.projectId, stageId: null, activityId: null };
+  }
+  return { projectId: null, stageId: null, activityId: null };
+}
+
+/** Groupe de frères d'une tâche pour la renumérotation (`order`). */
+function siblingWhere(t: Attachment & { ownerId: string }): Record<string, unknown> {
+  if (t.stageId) return { stageId: t.stageId, activityId: t.activityId };
+  if (t.projectId) return { projectId: t.projectId, stageId: null };
+  return { ownerId: t.ownerId, projectId: null };
+}
+
+/** Un nœud de carte référencé doit appartenir à l'utilisateur. */
+export async function checkNode(db: Tx | typeof prisma, userId: string, nodeId: string | null | undefined) {
+  if (!nodeId) return;
+  const n = await db.mindNode.findFirst({ where: { id: nodeId, map: { ownerId: userId } }, select: { id: true } });
+  if (!n) throw notFound("Nœud");
+}
+
+/**
+ * Transaction d'une mutation de tâche : verrouille la ligne du projet concerné
+ * (s'il y en a un) et renvoie le projet recalculé (ou null pour une tâche sans
+ * projet) ainsi que la tâche.
+ */
+async function mutateTask(projectId: string | null, fn: (tx: Tx) => Promise<string | null>): Promise<TaskMutation> {
+  return prisma.$transaction(
+    async (tx) => {
+      if (projectId) await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${projectId} FOR UPDATE`;
+      const taskId = await fn(tx);
+      let project: ProjectDto | null = null;
+      if (projectId) {
+        const p = await tx.project.update({ where: { id: projectId }, data: { updatedAt: new Date() }, include: PROJECT_INCLUDE });
+        project = toProjectDto(p);
+      }
+      const task = taskId ? await tx.task.findUnique({ where: { id: taskId }, include: TASK_INCLUDE }) : null;
+      return { project, task: task ? toTaskDto(task) : null };
+    },
+    { timeout: 15_000 },
+  );
+}
+
+export async function accessibleTask(userId: string, taskId: string) {
+  const t = await prisma.task.findFirst({ where: { id: taskId, ...taskAccessWhere(userId) } });
+  if (!t) throw notFound("Tâche");
+  return t;
+}
+
+/** Mes tâches sans projet (visibles dans le projet virtuel « Sans projet »). */
+export async function listOrphanTasks(userId: string): Promise<TaskDto[]> {
+  const rows = await prisma.task.findMany({ where: { ownerId: userId, projectId: null }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], include: TASK_INCLUDE });
+  return rows.map(toTaskDto);
+}
+
 export async function createTask(
   userId: string,
-  target: { stageId?: string; activityId?: string },
+  target: { projectId?: string | null; stageId?: string | null; activityId?: string | null; nodeId?: string | null },
   input: CreateTaskInput,
-): Promise<ProjectDto> {
-  const projectId = target.activityId
-    ? await activityProjectId(userId, target.activityId)
-    : target.stageId
-      ? await stageProjectId(userId, target.stageId)
-      : null;
-  if (!projectId) throw badRequest("stageId ou activityId requis.");
-
-  return mutateProject(projectId, async (tx) => {
-    let stageId: string;
-    let activityId: string | null = null;
-    if (target.activityId) {
-      const a = await tx.activity.findUniqueOrThrow({ where: { id: target.activityId } });
-      stageId = a.stageId;
-      activityId = a.id;
-    } else {
-      stageId = target.stageId!;
+): Promise<TaskMutation> {
+  const att = await resolveAttachment(userId, target);
+  await checkNode(prisma, userId, target.nodeId);
+  return mutateTask(att.projectId, async (tx) => {
+    if (input.assigneeId) {
+      if (!att.projectId) throw badRequest("Une tâche sans projet ne peut pas être affectée.");
+      await checkMember(tx, att.projectId, input.assigneeId);
     }
-    await checkMember(tx, projectId, input.assigneeId);
     const { status, progress } = reconcile({ status: "TODO", progress: 0 }, input);
-    const count = await tx.task.count({ where: { stageId, activityId } });
+    const count = await tx.task.count({ where: siblingWhere({ ...att, ownerId: userId }) });
     const created = await tx.task.create({
       data: {
-        stageId,
-        activityId,
+        ownerId: userId,
+        projectId: att.projectId,
+        stageId: att.stageId,
+        activityId: att.activityId,
         assigneeId: input.assigneeId ?? null,
         name: input.name,
         description: input.description,
@@ -653,49 +734,49 @@ export async function createTask(
         order: count,
         startDate: toDate(input.startDate) ?? null,
         dueDate: toDate(input.dueDate) ?? null,
+        ...(target.nodeId ? { nodes: { create: { nodeId: target.nodeId } } } : {}),
       },
     });
     const assignee = await memberUser(tx, input.assigneeId);
     if (assignee?.userId) {
       const name = await actorName(tx, userId);
       await notify(tx, [
-        { userId: assignee.userId, actorId: userId, actorName: name, type: "ASSIGNED", title: `${name} vous a assigné la tâche « ${created.name} »`, href: taskHref(projectId, created.id), taskId: created.id, projectId },
+        { userId: assignee.userId, actorId: userId, actorName: name, type: "ASSIGNED", title: `${name} vous a assigné la tâche « ${created.name} »`, href: taskHref(created.id), taskId: created.id, projectId: att.projectId },
       ]);
     }
+    return created.id;
   });
 }
 
-export async function updateTask(userId: string, taskId: string, input: UpdateTaskInput): Promise<ProjectDto> {
-  const projectId = await taskProjectId(userId, taskId);
-  return mutateProject(projectId, async (tx) => {
-    const t = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
-    const { status, progress } = reconcile(t, input);
-    await checkMember(tx, projectId, input.assigneeId);
+export async function updateTask(userId: string, taskId: string, input: UpdateTaskInput): Promise<TaskMutation> {
+  const t = await accessibleTask(userId, taskId);
 
-    // Déplacement éventuel vers une autre activité / étape du même projet.
-    let stageId = t.stageId;
-    let activityId = t.activityId;
-    if (input.activityId !== undefined) {
-      if (input.activityId === null) {
-        activityId = null;
-        if (input.stageId) {
-          const s = await tx.stage.findFirst({ where: { id: input.stageId, projectId } });
-          if (!s) throw badRequest("Déplacement hors du projet impossible.");
-          stageId = s.id;
-        }
-      } else {
-        const a = await tx.activity.findFirst({ where: { id: input.activityId, stage: { projectId } } });
-        if (!a) throw badRequest("Déplacement hors du projet impossible.");
-        activityId = a.id;
-        stageId = a.stageId;
-      }
-    } else if (input.stageId && input.stageId !== t.stageId) {
-      const s = await tx.stage.findFirst({ where: { id: input.stageId, projectId } });
-      if (!s) throw badRequest("Déplacement hors du projet impossible.");
-      stageId = s.id;
-      activityId = null;
+  // Nouveau rattachement éventuel (le niveau le plus précis l'emporte ; `null` détache).
+  let att: Attachment = { projectId: t.projectId, stageId: t.stageId, activityId: t.activityId };
+  if (input.activityId) att = await resolveAttachment(userId, { activityId: input.activityId });
+  else if (input.stageId) {
+    att = await resolveAttachment(userId, { stageId: input.stageId });
+    if (att.stageId === t.stageId && input.activityId === undefined) att.activityId = t.activityId;
+  } else if (input.activityId === null && input.stageId === undefined && input.projectId === undefined) {
+    att = { ...att, activityId: null };
+  } else if (input.stageId === null && input.projectId === undefined) {
+    att = { projectId: t.projectId, stageId: null, activityId: null };
+  } else if (input.projectId !== undefined) {
+    att = await resolveAttachment(userId, { projectId: input.projectId });
+    if (att.projectId === t.projectId) att = { projectId: t.projectId, stageId: t.stageId, activityId: t.activityId };
+  }
+  const moved = att.projectId !== t.projectId || att.stageId !== t.stageId || att.activityId !== t.activityId;
+  const projectChanged = att.projectId !== t.projectId;
+
+  return mutateTask(att.projectId, async (tx) => {
+    const { status, progress } = reconcile(t, input);
+    // Changement de projet : l'affectation (membre de l'ancien projet) tombe, sauf nouvelle affectation valide.
+    let assigneeId = input.assigneeId;
+    if (projectChanged && assigneeId === undefined) assigneeId = null;
+    if (assigneeId) {
+      if (!att.projectId) throw badRequest("Une tâche sans projet ne peut pas être affectée.");
+      await checkMember(tx, att.projectId, assigneeId);
     }
-    const moved = stageId !== t.stageId || activityId !== t.activityId;
 
     const updated = await tx.task.update({
       where: { id: taskId },
@@ -706,17 +787,18 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
         progress,
         priority: input.priority,
         complexity: input.complexity,
-        assigneeId: input.assigneeId,
+        assigneeId,
         startDate: toDate(input.startDate),
         dueDate: toDate(input.dueDate),
-        stageId,
-        activityId,
+        projectId: att.projectId,
+        stageId: att.stageId,
+        activityId: att.activityId,
         ...(moved ? { order: 1_000_000 } : {}),
       },
     });
     if (moved || input.order !== undefined) {
-      await resequence(tx, "task", { stageId, activityId }, taskId, input.order);
-      if (moved) await resequence(tx, "task", { stageId: t.stageId, activityId: t.activityId });
+      await resequence(tx, "task", siblingWhere({ ...att, ownerId: t.ownerId }), taskId, input.order);
+      if (moved) await resequence(tx, "task", siblingWhere({ projectId: t.projectId, stageId: t.stageId, activityId: t.activityId, ownerId: t.ownerId }));
     }
 
     // Notifications : nouvelle affectation, ou mise à jour d'une tâche affectée à quelqu'un d'autre.
@@ -730,25 +812,27 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     if (input.startDate !== undefined && iso(toDate(input.startDate)) !== iso(t.startDate)) changes.push("date de début");
     if (input.dueDate !== undefined && iso(toDate(input.dueDate)) !== iso(t.dueDate)) changes.push("échéance");
     if (moved) changes.push("rattachement");
-    const assigneeChanged = input.assigneeId !== undefined && input.assigneeId !== t.assigneeId;
+    const assigneeChanged = updated.assigneeId !== t.assigneeId;
     const assignee = await memberUser(tx, updated.assigneeId);
     if (assignee?.userId && assignee.userId !== userId && (assigneeChanged || changes.length > 0)) {
       const name = await actorName(tx, userId);
-      const href = taskHref(projectId, taskId);
+      const href = taskHref(taskId);
       await notify(tx, [
         assigneeChanged
-          ? { userId: assignee.userId, actorId: userId, actorName: name, type: "ASSIGNED", title: `${name} vous a assigné la tâche « ${updated.name} »`, href, taskId, projectId }
-          : { userId: assignee.userId, actorId: userId, actorName: name, type: "TASK_UPDATED", title: `${name} a mis à jour « ${updated.name} »`, body: `Modifié : ${changes.join(", ")}.`, href, taskId, projectId },
+          ? { userId: assignee.userId, actorId: userId, actorName: name, type: "ASSIGNED", title: `${name} vous a assigné la tâche « ${updated.name} »`, href, taskId, projectId: att.projectId }
+          : { userId: assignee.userId, actorId: userId, actorName: name, type: "TASK_UPDATED", title: `${name} a mis à jour « ${updated.name} »`, body: `Modifié : ${changes.join(", ")}.`, href, taskId, projectId: att.projectId },
       ]);
     }
+    return taskId;
   });
 }
 
-export async function deleteTask(userId: string, taskId: string): Promise<ProjectDto> {
-  const projectId = await taskProjectId(userId, taskId);
-  return mutateProject(projectId, async (tx) => {
-    const t = await tx.task.delete({ where: { id: taskId } });
-    await resequence(tx, "task", { stageId: t.stageId, activityId: t.activityId });
+export async function deleteTask(userId: string, taskId: string): Promise<TaskMutation> {
+  const t = await accessibleTask(userId, taskId);
+  return mutateTask(t.projectId, async (tx) => {
+    await tx.task.delete({ where: { id: taskId } });
+    await resequence(tx, "task", siblingWhere({ projectId: t.projectId, stageId: t.stageId, activityId: t.activityId, ownerId: t.ownerId }));
+    return null;
   });
 }
 

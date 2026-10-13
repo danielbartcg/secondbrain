@@ -25,6 +25,9 @@ export type MindNodeDto = {
   /** OPEN · WATCH (à surveiller, mis en évidence) · CLOSED (fermé, hachuré, masqué par défaut). */
   status: NodeStatus;
   order: number;
+  /** Tâches rattachées au nœud, et tâches non clôturées (terminées comprises). */
+  taskCount: number;
+  openTaskCount: number;
   updatedAt: string;
 };
 
@@ -57,7 +60,11 @@ type NodeRow = {
   status: NodeStatus;
   order: number;
   updatedAt: Date;
+  tasks?: Array<{ task: { status: string } }>;
 };
+
+/** Inclusion des statuts des tâches rattachées (pour les compteurs du nœud). */
+const NODE_INCLUDE = { tasks: { select: { task: { select: { status: true } } } } } satisfies Prisma.MindNodeInclude;
 
 function toNodeDto(n: NodeRow): MindNodeDto {
   return {
@@ -69,6 +76,8 @@ function toNodeDto(n: NodeRow): MindNodeDto {
     collapsed: n.collapsed,
     status: n.status,
     order: n.order,
+    taskCount: n.tasks?.length ?? 0,
+    openTaskCount: n.tasks?.filter((t) => t.task.status !== "CLOSED").length ?? 0,
     updatedAt: n.updatedAt.toISOString(),
   };
 }
@@ -120,11 +129,12 @@ export async function getMindMap(userId: string, mapId: string): Promise<MindMap
   const nodes = await prisma.mindNode.findMany({
     where: { mapId },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    include: NODE_INCLUDE,
   });
   let root = nodes.find((n) => n.parentId === null);
   if (!root) {
     // Carte sans racine (ne devrait pas arriver) : on la répare.
-    root = await prisma.mindNode.create({ data: { mapId, title: map.title, order: 0 } });
+    root = await prisma.mindNode.create({ data: { mapId, title: map.title, order: 0 }, include: NODE_INCLUDE });
     nodes.unshift(root);
   }
   return {
@@ -179,7 +189,7 @@ export async function createNode(userId: string, mapId: string, input: CreateNod
     });
     await resequence(tx, mapId, parent.id, created.id, input.index);
     if (parent.collapsed) await tx.mindNode.update({ where: { id: parent.id }, data: { collapsed: false } });
-    return tx.mindNode.findUniqueOrThrow({ where: { id: created.id } });
+    return tx.mindNode.findUniqueOrThrow({ where: { id: created.id }, include: NODE_INCLUDE });
   });
   return toNodeDto(node);
 }
@@ -199,7 +209,7 @@ export async function updateNode(
     if (input.color !== undefined) data.color = input.color;
     if (input.collapsed !== undefined) data.collapsed = input.collapsed;
     if (input.status !== undefined) data.status = input.status;
-    const row = await tx.mindNode.update({ where: { id: nodeId }, data });
+    const row = await tx.mindNode.update({ where: { id: nodeId }, data, include: NODE_INCLUDE });
     if (node.parentId === null && input.title) {
       await tx.mindMap.update({ where: { id: mapId }, data: { title: input.title } });
     }
@@ -244,7 +254,7 @@ export async function moveNode(
     await resequence(tx, mapId, target.id, nodeId, input.index);
     if (oldParentId !== target.id) await resequence(tx, mapId, oldParentId);
     if (target.collapsed) await tx.mindNode.update({ where: { id: target.id }, data: { collapsed: false } });
-    return tx.mindNode.findUniqueOrThrow({ where: { id: nodeId } });
+    return tx.mindNode.findUniqueOrThrow({ where: { id: nodeId }, include: NODE_INCLUDE });
   });
   return toNodeDto(moved);
 }

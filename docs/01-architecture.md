@@ -72,7 +72,13 @@ Docker + Caddy en production.
 
 ## Gestion de projet
 
-- Hiérarchie : `Project › Stage › Activity? › Task`, plus **équipe**
+- Hiérarchie : `Project? › Stage? › Activity? › Task` : **les trois niveaux
+  sont facultatifs** pour une tâche (invariant : activité ⇒ étape ⇒ projet,
+  résolu par `resolveAttachment()`). Une tâche sans projet est « orpheline » :
+  visible par son seul créateur (`Task.ownerId`), listée dans le projet virtuel
+  **« Sans projet »** (`/projects/sans-projet`) et dans les tableaux de bord.
+  Une tâche de projet sans étape apparaît dans « Tâches sans étape » du Plan et
+  compte dans l'avancement du projet. Plus **équipe**
   (`ProjectMember`), **livrables** (`Deliverable`, rattachables à une étape,
   avec responsable, dates attendues, statut), **documents** (`Document`,
   pouvant matérialiser un livrable) et **commentaires de tâche**
@@ -87,12 +93,29 @@ Docker + Caddy en production.
   `reconcile()`). Les niveaux supérieurs sont agrégés à la volée
   (`aggregate()`). Rien n'est dénormalisé.
 - Toute mutation renvoie le projet complet recalculé ; aucune logique
-  d'agrégation côté client.
-- Toutes les mutations passent par `mutateProject()` : transaction +
-  `SELECT … FOR UPDATE` sur la ligne `Project` (anti-interblocage) +
-  rechargement du projet dans la même transaction.
-- Affectations et rattachements sont vérifiés comme appartenant au même
-  projet (`checkMember`, `checkStage`).
+  d'agrégation côté client. Les mutations de **tâche** renvoient
+  `{ project | null, task }` (`null` sans projet ; le client recharge alors).
+- Toutes les mutations passent par `mutateProject()` / `mutateTask()` :
+  transaction + `SELECT … FOR UPDATE` sur la ligne `Project` (anti-interblocage)
+  + rechargement du projet dans la même transaction.
+- Accès aux tâches : `taskAccessWhere(userId)` = tâches de mes projets +
+  mes tâches sans projet. Affectations et rattachements sont vérifiés comme
+  appartenant au même projet (`checkMember`, `checkStage`) ; changer de
+  projet retire l'affectation ; une tâche sans projet n'est pas affectable.
+- **Tâches ↔ nœuds de carte** (`MindNodeTask`, n-n) : depuis un nœud on crée
+  une tâche (sans projet, rattachée) ou on rattache une tâche existante
+  (recherche). Le nœud affiche le nombre de tâches **non clôturées** (terminées
+  comprises) ; la fiche tâche liste ses nœuds (détachables).
+
+## Recherche globale (`src/lib/search.ts`)
+
+`GET /api/v1/search?q=` : projets (nom, description), tâches (nom,
+description), nœuds de carte (titre, notes HTML) et cartes (titre), filtrés
+par les accès de l'utilisateur, `contains` insensible à la casse, 6 par type.
+Chaque résultat porte `href` vers la page dédiée (`/tasks/:id`,
+`/projects/:id`, `/mindmaps/:id?node=:nodeId` qui sélectionne et centre le
+nœud). Composant `GlobalSearch` (accueil) : saisie différée 250 ms, résultats
+groupés, navigation clavier, pleine largeur sur mobile.
 
 ## « Mes tâches » et organisation personnelle (`src/lib/tasks.ts`)
 

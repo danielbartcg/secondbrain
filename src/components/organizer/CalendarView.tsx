@@ -107,7 +107,7 @@ export function CalendarView({ tasks, actions }: { tasks: OrganizerTask[]; actio
                 className={`w-56 shrink-0 cursor-grab select-none rounded-lg border px-2 py-1.5 text-xs transition-opacity active:cursor-grabbing lg:w-auto ${PRIORITY_CHIP[t.priority]} ${
                   planned ? "opacity-50 hover:opacity-80" : ""
                 } ${selectedTask === t.id ? "ring-2 ring-brand-500 ring-offset-1 opacity-100" : ""}`}
-                title={`${t.projectName} › ${t.stageName}${t.dueDate ? ` · échéance ${formatDate(t.dueDate)}` : ""}`}
+                title={`${t.projectName}${t.stageName ? ` › ${t.stageName}` : ""}${t.dueDate ? ` · échéance ${formatDate(t.dueDate)}` : ""}`}
               >
                 <div className="flex items-center gap-1.5">
                   <GripVertical className="h-3.5 w-3.5 shrink-0 opacity-50" />
@@ -200,7 +200,7 @@ export function CalendarView({ tasks, actions }: { tasks: OrganizerTask[]; actio
                     >
                       {late && <AlertTriangle className="h-3 w-3 shrink-0 text-danger" />}
                       <PriorityFlag priority={task.priority} className="hidden !h-3 !w-3 sm:block" />
-                      <Link href={`/projects/${task.projectId}/tasks/${task.id}`} className="min-w-0 flex-1 truncate hover:underline" onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/tasks/${task.id}`} className="min-w-0 flex-1 truncate hover:underline" onClick={(e) => e.stopPropagation()}>
                         {task.name}
                       </Link>
                       <button

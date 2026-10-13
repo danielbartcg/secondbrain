@@ -28,7 +28,9 @@ README.
   restent minces : validation zod (`src/lib/schemas.ts`) → métier → JSON.
 - Les pages serveur lisent directement `src/lib/*` (pas de fetch interne).
 - Les mutations d'un projet renvoient **le projet complet recalculé** ; le
-  client remplace son état (`ProjectWorkspace.run`).
+  client remplace son état (`ProjectWorkspace.run`). Les mutations de tâche
+  renvoient `{ project | null, task }` : projet, étape et activité sont
+  **facultatifs** sur une tâche (`resolveAttachment`, `mutateTask`).
 
 - **Notifications** : toute action qui concerne quelqu'un d'autre (affectation,
   modification d'une tâche affectée, réponse, mention) appelle `notify()`
@@ -52,7 +54,9 @@ logo amCharts reste affiché (licence gratuite).
 2. **Anti-IDOR** : toute fonction métier reçoit `userId` et vérifie l'accès
    (`requireProjectAccess` = propriétaire ou membre rattaché à un compte ;
    `requireProjectOwner` pour supprimer / gérer l'équipe ; `ownedMap` pour les
-   cartes). Ne jamais manipuler une ressource par id seul.
+   cartes ; `taskAccessWhere` / `accessibleTask` pour les tâches, y compris
+   sans projet ; `checkNode` pour un nœud de carte). Ne jamais manipuler une
+   ressource par id seul.
 3. Validation zod de toute entrée ; bornes sur longueurs et nombres.
 4. HTML des notes : `sanitizeNotes()` à l'enregistrement **et** au rendu. Pas
    de `dangerouslySetInnerHTML` sur du contenu non assaini. Jamais de regex à

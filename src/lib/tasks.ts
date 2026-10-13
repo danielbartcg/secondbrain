@@ -3,14 +3,20 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
-import { isMyTask, projectAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
+import { accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 
 /**
- * Fiche tâche : détail enrichi (projet, étape, activité, responsable, équipe),
- * fil de commentaires hiérarchique (réponses imbriquées, profondeur libre)
- * avec mentions `@[Nom](memberId)`, sessions de travail planifiées.
- * Organisation personnelle : « mes tâches » (calendrier, matrice, synthèse).
+ * Fiche tâche : détail enrichi (projet, étape, activité, responsable, équipe,
+ * nœuds de carte), fil de commentaires hiérarchique (réponses imbriquées,
+ * profondeur libre) avec mentions `@[Nom](memberId)`, sessions de travail
+ * planifiées. Organisation personnelle : « mes tâches » (calendrier, matrice,
+ * synthèse). Rattachement des tâches aux nœuds de carte mentale.
+ *
+ * Une tâche peut n'avoir ni projet, ni étape, ni activité (« sans projet ») :
+ * elle n'est alors visible que par son créateur (`ownerId`).
  */
+
+export const NO_PROJECT_LABEL = "Sans projet";
 
 export type TaskCommentDto = {
   id: string;
@@ -35,13 +41,18 @@ export type WorkSessionDto = {
   late: boolean;
 };
 
+export type TaskNodeRef = { id: string; title: string; mapId: string; mapTitle: string };
+
 export type TaskDetailDto = TaskDto & {
-  project: { id: string; name: string; color: string | null; ownerId: string; members: MemberDto[] };
-  stage: { id: string; name: string };
+  /** null = tâche sans projet. */
+  project: { id: string; name: string; color: string | null; ownerId: string; members: MemberDto[] } | null;
+  stage: { id: string; name: string } | null;
   activity: { id: string; name: string } | null;
   assignee: MemberDto | null;
   comments: TaskCommentDto[];
   workSessions: WorkSessionDto[];
+  /** Nœuds de carte mentale rattachés. */
+  nodes: TaskNodeRef[];
 };
 
 const MENTION_RE = /@\[([^\]]+)\]\(([A-Za-z0-9_-]+)\)/g;
@@ -81,30 +92,29 @@ function toSessionDto(s: { id: string; date: Date; userId: string; user: { name:
 }
 
 const SESSION_INCLUDE = { user: { select: { name: true } } } satisfies Prisma.WorkSessionInclude;
+const TASK_BASE_INCLUDE = { _count: { select: { comments: true } }, nodes: { select: { nodeId: true } } } satisfies Prisma.TaskInclude;
 
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
   const t = await prisma.task.findFirst({
-    where: { id: taskId, stage: { project: projectAccessWhere(userId) } },
+    where: { id: taskId, ...taskAccessWhere(userId) },
     include: {
-      _count: { select: { comments: true } },
+      ...TASK_BASE_INCLUDE,
       assignee: true,
       activity: { select: { id: true, name: true } },
-      stage: { select: { id: true, name: true, project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" } } } } } },
+      stage: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" } } } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } },
       workSessions: { orderBy: { date: "asc" }, include: SESSION_INCLUDE },
+      nodes: { select: { nodeId: true, node: { select: { id: true, title: true, mapId: true, map: { select: { title: true } } } } } },
     },
   });
   if (!t) throw notFound("Tâche");
   return {
     ...toTaskDto(t),
-    project: {
-      id: t.stage.project.id,
-      name: t.stage.project.name,
-      color: t.stage.project.color,
-      ownerId: t.stage.project.ownerId,
-      members: t.stage.project.members.map(toMemberDto),
-    },
-    stage: { id: t.stage.id, name: t.stage.name },
+    project: t.project
+      ? { id: t.project.id, name: t.project.name, color: t.project.color, ownerId: t.project.ownerId, members: t.project.members.map(toMemberDto) }
+      : null,
+    stage: t.stage,
     activity: t.activity,
     assignee: t.assignee ? toMemberDto(t.assignee) : null,
     comments: t.comments.map((c) => ({
@@ -117,6 +127,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
       createdAt: c.createdAt.toISOString(),
     })),
     workSessions: t.workSessions.map((s) => toSessionDto(s, userId, t.dueDate)),
+    nodes: t.nodes.map((n) => ({ id: n.node.id, title: n.node.title, mapId: n.node.mapId, mapTitle: n.node.map.title })),
   };
 }
 
@@ -124,18 +135,17 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
 
 export async function addComment(userId: string, taskId: string, body: string, parentId?: string | null): Promise<TaskDetailDto> {
   const t = await prisma.task.findFirst({
-    where: { id: taskId, stage: { project: projectAccessWhere(userId) } },
-    select: { id: true, name: true, assignee: { select: { userId: true } }, stage: { select: { projectId: true } } },
+    where: { id: taskId, ...taskAccessWhere(userId) },
+    select: { id: true, name: true, projectId: true, assignee: { select: { userId: true } } },
   });
   if (!t) throw notFound("Tâche");
-  const projectId = t.stage.projectId;
   let parent: { id: string; authorId: string } | null = null;
   if (parentId) {
     parent = await prisma.taskComment.findFirst({ where: { id: parentId, taskId }, select: { id: true, authorId: true } });
     if (!parent) throw badRequest("Le commentaire auquel vous répondez n'existe plus.");
   }
   // Seules les mentions de membres du projet sont retenues ; `@[Nom]` est résolu par nom.
-  const members = await prisma.projectMember.findMany({ where: { projectId }, select: { id: true, name: true, userId: true } });
+  const members = t.projectId ? await prisma.projectMember.findMany({ where: { projectId: t.projectId }, select: { id: true, name: true, userId: true } }) : [];
   const resolved = resolveMentions(body, members);
   const author = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
 
@@ -145,9 +155,9 @@ export async function addComment(userId: string, taskId: string, body: string, p
     });
     await tx.task.update({ where: { id: taskId }, data: { updatedAt: new Date() } });
 
-    const href = `${taskHref(projectId, taskId)}#comment-${comment.id}`;
+    const href = `${taskHref(taskId)}#comment-${comment.id}`;
     const excerpt = body.length > 140 ? body.slice(0, 137) + "…" : body;
-    const common = { actorId: userId, actorName: author.name, href, taskId, projectId };
+    const common = { actorId: userId, actorName: author.name, href, taskId, projectId: t.projectId };
     const items = [];
     if (parent) {
       items.push({ ...common, userId: parent.authorId, type: "REPLY" as const, title: `${author.name} a répondu à votre commentaire sur « ${t.name} »`, body: excerpt });
@@ -168,26 +178,18 @@ export async function addComment(userId: string, taskId: string, body: string, p
 
 export async function deleteComment(userId: string, commentId: string): Promise<TaskDetailDto> {
   const c = await prisma.taskComment.findFirst({
-    where: { id: commentId, task: { stage: { project: projectAccessWhere(userId) } } },
-    select: { id: true, taskId: true, authorId: true, task: { select: { stage: { select: { project: { select: { ownerId: true } } } } } } },
+    where: { id: commentId, task: taskAccessWhere(userId) },
+    select: { id: true, taskId: true, authorId: true, task: { select: { ownerId: true, project: { select: { ownerId: true } } } } },
   });
   if (!c) throw notFound("Commentaire");
-  if (c.authorId !== userId && c.task.stage.project.ownerId !== userId) throw forbidden();
+  const owner = c.task.project?.ownerId ?? c.task.ownerId;
+  if (c.authorId !== userId && owner !== userId) throw forbidden();
   // Les réponses sont supprimées en cascade (fil).
   await prisma.taskComment.delete({ where: { id: commentId } });
   return getTaskDetail(userId, c.taskId);
 }
 
 // --- Sessions de travail -----------------------------------------------------
-
-async function accessibleTask(userId: string, taskId: string) {
-  const t = await prisma.task.findFirst({
-    where: { id: taskId, stage: { project: projectAccessWhere(userId) } },
-    select: { id: true, dueDate: true },
-  });
-  if (!t) throw notFound("Tâche");
-  return t;
-}
 
 async function sessionsOf(userId: string, taskId: string, dueDate: Date | null): Promise<WorkSessionDto[]> {
   const rows = await prisma.workSession.findMany({ where: { taskId }, orderBy: { date: "asc" }, include: SESSION_INCLUDE });
@@ -218,10 +220,11 @@ export async function deleteWorkSession(userId: string, sessionId: string): Prom
 // --- Organisation personnelle : « mes tâches » --------------------------------
 
 export type OrganizerTask = TaskDto & {
-  projectId: string;
+  /** null = sans projet. */
+  projectId: string | null;
   projectName: string;
   projectColor: string | null;
-  stageName: string;
+  stageName: string | null;
   activityName: string | null;
   assigneeName: string | null;
   /** Ordre relatif personnel (vue Synthèse) ; null = jamais ordonnée. */
@@ -231,7 +234,7 @@ export type OrganizerTask = TaskDto & {
 };
 
 export type OrganizerDto = {
-  /** Mes tâches des projets actifs ou en pause (ouvertes et terminées). */
+  /** Mes tâches des projets actifs ou en pause + mes tâches sans projet (ouvertes et terminées). */
   tasks: OrganizerTask[];
 };
 
@@ -239,24 +242,25 @@ const PRIORITY_WEIGHT = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 } as const;
 
 export async function getMyTasks(userId: string): Promise<OrganizerDto> {
   const rows = await prisma.task.findMany({
-    where: { stage: { project: { ...projectAccessWhere(userId), status: { in: ["ACTIVE", "ON_HOLD"] } } } },
+    where: { AND: [taskAccessWhere(userId), { OR: [{ projectId: null }, { project: { status: { in: ["ACTIVE", "ON_HOLD"] } } }] }] },
     include: {
-      _count: { select: { comments: true } },
+      ...TASK_BASE_INCLUDE,
       assignee: { select: { name: true, userId: true } },
       activity: { select: { name: true } },
-      stage: { select: { name: true, project: { select: { id: true, name: true, color: true, ownerId: true } } } },
+      stage: { select: { name: true } },
+      project: { select: { id: true, name: true, color: true, ownerId: true } },
       ranks: { where: { userId }, select: { rank: true } },
       workSessions: { where: { userId }, orderBy: { date: "asc" }, select: { id: true, date: true } },
     },
   });
   const tasks = rows
-    .filter((t) => isMyTask(t, t.stage.project.ownerId, userId))
+    .filter((t) => isMyTask(t, t.project?.ownerId ?? t.ownerId, userId))
     .map<OrganizerTask>((t) => ({
       ...toTaskDto(t),
-      projectId: t.stage.project.id,
-      projectName: t.stage.project.name,
-      projectColor: t.stage.project.color,
-      stageName: t.stage.name,
+      projectId: t.project?.id ?? null,
+      projectName: t.project?.name ?? NO_PROJECT_LABEL,
+      projectColor: t.project?.color ?? null,
+      stageName: t.stage?.name ?? null,
       activityName: t.activity?.name ?? null,
       assigneeName: t.assignee?.name ?? null,
       rank: t.ranks[0]?.rank ?? null,
@@ -278,10 +282,7 @@ export async function getMyTasks(userId: string): Promise<OrganizerDto> {
 /** Enregistre l'ordre relatif personnel : `taskIds` dans l'ordre voulu (tâches accessibles uniquement). */
 export async function orderMyTasks(userId: string, taskIds: string[]): Promise<void> {
   const unique = [...new Set(taskIds)];
-  const accessible = await prisma.task.findMany({
-    where: { id: { in: unique }, stage: { project: projectAccessWhere(userId) } },
-    select: { id: true },
-  });
+  const accessible = await prisma.task.findMany({ where: { id: { in: unique }, ...taskAccessWhere(userId) }, select: { id: true } });
   const ok = new Set(accessible.map((t) => t.id));
   const ordered = unique.filter((id) => ok.has(id));
   await prisma.$transaction(
@@ -289,4 +290,46 @@ export async function orderMyTasks(userId: string, taskIds: string[]): Promise<v
       prisma.taskRank.upsert({ where: { userId_taskId: { userId, taskId } }, create: { userId, taskId, rank }, update: { rank } }),
     ),
   );
+}
+
+// --- Tâches d'un nœud de carte mentale -----------------------------------------
+
+export type NodeTaskDto = TaskDto & { projectName: string; projectColor: string | null };
+
+export type NodeTasksResult = {
+  nodeId: string;
+  tasks: NodeTaskDto[];
+  /** Nombre de tâches, et de tâches non clôturées (terminées comprises). */
+  taskCount: number;
+  openTaskCount: number;
+};
+
+async function nodeTasksResult(nodeId: string): Promise<NodeTasksResult> {
+  const rows = await prisma.task.findMany({
+    where: { nodes: { some: { nodeId } } },
+    orderBy: [{ status: "asc" }, { createdAt: "asc" }],
+    include: { ...TASK_BASE_INCLUDE, project: { select: { name: true, color: true } } },
+  });
+  const tasks = rows.map<NodeTaskDto>((t) => ({ ...toTaskDto(t), projectName: t.project?.name ?? NO_PROJECT_LABEL, projectColor: t.project?.color ?? null }));
+  return { nodeId, tasks, taskCount: tasks.length, openTaskCount: tasks.filter((t) => t.status !== "CLOSED").length };
+}
+
+export async function listNodeTasks(userId: string, nodeId: string): Promise<NodeTasksResult> {
+  await checkNode(prisma, userId, nodeId);
+  return nodeTasksResult(nodeId);
+}
+
+/** Rattache une tâche existante (accessible) à un nœud (propre à l'utilisateur). Idempotent. */
+export async function linkNodeTask(userId: string, nodeId: string, taskId: string): Promise<NodeTasksResult> {
+  await checkNode(prisma, userId, nodeId);
+  await accessibleTask(userId, taskId);
+  await prisma.mindNodeTask.upsert({ where: { nodeId_taskId: { nodeId, taskId } }, create: { nodeId, taskId }, update: {} });
+  await prisma.mindNode.update({ where: { id: nodeId }, data: { updatedAt: new Date() } });
+  return nodeTasksResult(nodeId);
+}
+
+export async function unlinkNodeTask(userId: string, nodeId: string, taskId: string): Promise<NodeTasksResult> {
+  await checkNode(prisma, userId, nodeId);
+  await prisma.mindNodeTask.deleteMany({ where: { nodeId, taskId } });
+  return nodeTasksResult(nodeId);
 }

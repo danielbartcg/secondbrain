@@ -6,6 +6,7 @@ import type { DashboardDto } from "@/lib/dashboard";
 import type { MindMapSummary } from "@/lib/mindmaps";
 import { StatusDonut } from "@/components/charts/StatusDonut";
 import { ProgressBarsChart } from "@/components/charts/ProgressBarsChart";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import {
   Badge,
   DELIVERABLE_STATUS_COLOR,
@@ -35,6 +36,9 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
       <h1 className="text-2xl font-semibold tracking-tight">Bonjour {userName} 👋</h1>
       <p className="mt-1 text-sm text-muted">Votre journée en un coup d&apos;œil.</p>
 
+      {/* Recherche globale avec auto-complétion */}
+      <GlobalSearch className="mt-5" />
+
       {/* Indicateurs */}
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi icon={<ListTodo className="h-5 w-5" />} label="Mes tâches ouvertes" value={openMine.length} hint={`${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED} terminée${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED > 1 ? "s" : ""}`} />
@@ -58,14 +62,15 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
             <ul className="mt-3 divide-y divide-line">
               {openMine.slice(0, 12).map((t) => (
                 <li key={t.id}>
-                  <Link href={`/projects/${t.projectId}/tasks/${t.id}`} className="flex items-center gap-3 py-2.5 hover:bg-surface-2 -mx-2 rounded-lg px-2">
+                  <Link href={`/tasks/${t.id}`} className="flex items-center gap-3 py-2.5 hover:bg-surface-2 -mx-2 rounded-lg px-2">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.projectColor ?? "var(--color-brand-500)" }} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 truncate text-sm font-medium">
                         <PriorityFlag priority={t.priority} /> <span className="truncate">{t.name}</span>
                       </div>
                       <div className="truncate text-xs text-muted">
-                        {t.projectName} · {t.stageName}
+                        {t.projectName}
+                        {t.stageName ? ` · ${t.stageName}` : ""}
                       </div>
                     </div>
                     <div className="hidden w-28 sm:block">
@@ -105,7 +110,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
               {data.deadlines.slice(0, 15).map((d) => (
                 <li key={`${d.kind}-${d.id}`}>
                   <Link
-                    href={d.kind === "task" ? `/projects/${d.projectId}/tasks/${d.id}` : `/projects/${d.projectId}#livrables`}
+                    href={d.kind === "task" ? `/tasks/${d.id}` : `/projects/${d.projectId}#livrables`}
                     className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-surface-2"
                   >
                     {d.kind === "task" ? <ListTodo className="h-4 w-4 shrink-0 text-muted" /> : <Package className="h-4 w-4 shrink-0 text-muted" />}

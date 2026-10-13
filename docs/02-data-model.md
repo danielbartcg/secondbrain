@@ -9,9 +9,13 @@ sont en `SetNull`.
 User ──< Session
 User ──< MindMap ──< MindNode (arbre par parentId)
 User ──< Project (owner)
+User ──< Task (owner : créateur ; seul lecteur d'une tâche sans projet)
 Project ──< ProjectMember (userId? → User)
 Project ──< Stage ──< Activity ──< Task
                  └──────────────< Task (activityId = null)
+Project ──< Task (stageId = null : tâche du projet sans étape)
+Task (projectId = null) : tâche « sans projet »
+MindNode ──< MindNodeTask >── Task     rattachement n-n tâches ↔ nœuds
 Task ──< TaskComment (author → User ; parentId → TaskComment : fil)
 Task ──< WorkSession (user → User)         sessions de travail planifiées
 Task ──< TaskRank (user → User)            ordre relatif personnel
@@ -43,7 +47,8 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `ProjectMember` | `id`, `projectId`, `userId?`, `name`, `email?`, `role?`, `color?`, `createdAt` | **équipe projet** : compte de l'application (`userId`) ou nom libre. `@@unique([projectId, userId])`. Le propriétaire est créé membre (« Chef de projet ») à la création du projet |
 | `Stage` | `id`, `projectId`, `name`, `description`, `order`, `startDate?`, `dueDate?`, timestamps | étape |
 | `Activity` | `id`, `stageId`, `name`, `description`, `order`, timestamps | niveau intermédiaire **facultatif** |
-| `Task` | `id`, `stageId`, `activityId?`, `assigneeId?`, `name`, `description`, `status` (`TODO` · `IN_PROGRESS` · `DONE` · `CLOSED`), `progress` 0–100, `priority` (`LOW` · `MEDIUM` · `HIGH` · `CRITICAL`, défaut `MEDIUM`), `complexity` (`LOW` · `MEDIUM` · `HIGH`, défaut `MEDIUM`), `order`, `startDate?`, `dueDate?`, timestamps | `stageId` toujours renseigné, même sous une activité ; `assigneeId` → membre **du même projet** (vérifié). `CLOSED` = clôture **manuelle** après `DONE` (la tâche sort du flux courant) |
+| `Task` | `id`, `ownerId`, `projectId?`, `stageId?`, `activityId?`, `assigneeId?`, `name`, `description`, `status` (`TODO` · `IN_PROGRESS` · `DONE` · `CLOSED`), `progress` 0–100, `priority` (`LOW` · `MEDIUM` · `HIGH` · `CRITICAL`, défaut `MEDIUM`), `complexity` (`LOW` · `MEDIUM` · `HIGH`, défaut `MEDIUM`), `order`, `startDate?`, `dueDate?`, timestamps | **rattachement facultatif et cohérent** : `activityId ⇒ stageId ⇒ projectId` ; `projectId = null` = sans projet (visible par `ownerId` seul) ; `assigneeId` → membre **du même projet** (vérifié ; impossible sans projet). `CLOSED` = clôture **manuelle** après `DONE` (la tâche sort du flux courant) |
+| `MindNodeTask` | `nodeId`, `taskId`, `createdAt` (`@@id([nodeId, taskId])`) | tâche rattachée à un nœud de carte ; le nœud compte ses tâches non clôturées |
 | `Folder` | `id`, `projectId`, `parentId?`, `name`, timestamps | arborescence documentaire (racine = `parentId` null) ; supprimer un dossier remonte ses documents et sous-dossiers dans le parent |
 | `TaskComment` | `id`, `taskId`, `authorId`, `parentId?`, `body`, `mentions String[]`, timestamps | `parentId` → commentaire auquel on répond (fil de profondeur libre, `Cascade` : supprimer un commentaire supprime ses réponses) ; `body` contient des mentions `@[Nom](memberId)` ; `mentions` = ids de membres cités **et** appartenant au projet |
 | `WorkSession` | `id`, `taskId`, `userId`, `date` (`DATE`), `createdAt` | jour où l'utilisateur prévoit de travailler sur la tâche ; `@@unique([taskId, userId, date])` ; « en retard » si `date > dueDate` (calculé) |
@@ -94,6 +99,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `20261011212245_folders_and_closed_status` | `Folder`, `Document.folderId`, valeur `CLOSED` de `TaskStatus` |
 | `20261012200606_organizer_threads_notifications` | `MindNode.status`, `Task.priority/complexity`, `TaskComment.parentId`, `WorkSession`, `TaskRank`, `Notification` |
 | `20261012201500_notification_task_updated` | renomme la valeur `COMMENT` → `TASK_UPDATED` de `NotificationType` (`ALTER TYPE … RENAME VALUE`) |
+| `20261013080000_orphan_tasks_node_links` | `Task.ownerId` / `projectId` (reprise : projet déduit de l'étape, propriétaire du projet), `Task.stageId` nullable, `MindNodeTask` |
 
 Développement : `npx prisma migrate dev`. Production : `npm run prod:deploy`
 exécute `prisma migrate deploy` dans le conteneur `tools` **avant** de

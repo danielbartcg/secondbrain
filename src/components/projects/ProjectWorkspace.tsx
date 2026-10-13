@@ -19,7 +19,8 @@ import { DocumentsTab } from "./DocumentsTab";
  * le projet recalculé par l'API et remplace l'état.
  */
 
-export type Resp = { project: ProjectDto };
+/** Les mutations de tâche renvoient `project: null` si la tâche n'a pas de projet : on recharge alors. */
+export type Resp = { project: ProjectDto | null };
 export type Run = (fn: () => Promise<Resp>) => Promise<void>;
 
 const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
@@ -61,7 +62,11 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
       setSaving((s) => s + 1);
       try {
         const { project } = await fn();
-        setProject(project);
+        if (project) setProject(project);
+        else {
+          const r = await api.get<Resp>(`/projects/${initial.id}`);
+          if (r.project) setProject(r.project);
+        }
       } catch (e) {
         console.error(e);
         alert(e instanceof Error ? e.message : "Erreur");

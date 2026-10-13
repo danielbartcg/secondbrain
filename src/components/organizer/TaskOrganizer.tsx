@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Grid3x3, ListOrdered } from "lucide-react";
 import { api } from "@/lib/client";
 import type { OrganizerDto, OrganizerTask, WorkSessionDto } from "@/lib/tasks";
-import type { ProjectDto } from "@/lib/projects";
+import type { TaskMutation } from "@/lib/projects";
 import { isFinished } from "@/components/ui";
 import { CalendarView } from "./CalendarView";
 import { MatrixView } from "./MatrixView";
@@ -90,7 +90,7 @@ export function TaskOrganizer({ initial }: { initial: OrganizerDto }) {
       patchTask: (id, data) =>
         mutate(
           (ts) => ts.map((t) => (t.id === id ? { ...t, ...data } : t)),
-          () => api.patch<{ project: ProjectDto }>(`/tasks/${id}`, data),
+          () => api.patch<TaskMutation>(`/tasks/${id}`, data),
         ),
       addSession: (taskId, date) =>
         mutate(

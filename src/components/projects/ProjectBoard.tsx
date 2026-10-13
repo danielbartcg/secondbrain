@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Layers, Lock, MessageSquare, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Inbox, Layers, Lock, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ActivityDto, ProjectDto, StageDto, TaskDto } from "@/lib/projects";
 import type { TaskStatus } from "@prisma/client";
@@ -15,8 +15,38 @@ import { DateField, type Resp, type Run } from "./ProjectWorkspace";
  */
 export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }) {
   const [showAddStage, setShowAddStage] = useState(project.stages.length === 0);
+  const [addingLoose, setAddingLoose] = useState(false);
   return (
     <div>
+      {/* Tâches du projet non rattachées à une étape */}
+      <section className="mb-4 rounded-2xl border border-dashed border-line-strong bg-surface p-3 sm:p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <Inbox className="h-4 w-4 text-muted" /> Tâches sans étape
+            <span className="rounded-full bg-surface-3 px-1.5 text-xs font-normal text-muted">{project.tasks.length}</span>
+          </h2>
+          <Button size="sm" variant="ghost" onClick={() => setAddingLoose((v) => !v)}>
+            <Plus className="h-4 w-4" /> Tâche
+          </Button>
+        </div>
+        {project.tasks.length > 0 && (
+          <div className="mt-2">
+            <TaskList tasks={project.tasks} project={project} run={run} />
+          </div>
+        )}
+        {addingLoose && (
+          <QuickAdd
+            autoFocus
+            className="mt-2"
+            placeholder="Nouvelle tâche du projet, sans étape (rattachable plus tard depuis sa fiche)"
+            onAdd={async (name) => {
+              await run(() => api.post<Resp>(`/projects/${project.id}/tasks`, { name }));
+            }}
+          />
+        )}
+        {project.tasks.length === 0 && !addingLoose && <p className="mt-1 text-xs text-muted">Les tâches créées ici ne sont rattachées à aucune étape ; elles comptent dans l'avancement du projet.</p>}
+      </section>
+
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
           <Layers className="h-5 w-5 text-brand-600" /> Étapes
@@ -242,7 +272,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
   const done = isFinished(task.status);
   const closed = task.status === "CLOSED";
   const assignee = task.assigneeId ? project.members.find((m) => m.id === task.assigneeId) : null;
-  const sheetHref = `/projects/${project.id}/tasks/${task.id}`;
+  const sheetHref = `/tasks/${task.id}`;
 
   return (
     <li className="px-2 py-2 sm:px-3">

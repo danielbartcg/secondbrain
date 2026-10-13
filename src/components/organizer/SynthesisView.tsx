@@ -78,18 +78,18 @@ export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; acti
                   </span>
                 </td>
                 <td className="max-w-[22rem] px-2 py-2">
-                  <Link href={`/projects/${t.projectId}/tasks/${t.id}`} className="flex items-center gap-1.5 font-medium hover:underline">
+                  <Link href={`/tasks/${t.id}`} className="flex items-center gap-1.5 font-medium hover:underline">
                     <PriorityFlag priority={t.priority} /> <span className="truncate">{t.name}</span>
                   </Link>
                 </td>
                 <td className="px-2 py-2">
-                  <Link href={`/projects/${t.projectId}`} className="flex items-center gap-1.5 text-ink-2 hover:underline">
+                  <Link href={t.projectId ? `/projects/${t.projectId}` : "/projects/sans-projet"} className="flex items-center gap-1.5 text-ink-2 hover:underline">
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: t.projectColor ?? "#4f5ff0" }} />
                     <span className="truncate">{t.projectName}</span>
                   </Link>
                 </td>
                 <td className="px-2 py-2 text-ink-2">
-                  {t.stageName}
+                  {t.stageName ?? <span className="text-faint">—</span>}
                   {t.activityName && <span className="text-muted"> › {t.activityName}</span>}
                 </td>
                 <td className="px-2 py-2">

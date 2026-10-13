@@ -10,7 +10,7 @@ import { Avatar, Badge, DELIVERABLE_STATUS_COLOR, DELIVERABLE_STATUS_LABEL, DELI
 
 /** Tableau de bord d'un projet : indicateurs, planning, avancement par étape, livrables. */
 export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; onGoTo: (tab: "plan" | "livrables" | "documents" | "equipe") => void }) {
-  const allTasks = project.stages.flatMap((s) => [...s.tasks, ...s.activities.flatMap((a) => a.tasks)]);
+  const allTasks = [...project.tasks, ...project.stages.flatMap((s) => [...s.tasks, ...s.activities.flatMap((a) => a.tasks)])];
   const now = new Date();
   const overdueTasks = allTasks.filter((t) => t.dueDate && !isFinished(t.status) && new Date(t.dueDate) < now);
   const overdueDeliverables = project.deliverables.filter((d) => d.expectedEnd && (d.status === "PLANNED" || d.status === "IN_PROGRESS") && new Date(d.expectedEnd) < now);
@@ -139,7 +139,7 @@ export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; 
               const m = t.assigneeId ? memberById.get(t.assigneeId) : null;
               return (
                 <li key={t.id}>
-                  <Link href={`/projects/${project.id}/tasks/${t.id}`} className="flex items-center gap-3 py-2 text-sm hover:underline">
+                  <Link href={`/tasks/${t.id}`} className="flex items-center gap-3 py-2 text-sm hover:underline">
                     <span className="min-w-0 flex-1 truncate">{t.name}</span>
                     {m && <Avatar id={m.id} name={m.name} color={m.color} size={22} />}
                     <span className="shrink-0 text-xs text-danger">{formatDate(t.dueDate)}</span>

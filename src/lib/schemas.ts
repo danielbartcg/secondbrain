@@ -105,12 +105,27 @@ export const createTaskSchema = z.object({
   /** Membre de l'équipe projet affecté. */
   assigneeId: nullableId,
 });
+/** Création libre : rattachement facultatif (le niveau le plus précis l'emporte) et nœud de carte. */
+export const createFreeTaskSchema = createTaskSchema.extend({
+  projectId: nullableId,
+  stageId: nullableId,
+  activityId: nullableId,
+  nodeId: nullableId,
+});
 export const updateTaskSchema = createTaskSchema.partial().extend({
   order: z.number().int().min(0).optional(),
-  /** Déplacer la tâche : vers une activité (id) ou directement sous l'étape (null). */
+  /**
+   * Rattachement : activityId (id) ⇒ étape et projet déduits ; stageId (id) ⇒
+   * projet déduit ; projectId (id) ⇒ sans étape ; null détache le niveau et
+   * les niveaux inférieurs (projectId: null = tâche sans projet).
+   */
   activityId: nullableId,
-  stageId: z.string().min(1).optional(),
+  stageId: nullableId,
+  projectId: nullableId,
 });
+
+/** Rattacher une tâche existante à un nœud de carte. */
+export const linkNodeTaskSchema = z.object({ taskId: z.string().min(1) });
 
 // --- Équipe ------------------------------------------------------------------
 export const createMemberSchema = z
@@ -185,6 +200,7 @@ export type CreateActivityInput = z.infer<typeof createActivitySchema>;
 export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+export type CreateFreeTaskInput = z.infer<typeof createFreeTaskSchema>;
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export type CreateDeliverableInput = z.infer<typeof createDeliverableSchema>;

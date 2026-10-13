@@ -58,7 +58,7 @@ type DashboardDto = {
 
 ```ts
 type MindNode = { id; parentId: string | null; title; notes /* HTML assaini */; color; collapsed;
-                  status: "OPEN"|"WATCH"|"CLOSED"; order; updatedAt };
+                  status: "OPEN"|"WATCH"|"CLOSED"; order; taskCount; openTaskCount; updatedAt };
 type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 ```
 
@@ -79,9 +79,11 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 ```ts
 type Progress = { percent; total; done };
 type Member   = { id; userId: string | null; name; email; role; color };
-type Task     = { id; stageId; activityId; assigneeId; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
+type Task     = { id; ownerId; projectId: string | null; stageId: string | null; activityId: string | null;  // rattachement facultatif
+                  assigneeId; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
                   progress: 0..100; priority: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; complexity: "LOW"|"MEDIUM"|"HIGH";
-                  order; startDate; dueDate; commentCount; updatedAt };
+                  order; startDate; dueDate; commentCount; nodeIds: string[] /* nœuds de carte */; updatedAt };
+type TaskMutation = { project: Project | null; task: Task | null };   // réponse des mutations de tâche
 type Activity = { id; stageId; name; description; order; progress; tasks: Task[] };
 type Stage    = { id; projectId; name; description; order; startDate; dueDate; progress; activities: Activity[]; tasks: Task[] };
 type Folder   = { id; parentId: string | null; name };     // arborescence documentaire (null = racine)
@@ -91,7 +93,7 @@ type Deliverable = { id; stageId; assigneeId; name; description; status: "PLANNE
                      expectedStart; expectedEnd; deliveredAt; order; documents: Document[] };
 type ProjectSummary = { id; ownerId; name; description; color; status; startDate; dueDate; progress;
                         stageCount; memberCount; deliverableCount; createdAt; updatedAt };
-type Project = ProjectSummary & { stages: Stage[]; members: Member[]; deliverables: Deliverable[]; documents: Document[]; folders: Folder[] };
+type Project = ProjectSummary & { stages: Stage[]; tasks: Task[] /* sans étape */; members: Member[]; deliverables: Deliverable[]; documents: Document[]; folders: Folder[] };
 ```
 
 Toute mutation sur un projet ou l'un de ses éléments **renvoie le projet
@@ -123,15 +125,27 @@ complet recalculé** (`{ project }`).
 | POST | `/stages/:id/activities` | `{ name, description? }` |
 | PATCH | `/activities/:id` | `{ name?, description?, order? }` |
 | DELETE | `/activities/:id` | |
-| POST | `/stages/:id/tasks` | tâche directement sous l'étape |
-| POST | `/activities/:id/tasks` | tâche sous une activité |
+| GET | `/tasks` | → `{ tasks: Task[] }` mes tâches **sans projet** |
+| POST | `/tasks` | corps de tâche + `projectId?, stageId?, activityId?, nodeId?` → `201 TaskMutation` (rien = tâche sans projet ; `nodeId` = rattachée à ce nœud) |
+| POST | `/projects/:id/tasks` | tâche du projet **sans étape** → `201 TaskMutation` |
+| POST | `/stages/:id/tasks` | tâche directement sous l'étape → `201 TaskMutation` |
+| POST | `/activities/:id/tasks` | tâche sous une activité → `201 TaskMutation` |
 | GET | `/tasks/:id` | → `{ task: TaskDetail }` (voir fiche tâche) |
-| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, order?, activityId?, stageId? }` |
-| DELETE | `/tasks/:id` | |
+| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, order?, projectId?, stageId?, activityId? }` → `TaskMutation` |
+| DELETE | `/tasks/:id` | → `{ project: Project \| null, task: null }` |
 
 Corps d'une tâche à la création : `{ name, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId? }`
 (priorité et complexité par défaut `MEDIUM`).
-`assigneeId` doit être un membre du projet (`400` sinon ; `null` désaffecte).
+`assigneeId` doit être un membre du projet (`400` sinon ; `null` désaffecte ;
+impossible sur une tâche sans projet).
+
+**Rattachement** (`PATCH`) : le niveau le plus précis l'emporte et déduit les
+niveaux supérieurs — `activityId` (id) ⇒ étape et projet ; `stageId` (id) ⇒
+projet, activité effacée si l'étape change ; `projectId` (id) ⇒ sans étape ni
+activité si le projet change ; `null` détache le niveau et ceux du dessous
+(`projectId: null` ⇒ tâche sans projet). Changer de projet retire
+l'affectation (sauf `assigneeId` valide fourni). Les tâches accessibles sont
+celles de mes projets **et** mes tâches sans projet.
 
 Cohérence statut / avancement : `progress = 100 ⇒ DONE` (une tâche `CLOSED`
 le reste), `progress = 0 ⇒ TODO`, sinon `IN_PROGRESS` ; `status = DONE` ou
@@ -167,10 +181,36 @@ casse) en `@[Nom](memberId)` et ne retient dans `mentions` que les membres du
 projet. La forme complète `@[Nom](memberId)` est aussi acceptée en entrée
 (identifiant vérifié). Un `@[Nom]` sans membre correspondant reste du texte.
 
-### Organisation personnelle (« mes tâches »)
+#### Tâches d'un nœud de carte mentale
+
+```ts
+type NodeTasks = { nodeId; tasks: (Task & { projectName; projectColor })[]; taskCount; openTaskCount /* non clôturées */ };
+```
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/mindmaps/:id/nodes/:nodeId/tasks` | — | `NodeTasks` |
+| POST | `/mindmaps/:id/nodes/:nodeId/tasks` | `{ taskId }` (tâche accessible ; idempotent) | `201 NodeTasks` |
+| DELETE | `/mindmaps/:id/nodes/:nodeId/tasks/:taskId` | — | `NodeTasks` (la tâche subsiste) |
+
+`MindNode` expose aussi `taskCount` et `openTaskCount`. Créer une tâche depuis
+un nœud : `POST /tasks { name, nodeId }`.
+
+## Recherche
+
+| Méthode | Route | Réponse |
+| --- | --- | --- |
+| GET | `/search?q=…&kinds=project,task,node,mindmap&limit=6` | `{ results: { kind; id; title; subtitle; href; status?; color? }[] }` |
+
+`q` : 2 caractères minimum ; `contains` insensible à la casse sur nom / titre
+et description / notes ; `limit` par type (20 max) ; `href` = page dédiée
+(`/tasks/:id`, `/projects/:id`, `/mindmaps/:id?node=:nodeId`, `/mindmaps/:id`).
+
+## Organisation personnelle (« mes tâches »)
 
 « Mes tâches » = affectées à un membre rattaché à mon compte, **ou** non
-affectées dans un projet dont je suis propriétaire. Projets actifs / en pause.
+affectées dans un projet dont je suis propriétaire, **ou** mes tâches sans
+projet (`projectId: null`, `projectName: "Sans projet"`). Projets actifs / en pause.
 
 ```ts
 type OrganizerTask = Task & { projectId; projectName; projectColor; stageName; activityName; assigneeName;

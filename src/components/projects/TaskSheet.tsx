@@ -3,10 +3,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CalendarDays, CalendarPlus, Check, Circle, CircleDot, CornerDownRight, Flag, Gauge, Layers, Lock, MessageSquare, Plus, Send, Trash2, User, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, CalendarPlus, Check, Circle, CircleDot, CornerDownRight, Flag, FolderKanban, Gauge, Layers, Lock, MessageSquare, Plus, Send, Trash2, Unlink, User, Workflow, X } from "lucide-react";
 import { api } from "@/lib/client";
-import type { MemberDto, ProjectDto } from "@/lib/projects";
+import type { MemberDto, ProjectDto, ProjectSummary, TaskMutation } from "@/lib/projects";
 import type { TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
+import type { NodeTasksResult } from "@/lib/tasks";
 import {
   Avatar,
   Badge,
@@ -30,9 +31,10 @@ import {
 
 /**
  * Fiche tâche : champs mis en forme (statut, avancement, priorité, complexité,
- * responsable, dates, description, rattachement), sessions de travail
- * planifiées, et fil de commentaires hiérarchique (réponses imbriquées) avec
- * mentions « @ ».
+ * responsable, dates, description), **rattachement** facultatif projet ›
+ * étape › activité (une tâche peut n'en avoir aucun : « sans projet »),
+ * nœuds de carte mentale rattachés, sessions de travail planifiées, et fil de
+ * commentaires hiérarchique (réponses imbriquées) avec mentions « @ ».
  */
 
 type TaskResp = { task: TaskDetailDto };
@@ -55,7 +57,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
     async (data: Record<string, unknown>) => {
       setSaving((s) => s + 1);
       try {
-        await api.patch<{ project: ProjectDto }>(`/tasks/${task.id}`, data);
+        await api.patch<TaskMutation>(`/tasks/${task.id}`, data);
         await reload();
       } catch (e) {
         console.error(e);
@@ -77,19 +79,25 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
   };
 
   const late = task.dueDate && !isFinished(task.status) && new Date(task.dueDate) < new Date();
-  const color = task.project.color ?? "#4f5ff0";
-  const isOwner = task.project.ownerId === currentUserId;
+  const color = task.project?.color ?? "#64748b";
+  const isOwner = (task.project?.ownerId ?? task.ownerId) === currentUserId;
+  const members = task.project?.members ?? [];
+  const backHref = task.project ? `/projects/${task.project.id}#plan` : "/projects/sans-projet";
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted">
-        <Link href={`/projects/${task.project.id}#plan`} className="flex items-center gap-1 hover:text-ink">
-          <ArrowLeft className="h-4 w-4" /> {task.project.name}
+        <Link href={backHref} className="flex items-center gap-1 hover:text-ink">
+          <ArrowLeft className="h-4 w-4" /> {task.project?.name ?? "Sans projet"}
         </Link>
-        <span>/</span>
-        <span className="flex items-center gap-1">
-          <Layers className="h-3.5 w-3.5" /> {task.stage.name}
-        </span>
+        {task.stage && (
+          <>
+            <span>/</span>
+            <span className="flex items-center gap-1">
+              <Layers className="h-3.5 w-3.5" /> {task.stage.name}
+            </span>
+          </>
+        )}
         {task.activity && (
           <>
             <span>/</span>
@@ -179,9 +187,9 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
             <Field icon={<User className="h-4 w-4" />} label="Responsable">
               <div className="flex items-center gap-2">
                 {task.assignee && <Avatar id={task.assignee.id} name={task.assignee.name} color={task.assignee.color} size={26} />}
-                <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className={`${selectClass} min-w-0 flex-1`}>
+                <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} disabled={!task.project} title={task.project ? undefined : "Rattachez la tâche à un projet pour l'affecter à un membre"} className={`${selectClass} min-w-0 flex-1 disabled:opacity-50`}>
                   <option value="">— Personne —</option>
-                  {task.project.members.map((m) => (
+                  {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
                       {m.role ? ` (${m.role})` : ""}
@@ -196,19 +204,13 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
             <Field icon={<CalendarDays className="h-4 w-4" />} label="Échéance">
               <input type="date" value={toInputDate(task.dueDate)} onChange={(e) => patch({ dueDate: e.target.value || null })} className={`${selectClass} w-full ${late ? "border-red-300 text-danger" : ""}`} />
             </Field>
-            <Field icon={<Layers className="h-4 w-4" />} label="Rattachement">
-              <select
-                value={task.activityId ? `a:${task.activityId}` : `s:${task.stageId}`}
-                onChange={(e) => {
-                  const [kind, id] = e.target.value.split(":");
-                  void patch(kind === "a" ? { activityId: id } : { activityId: null, stageId: id });
-                }}
-                className={`${selectClass} w-full`}
-              >
-                <StageOptions task={task} />
-              </select>
-            </Field>
           </dl>
+
+          {/* Rattachement : projet › étape › activité, tous facultatifs */}
+          <AttachmentBlock task={task} patch={patch} />
+
+          {/* Nœuds de carte mentale */}
+          <NodeLinks task={task} onChange={(nodes) => setTask((t) => ({ ...t, nodes }))} />
 
           {/* Sessions de travail planifiées */}
           <WorkSessions task={task} onChange={(workSessions) => setTask((t) => ({ ...t, workSessions }))} />
@@ -233,7 +235,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
               onClick={async () => {
                 if (!confirm(`Supprimer la tâche « ${task.name} » ?`)) return;
                 await api.delete(`/tasks/${task.id}`);
-                router.push(`/projects/${task.project.id}#plan`);
+                router.push(backHref);
               }}
             >
               <Trash2 className="h-4 w-4" /> Supprimer la tâche
@@ -259,36 +261,107 @@ function Field({ icon, label, children }: { icon: React.ReactNode; label: string
   );
 }
 
-/** Options « étape » / « étape › activité » : chargées à la demande depuis le projet. */
-function StageOptions({ task }: { task: TaskDetailDto }) {
+// --- Rattachement ------------------------------------------------------------
+
+/**
+ * Bloc « Rattachement » : projet (facultatif) › étape (facultative) › activité
+ * (facultative). Les listes se chargent à la demande ; changer de projet
+ * efface l'étape et l'activité ; « Sans projet » détache tout.
+ */
+function AttachmentBlock({ task, patch }: { task: TaskDetailDto; patch: (data: Record<string, unknown>) => Promise<void> }) {
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [project, setProject] = useState<ProjectDto | null>(null);
+
   useEffect(() => {
     api
-      .get<{ project: ProjectDto }>(`/projects/${task.project.id}`)
-      .then(({ project }) => setProject(project))
+      .get<{ projects: ProjectSummary[] }>("/projects")
+      .then((r) => setProjects(r.projects))
       .catch(() => {});
-  }, [task.project.id]);
-  if (!project) {
-    return (
-      <option value={task.activityId ? `a:${task.activityId}` : `s:${task.stageId}`}>
-        {task.stage.name}
-        {task.activity ? ` › ${task.activity.name}` : ""}
-      </option>
-    );
+  }, []);
+  useEffect(() => {
+    if (!task.project) {
+      setProject(null);
+      return;
+    }
+    api
+      .get<{ project: ProjectDto }>(`/projects/${task.project.id}`)
+      .then((r) => setProject(r.project))
+      .catch(() => {});
+  }, [task.project?.id, task.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stages = project?.stages ?? [];
+  const activities = stages.find((s) => s.id === task.stageId)?.activities ?? [];
+
+  return (
+    <div className="mt-4 rounded-xl border border-line bg-surface-2/60 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
+        <FolderKanban className="h-4 w-4" /> Rattachement
+        <span className="font-normal text-faint">— projet, étape et activité sont facultatifs</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Projet</span>
+          <select value={task.project?.id ?? ""} onChange={(e) => patch({ projectId: e.target.value || null })} className={`${selectClass} w-full`}>
+            <option value="">Sans projet</option>
+            {(projects ?? (task.project ? [{ id: task.project.id, name: task.project.name }] : [])).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Étape</span>
+          <select value={task.stageId ?? ""} onChange={(e) => patch({ stageId: e.target.value || null })} disabled={!task.project} className={`${selectClass} w-full disabled:opacity-50`}>
+            <option value="">{task.project ? "Sans étape" : "—"}</option>
+            {(stages.length ? stages : task.stage ? [{ id: task.stage.id, name: task.stage.name }] : []).map((st) => (
+              <option key={st.id} value={st.id}>
+                {st.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Activité</span>
+          <select value={task.activityId ?? ""} onChange={(e) => patch({ activityId: e.target.value || null })} disabled={!task.stage} className={`${selectClass} w-full disabled:opacity-50`}>
+            <option value="">{task.stage ? "Sans activité" : "—"}</option>
+            {(activities.length ? activities : task.activity ? [{ id: task.activity.id, name: task.activity.name }] : []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+/** Nœuds de carte mentale auxquels la tâche est rattachée (détachement possible). */
+function NodeLinks({ task, onChange }: { task: TaskDetailDto; onChange: (nodes: TaskDetailDto["nodes"]) => void }) {
+  if (task.nodes.length === 0) return null;
+  async function unlink(n: TaskDetailDto["nodes"][number]) {
+    await api.delete<NodeTasksResult>(`/mindmaps/${n.mapId}/nodes/${n.id}/tasks/${task.id}`);
+    onChange(task.nodes.filter((x) => x.id !== n.id));
   }
   return (
-    <>
-      {project.stages.map((s) => (
-        <Fragment key={s.id}>
-          <option value={`s:${s.id}`}>{s.name}</option>
-          {s.activities.map((a) => (
-            <option key={a.id} value={`a:${a.id}`}>
-              {s.name} › {a.name}
-            </option>
-          ))}
-        </Fragment>
-      ))}
-    </>
+    <div className="mt-4 rounded-xl border border-line bg-surface-2/60 p-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+        <Workflow className="h-4 w-4" /> Nœuds de carte mentale
+      </div>
+      <ul className="flex flex-wrap gap-1.5">
+        {task.nodes.map((n) => (
+          <li key={n.id} className="flex items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-xs">
+            <Link href={`/mindmaps/${n.mapId}?node=${n.id}`} className="hover:underline">
+              <span className="font-medium">{n.title}</span> <span className="text-muted">· {n.mapTitle}</span>
+            </Link>
+            <button type="button" onClick={() => unlink(n)} className="rounded p-0.5 text-faint hover:bg-red-50 hover:text-danger" title="Détacher de ce nœud">
+              <Unlink className="h-3 w-3" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -432,8 +505,8 @@ function CommentComposer({
   const candidates = useMemo(() => {
     if (!mention) return [];
     const q = mention.query.toLowerCase();
-    return task.project.members.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
-  }, [mention, task.project.members]);
+    return (task.project?.members ?? []).filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
+  }, [mention, (task.project?.members ?? [])]);
 
   /** Détecte un « @mot » en cours de saisie avant le curseur. */
   function detectMention(value: string, caret: number) {
@@ -600,7 +673,7 @@ function CommentNode({
               )}
             </div>
             <div className="mt-1">
-              <CommentBody body={node.body} members={task.project.members} />
+              <CommentBody body={node.body} members={(task.project?.members ?? [])} />
             </div>
           </div>
           <div className="mt-1 flex items-center gap-3 pl-2 text-xs">

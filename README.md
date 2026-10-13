@@ -22,6 +22,11 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    **Organiser mes tâches** : vue calendaire (glisser-déposer des tâches sur
    les jours, alerte si après l'échéance), matrice priorité × complexité,
    tableau de synthèse réordonnable.
+   Une tâche peut n'avoir **ni projet, ni étape, ni activité** (projet virtuel
+   « Sans projet »), et se rattacher à des **nœuds de carte mentale** (qui
+   affichent leurs tâches ouvertes ; création ou rattachement depuis le nœud).
+   **Recherche globale** avec auto-complétion sur la page d'accueil (projets,
+   tâches, nœuds, cartes).
    **Notifications in-app** (cloche) : tâche assignée, réponse à un
    commentaire, tâche assignée mise à jour, mention — cliquables, lues /
    non lues.
