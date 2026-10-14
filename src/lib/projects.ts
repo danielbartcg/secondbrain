@@ -54,6 +54,9 @@ export type TaskDto = {
   stageId: string | null;
   activityId: string | null;
   assigneeId: string | null;
+  /** Superviseur (un membre) et contributeurs (plusieurs). */
+  supervisorId: string | null;
+  contributorIds: string[];
   name: string;
   description: string;
   status: TaskStatus;
@@ -178,7 +181,7 @@ export function aggregate(progresses: number[]): Progress {
 
 // --- Sélections Prisma -------------------------------------------------------
 
-const TASK_INCLUDE = { _count: { select: { comments: true } }, nodes: { select: { nodeId: true } } } satisfies Prisma.TaskInclude;
+const TASK_INCLUDE = { _count: { select: { comments: true } }, nodes: { select: { nodeId: true } }, contributors: { select: { memberId: true } } } satisfies Prisma.TaskInclude;
 
 const DOCUMENT_INCLUDE = { uploadedBy: { select: { id: true, name: true } } } satisfies Prisma.DocumentInclude;
 
@@ -212,6 +215,8 @@ export function toTaskDto(t: TaskRow): TaskDto {
     stageId: t.stageId,
     activityId: t.activityId,
     assigneeId: t.assigneeId,
+    supervisorId: t.supervisorId,
+    contributorIds: t.contributors.map((c) => c.memberId),
     name: t.name,
     description: t.description,
     status: t.status,
@@ -410,11 +415,57 @@ async function resequence(
 }
 
 /**
- * « Ma » tâche : affectée à un membre rattaché à mon compte, ou non affectée
- * dans un projet dont je suis propriétaire (usage solo).
+ * « Ma » tâche : affectée à un membre rattaché à mon compte (responsable,
+ * superviseur ou contributeur), ou non affectée dans un projet dont je suis
+ * propriétaire (usage solo).
  */
-export function isMyTask(t: { assignee: { userId: string | null } | null }, projectOwnerId: string, userId: string): boolean {
-  return t.assignee ? t.assignee.userId === userId : projectOwnerId === userId;
+export function isMyTask(
+  t: { assignee: { userId: string | null } | null; supervisor?: { userId: string | null } | null; contributors?: Array<{ member: { userId: string | null } }> },
+  projectOwnerId: string,
+  userId: string,
+): boolean {
+  if (t.assignee?.userId === userId) return true;
+  if (t.supervisor?.userId === userId) return true;
+  if (t.contributors?.some((c) => c.member.userId === userId)) return true;
+  return !t.assignee && projectOwnerId === userId;
+}
+
+/** Sélection des personnes d'une tâche (pour `isMyTask`). */
+export const TASK_PEOPLE_SELECT = {
+  assignee: { select: { name: true, userId: true } },
+  supervisor: { select: { name: true, userId: true } },
+  contributors: { select: { memberId: true, member: { select: { userId: true } } } },
+} satisfies Prisma.TaskInclude;
+
+/** Vérifie que des membres appartiennent au projet ; renvoie les ids dédoublonnés. */
+async function checkMembers(tx: Tx, projectId: string | null, memberIds: string[] | undefined): Promise<string[] | undefined> {
+  if (memberIds === undefined) return undefined;
+  const ids = [...new Set(memberIds)];
+  if (ids.length === 0) return [];
+  if (!projectId) throw badRequest("Une tâche sans projet ne peut pas avoir de contributeurs.");
+  const found = await tx.projectMember.count({ where: { id: { in: ids }, projectId } });
+  if (found !== ids.length) throw badRequest("Un des membres n'appartient pas au projet.");
+  return ids;
+}
+
+/** Notifications « vous a ajouté » pour les membres (à compte) nouvellement impliqués. */
+async function notifyInvolved(tx: Tx, actorId: string, taskId: string, taskName: string, projectId: string | null, involved: Array<{ memberId: string; role: string }>) {
+  if (involved.length === 0) return;
+  const members = await tx.projectMember.findMany({ where: { id: { in: involved.map((i) => i.memberId) } }, select: { id: true, userId: true } });
+  const name = await actorName(tx, actorId);
+  await notify(
+    tx,
+    involved.map((i) => ({
+      userId: members.find((m) => m.id === i.memberId)?.userId,
+      actorId,
+      actorName: name,
+      type: "ASSIGNED" as const,
+      title: `${name} vous a ajouté comme ${i.role} sur « ${taskName} »`,
+      href: taskHref(taskId),
+      taskId,
+      projectId,
+    })),
+  );
 }
 
 export const taskHref = (taskId: string) => `/tasks/${taskId}`;
@@ -729,10 +780,12 @@ export async function createTask(
   const att = await resolveAttachment(userId, target);
   await checkNode(prisma, userId, target.nodeId);
   return mutateTask(att.projectId, async (tx) => {
-    if (input.assigneeId) {
+    if (input.assigneeId || input.supervisorId) {
       if (!att.projectId) throw badRequest("Une tâche sans projet ne peut pas être affectée.");
       await checkMember(tx, att.projectId, input.assigneeId);
+      await checkMember(tx, att.projectId, input.supervisorId);
     }
+    const contributorIds = (await checkMembers(tx, att.projectId, input.contributorIds)) ?? [];
     const { status, progress } = reconcile({ status: "TODO", progress: 0 }, input);
     const count = await tx.task.count({ where: siblingWhere({ ...att, ownerId: userId }) });
     const created = await tx.task.create({
@@ -742,6 +795,8 @@ export async function createTask(
         stageId: att.stageId,
         activityId: att.activityId,
         assigneeId: input.assigneeId ?? null,
+        supervisorId: input.supervisorId ?? null,
+        ...(contributorIds.length ? { contributors: { create: contributorIds.map((memberId) => ({ memberId })) } } : {}),
         name: input.name,
         description: input.description,
         status,
@@ -761,6 +816,10 @@ export async function createTask(
         { userId: assignee.userId, actorId: userId, actorName: name, type: "ASSIGNED", title: `${name} vous a assigné la tâche « ${created.name} »`, href: taskHref(created.id), taskId: created.id, projectId: att.projectId },
       ]);
     }
+    await notifyInvolved(tx, userId, created.id, created.name, att.projectId, [
+      ...(input.supervisorId ? [{ memberId: input.supervisorId, role: "superviseur" }] : []),
+      ...contributorIds.map((memberId) => ({ memberId, role: "contributeur" })),
+    ]);
     return created.id;
   });
 }
@@ -789,10 +848,24 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     const { status, progress } = reconcile(t, input);
     // Changement de projet : l'affectation (membre de l'ancien projet) tombe, sauf nouvelle affectation valide.
     let assigneeId = input.assigneeId;
-    if (projectChanged && assigneeId === undefined) assigneeId = null;
-    if (assigneeId) {
+    let supervisorId = input.supervisorId;
+    let contributorIds = input.contributorIds;
+    if (projectChanged) {
+      if (assigneeId === undefined) assigneeId = null;
+      if (supervisorId === undefined) supervisorId = null;
+      if (contributorIds === undefined) contributorIds = [];
+    }
+    if (assigneeId || supervisorId) {
       if (!att.projectId) throw badRequest("Une tâche sans projet ne peut pas être affectée.");
       await checkMember(tx, att.projectId, assigneeId);
+      await checkMember(tx, att.projectId, supervisorId);
+    }
+    const newContributors = await checkMembers(tx, att.projectId, contributorIds);
+    const previousContributors = (await tx.taskContributor.findMany({ where: { taskId }, select: { memberId: true } })).map((c) => c.memberId);
+    if (newContributors !== undefined) {
+      await tx.taskContributor.deleteMany({ where: { taskId, memberId: { notIn: newContributors } } });
+      const toAdd = newContributors.filter((id) => !previousContributors.includes(id));
+      if (toAdd.length) await tx.taskContributor.createMany({ data: toAdd.map((memberId) => ({ taskId, memberId })) });
     }
 
     const updated = await tx.task.update({
@@ -805,6 +878,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
         priority: input.priority,
         complexity: input.complexity,
         assigneeId,
+        supervisorId,
         startDate: toDate(input.startDate),
         dueDate: toDate(input.dueDate),
         projectId: att.projectId,
@@ -829,6 +903,14 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     if (input.startDate !== undefined && iso(toDate(input.startDate)) !== iso(t.startDate)) changes.push("date de début");
     if (input.dueDate !== undefined && iso(toDate(input.dueDate)) !== iso(t.dueDate)) changes.push("échéance");
     if (moved) changes.push("rattachement");
+    const supervisorChanged = updated.supervisorId !== t.supervisorId;
+    if (supervisorChanged) changes.push("superviseur");
+    const addedContributors = newContributors ? newContributors.filter((id) => !previousContributors.includes(id)) : [];
+    if (newContributors && (addedContributors.length || newContributors.length !== previousContributors.length)) changes.push("contributeurs");
+    await notifyInvolved(tx, userId, taskId, updated.name, att.projectId, [
+      ...(supervisorChanged && updated.supervisorId ? [{ memberId: updated.supervisorId, role: "superviseur" }] : []),
+      ...addedContributors.map((memberId) => ({ memberId, role: "contributeur" })),
+    ]);
     const assigneeChanged = updated.assigneeId !== t.assigneeId;
     const assignee = await memberUser(tx, updated.assigneeId);
     if (assignee?.userId && assignee.userId !== userId && (assigneeChanged || changes.length > 0)) {

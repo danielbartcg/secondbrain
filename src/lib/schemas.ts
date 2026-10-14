@@ -105,8 +105,12 @@ export const createTaskSchema = z.object({
   complexity: taskComplexitySchema.optional(),
   startDate: isoDate,
   dueDate: isoDate,
-  /** Membre de l'équipe projet affecté. */
+  /** Membre de l'équipe projet affecté (responsable). */
   assigneeId: nullableId,
+  /** Superviseur : un seul membre. */
+  supervisorId: nullableId,
+  /** Contributeurs : liste de membres (remplace la liste existante). */
+  contributorIds: z.array(z.string().min(1)).max(100).optional(),
 });
 /** Création libre : rattachement facultatif (le niveau le plus précis l'emporte) et nœud de carte. */
 export const createFreeTaskSchema = createTaskSchema.extend({

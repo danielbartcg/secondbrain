@@ -200,7 +200,7 @@ export function CalendarView({ tasks, actions }: { tasks: OrganizerTask[]; actio
                     >
                       {late && <AlertTriangle className="h-3 w-3 shrink-0 text-danger" />}
                       <PriorityFlag priority={task.priority} className="hidden !h-3 !w-3 sm:block" />
-                      <Link href={`/tasks/${task.id}`} className="min-w-0 flex-1 truncate hover:underline" onClick={(e) => e.stopPropagation()}>
+                      <Link draggable={false} href={`/tasks/${task.id}`} className="min-w-0 flex-1 truncate hover:underline" onClick={(e) => e.stopPropagation()}>
                         {task.name}
                       </Link>
                       <button

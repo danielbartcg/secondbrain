@@ -82,7 +82,7 @@ export function MatrixView({ tasks, actions }: { tasks: OrganizerTask[]; actions
                         }}
                         className={`cursor-grab rounded-lg border px-2 py-1.5 text-xs active:cursor-grabbing ${PRIORITY_CHIP[t.priority]}`}
                       >
-                        <Link href={`/tasks/${t.id}`} className="block truncate font-medium hover:underline">
+                        <Link draggable={false} href={`/tasks/${t.id}`} className="block truncate font-medium hover:underline">
                           {t.name}
                         </Link>
                         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] opacity-80">

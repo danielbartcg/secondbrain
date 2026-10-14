@@ -144,9 +144,16 @@ groupés, navigation clavier, pleine largeur sur mobile.
 
 ## « Mes tâches » et organisation personnelle (`src/lib/tasks.ts`)
 
-Définition commune (`isMyTask`) : une tâche est « à moi » si elle est
-affectée à un membre rattaché à mon compte, **ou** si elle n'est affectée à
-personne dans un projet dont je suis propriétaire (usage solo). Sert au
+Chaque tâche a un **responsable** (`assigneeId`), un **superviseur**
+(`supervisorId`, un seul membre) et des **contributeurs** (`TaskContributor`,
+plusieurs membres), tous membres du même projet (vérifiés, retirés au
+changement de projet, impossibles sans projet). Les nouveaux impliqués à
+compte reçoivent une notification `ASSIGNED`.
+
+Définition commune (`isMyTask`) : une tâche est « à moi » si je suis son
+responsable, son superviseur ou l'un de ses contributeurs (membre rattaché à
+mon compte), **ou** si elle n'est affectée à personne dans un projet dont je
+suis propriétaire (usage solo). `OrganizerTask.roles` dit pourquoi. Sert au
 tableau de bord et à la page **Organiser mes tâches** (`/organize`,
 `GET /api/v1/me/tasks`), qui propose trois vues sur les tâches ouvertes des
 projets actifs / en pause :
@@ -162,6 +169,16 @@ projets actifs / en pause :
 - **Synthèse** (`SynthesisView`) : tableau réordonnable ; l'ordre relatif est
   **personnel** (`TaskRank`, `PUT /me/tasks/order`), indépendant de l'ordre
   du plan.
+- **Kanban** (`KanbanView`) : colonnes par statut avec filtre (semaine par
+  échéances, semaine par sessions de travail, assignation, supervision,
+  contribution, toutes).
+
+Le composant **`KanbanBoard`** (`src/components/tasks/`) est partagé entre
+« Mes tâches » et l'onglet Kanban d'un projet : une colonne par statut
+(Clôturée repliée), cartes glissables (changement de statut via
+`PATCH /tasks/:id`), menu « … » pour le tactile, lien vers la fiche. Les
+liens internes des cartes sont `draggable={false}` pour que le glisser porte
+sur la carte.
 
 Glisser-déposer natif HTML5 (`dataTransfer` typé `application/x-sb-*`),
 mutations optimistes avec rechargement en cas d'erreur (`TaskOrganizer`).
@@ -173,7 +190,7 @@ Table `Notification` (destinataire, type, titre, texte, `href`, `readAt`).
 
 | Type | Déclencheur | Destinataire | Lien |
 | --- | --- | --- | --- |
-| `ASSIGNED` | tâche créée ou ré-affectée | membre affecté (compte) | fiche tâche |
+| `ASSIGNED` | tâche créée ou ré-affectée ; ajout comme superviseur ou contributeur | membre impliqué (compte) | fiche tâche |
 | `TASK_UPDATED` | nom, description, statut/avancement, priorité, complexité, dates, rattachement, nouveau commentaire | membre affecté | fiche tâche ; **regroupée** : une seule non lue par tâche, rafraîchie |
 | `REPLY` | réponse à un commentaire | auteur du commentaire parent | fiche tâche `#comment-<id>` |
 | `MENTION` | `@[Nom]` d'un membre à compte | membre mentionné | idem |

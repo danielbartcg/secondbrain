@@ -20,7 +20,8 @@ Task ──< TaskComment (author → User ; parentId → TaskComment : fil)
 Task ──< WorkSession (user → User)         sessions de travail planifiées
 Task ──< TaskRank (user → User)            ordre relatif personnel
 Task ──< Notification (user → User)
-Task.assigneeId → ProjectMember
+Task.assigneeId → ProjectMember (responsable) ; Task.supervisorId → ProjectMember (superviseur)
+Task ──< TaskContributor >── ProjectMember   contributeurs (n-n)
 Project ──< Deliverable (stageId? → Stage, assigneeId? → ProjectMember)
 Project ──< Document (deliverableId? → Deliverable, uploadedById? → User)
 ```
@@ -47,7 +48,8 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `ProjectMember` | `id`, `projectId`, `userId?`, `name`, `email?`, `role?`, `color?`, `createdAt` | **équipe projet** : compte de l'application (`userId`) ou nom libre. `@@unique([projectId, userId])`. Le propriétaire est créé membre (« Chef de projet ») à la création du projet |
 | `Stage` | `id`, `projectId`, `name`, `description`, `notes` (HTML), `order`, `startDate?`, `dueDate?`, timestamps | étape |
 | `Activity` | `id`, `stageId`, `name`, `description`, `notes` (HTML), `order`, timestamps | niveau intermédiaire **facultatif** |
-| `Task` | `id`, `ownerId`, `projectId?`, `stageId?`, `activityId?`, `assigneeId?`, `name`, `description`, `notes` (HTML), `status` (`TODO` · `IN_PROGRESS` · `DONE` · `CLOSED`), `progress` 0–100, `priority` (`LOW` · `MEDIUM` · `HIGH` · `CRITICAL`, défaut `MEDIUM`), `complexity` (`LOW` · `MEDIUM` · `HIGH`, défaut `MEDIUM`), `order`, `startDate?`, `dueDate?`, timestamps | **rattachement facultatif et cohérent** : `activityId ⇒ stageId ⇒ projectId` ; `projectId = null` = sans projet (visible par `ownerId` seul) ; `assigneeId` → membre **du même projet** (vérifié ; impossible sans projet). `CLOSED` = clôture **manuelle** après `DONE` (la tâche sort du flux courant) |
+| `Task` | `id`, `ownerId`, `projectId?`, `stageId?`, `activityId?`, `assigneeId?`, `supervisorId?`, `name`, `description`, `notes` (HTML), `status` (`TODO` · `IN_PROGRESS` · `DONE` · `CLOSED`), `progress` 0–100, `priority` (`LOW` · `MEDIUM` · `HIGH` · `CRITICAL`, défaut `MEDIUM`), `complexity` (`LOW` · `MEDIUM` · `HIGH`, défaut `MEDIUM`), `order`, `startDate?`, `dueDate?`, timestamps | **rattachement facultatif et cohérent** : `activityId ⇒ stageId ⇒ projectId` ; `projectId = null` = sans projet (visible par `ownerId` seul) ; `assigneeId` → membre **du même projet** (vérifié ; impossible sans projet). `CLOSED` = clôture **manuelle** après `DONE` (la tâche sort du flux courant) |
+| `TaskContributor` | `taskId`, `memberId`, `createdAt` (`@@id([taskId, memberId])`) | contributeurs d'une tâche (membres du même projet ; cascade à la suppression du membre) |
 | `MindNodeTask` | `nodeId`, `taskId`, `createdAt` (`@@id([nodeId, taskId])`) | tâche rattachée à un nœud de carte ; le nœud compte ses tâches non clôturées |
 | `Folder` | `id`, `projectId`, `parentId?`, `name`, timestamps | arborescence documentaire (racine = `parentId` null) ; supprimer un dossier remonte ses documents et sous-dossiers dans le parent |
 | `TaskComment` | `id`, `taskId`, `authorId`, `parentId?`, `body`, `mentions String[]`, timestamps | `parentId` → commentaire auquel on répond (fil de profondeur libre, `Cascade` : supprimer un commentaire supprime ses réponses) ; `body` contient des mentions `@[Nom](memberId)` ; `mentions` = ids de membres cités **et** appartenant au projet |
@@ -100,6 +102,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `20261012200606_organizer_threads_notifications` | `MindNode.status`, `Task.priority/complexity`, `TaskComment.parentId`, `WorkSession`, `TaskRank`, `Notification` |
 | `20261012201500_notification_task_updated` | renomme la valeur `COMMENT` → `TASK_UPDATED` de `NotificationType` (`ALTER TYPE … RENAME VALUE`) |
 | `20261013120000_node_positions` | `MindNode.x` / `y` (position manuelle) |
+| `20261014090000_task_supervisor_contributors` | `Task.supervisorId`, `TaskContributor` |
 | `20261013150000_object_notes` | `notes` (HTML) sur `Project`, `Stage`, `Activity`, `Task` |
 | `20261013080000_orphan_tasks_node_links` | `Task.ownerId` / `projectId` (reprise : projet déduit de l'étape, propriétaire du projet), `Task.stageId` nullable, `MindNodeTask` |
 

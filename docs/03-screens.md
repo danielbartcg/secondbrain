@@ -13,14 +13,14 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | `/projects/[id]` | `projects/[id]/page.tsx` | `projects/ProjectWorkspace` | espace projet à onglets |
 | `/tasks/[taskId]` | `tasks/[taskId]/page.tsx` → `getTaskDetail` | `projects/TaskSheet` | **fiche tâche** (avec ou sans projet) + sessions + fil de commentaires ; l'ancienne adresse `/projects/[id]/tasks/[taskId]` redirige |
 | `/projects/sans-projet` | `projects/sans-projet/page.tsx` → `listOrphanTasks` | `projects/OrphanTasks` | projet virtuel **« Sans projet »** : tâches orphelines (création, statut, fiche, suppression) |
-| `/organize` | `organize/page.tsx` → `getMyTasks` | `organizer/TaskOrganizer` | **Organiser mes tâches** : Calendrier / Sélection / Synthèse (menu sous « Projets ») |
+| `/organize` | `organize/page.tsx` → `getMyTasks` | `organizer/TaskOrganizer` | **Mes tâches** : Synthèse / Sélection / Calendrier / Kanban (entrée de menu « Mes tâches ») |
 | `/notifications` | `notifications/page.tsx` | `NotificationsPage` | toutes mes notifications (filtre non lues) |
 | `/notes` | `notes/page.tsx` → `children("root")` | `notes/NotesWorkspace` | **Prise de notes** : arborescence paresseuse + document riche par objet ; lien profond `?ref=kind:id` |
 
 ## Coque (`AppShell`)
 
-Menu : Tableau de bord, Cartes mentales, Projets, **Organiser mes tâches**
-(sous-entrée de Projets), **Prise de notes**. **Cloche de notifications** (`NotificationsBell`)
+Menu : Tableau de bord, Cartes mentales, Projets, **Mes tâches**, **Prise de
+notes**. **Cloche de notifications** (`NotificationsBell`)
 à côté du logo (barre latérale) et dans l'en-tête mobile : pastille rouge =
 nombre de non lues ; panneau déroulant façon réseau social (icône par type,
 titre, extrait, « il y a … », point bleu si non lue) ; un clic marque lue et
@@ -47,10 +47,11 @@ bascule lue / non lue, suppression ; « Tout lu » ; lien « Voir toutes ».
   tâche du Plan, lien « Ouvrir dans Prise de notes » dans le panneau de
   carte. Les notes d'une carte = notes de son nœud racine.
 
-## Organiser mes tâches (`organizer/TaskOrganizer`)
+## Mes tâches (`organizer/TaskOrganizer`)
 
-Sélecteur de vue (mémorisé dans le hash : `#calendar`, `#matrix`,
-`#synthesis`), compteurs, indicateur d'enregistrement. Items tâche colorés
+Sélecteur de vue, dans l'ordre **Synthèse / Sélection / Calendrier / Kanban**
+(mémorisé dans le hash : `#synthesis`, `#matrix`, `#calendar`, `#kanban` ;
+Synthèse par défaut), compteurs, indicateur d'enregistrement. Items tâche colorés
 selon la priorité (rouge critique, ambre haute, indigo moyenne, gris basse).
 
 | Vue | Composant | Contenu |
@@ -58,6 +59,7 @@ selon la priorité (rouge critique, ambre haute, indigo moyenne, gris basse).
 | Calendrier | `CalendarView` | liste « Tâches à planifier » (glissable ; une tâche planifiée est grisée mais reste déposable) + grille mensuelle lun→dim, navigation, aujourd'hui. Déposer sur un jour = **session de travail** ; les sessions se glissent d'un jour à l'autre, se retirent (×), sont liées à la fiche. Session après l'échéance : bordure rouge + ⚠. Drapeau rouge sur les jours d'échéance. Mobile : liste horizontale, sélection au clic puis clic sur un jour |
 | Sélection | `MatrixView` | matrice **priorité** (lignes, Critique en haut → Basse) × **complexité** (colonnes Basse / Moyenne / Forte) ; glisser une carte vers une autre zone change sa complexité (et sa priorité si la ligne change) |
 | Synthèse | `SynthesisView` | tableau : #, tâche, projet, étape, priorité (modifiable), échéance (rouge si dépassée), statut, « Prévu ? » (oui · n jours / non) ; glisser les lignes = ordre relatif personnel |
+| Kanban | `KanbanView` → `tasks/KanbanBoard` | colonnes À faire / En cours / Terminée / Clôturée (repliée), cartes glissables (statut), **filtre** : Toutes mes tâches · Mes tâches de la semaine (échéances) · Mes tâches de la semaine (sessions de travail) · Mes tâches (assignation) · (supervision) · (contribution) |
 
 ## Tableau de bord personnel (`HomeDashboard`)
 
@@ -84,6 +86,7 @@ puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) :
 | Onglet | Composant | Contenu |
 | --- | --- | --- |
 | Tableau de bord | `ProjectDashboardTab` | KPIs ; **planning Gantt** (`PlanningChart`) des étapes (part réalisée en plein) et livrables 📦 avec ligne « aujourd'hui » ; avancement par étape (`ProgressBarsChart`) ; tâches par statut ; statut des livrables (anneau + liste) ; tâches en retard |
+| Kanban | `ProjectKanbanTab` → `tasks/KanbanBoard` | toutes les tâches du projet par statut (contexte étape › activité, responsable), glisser pour changer le statut, lien fiche ; même composant que le Kanban de « Mes tâches » |
 | Plan | `ProjectBoard` | bloc **« Tâches sans étape »** (tâches du projet non rattachées à une étape, ajout rapide) puis étapes › activités › tâches : drapeau de priorité, avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche ; détails rapides : priorité, complexité, dates, clôture |
 | Livrables | `DeliverablesTab` | cartes : statut, responsable, étape, début/fin attendus, documents rattachés (téléversement direct, rattachement d'un document existant, détachement, téléchargement) |
 | Documents | `DocumentsTab` | **explorateur à dossiers** : fil d'Ariane, sous-dossiers du dossier courant (créer, renommer, « Déplacer vers… », supprimer → contenu remonté dans le parent), documents du dossier courant (sélecteur de dossier, « matérialise le livrable … », téléchargement, suppression par l'auteur ou le propriétaire) ; dépôt (bouton ou glisser-déposer) **dans le dossier courant** |
@@ -97,8 +100,10 @@ réponse recalculée, recharge en cas d'erreur.
 - Fil d'Ariane : projet (ou « Sans projet ») › étape › activité.
 - Carte principale : badges (statut, priorité, retard, nb commentaires),
   titre éditable, boutons de statut À faire / En cours / Terminée + curseur
-  d'avancement, champs **Priorité / Complexité / Responsable** (désactivé sans
-  projet) **/ Début / Échéance**, description, suppression.
+  d'avancement, champs **Priorité / Complexité / Responsable / Superviseur**
+  (un seul membre) **/ Contributeurs** (sélection multiple à cases à cocher,
+  avatars) — désactivés sans projet — **/ Début / Échéance**, description,
+  suppression.
 - **Rattachement** : trois sélecteurs **Projet › Étape › Activité**, tous
   facultatifs (« Sans projet », « Sans étape », « Sans activité ») ; les listes
   se chargent à la demande ; changer de projet efface étape, activité et

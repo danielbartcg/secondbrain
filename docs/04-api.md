@@ -82,7 +82,7 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 type Progress = { percent; total; done };
 type Member   = { id; userId: string | null; name; email; role; color };
 type Task     = { id; ownerId; projectId: string | null; stageId: string | null; activityId: string | null;  // rattachement facultatif
-                  assigneeId; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
+                  assigneeId; supervisorId: string | null; contributorIds: string[]; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
                   progress: 0..100; priority: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; complexity: "LOW"|"MEDIUM"|"HIGH";
                   order; startDate; dueDate; commentCount; hasNotes; nodeIds: string[] /* nœuds de carte */; updatedAt };
 type TaskMutation = { project: Project | null; task: Task | null };   // réponse des mutations de tâche
@@ -133,13 +133,17 @@ complet recalculé** (`{ project }`).
 | POST | `/stages/:id/tasks` | tâche directement sous l'étape → `201 TaskMutation` |
 | POST | `/activities/:id/tasks` | tâche sous une activité → `201 TaskMutation` |
 | GET | `/tasks/:id` | → `{ task: TaskDetail }` (voir fiche tâche) |
-| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, order?, projectId?, stageId?, activityId? }` → `TaskMutation` |
+| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, supervisorId?, contributorIds?, order?, projectId?, stageId?, activityId? }` → `TaskMutation` |
 | DELETE | `/tasks/:id` | → `{ project: Project \| null, task: null }` |
 
-Corps d'une tâche à la création : `{ name, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId? }`
+Corps d'une tâche à la création : `{ name, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, supervisorId?, contributorIds? }`
 (priorité et complexité par défaut `MEDIUM`).
-`assigneeId` doit être un membre du projet (`400` sinon ; `null` désaffecte ;
-impossible sur une tâche sans projet).
+`assigneeId` (responsable) et `supervisorId` (superviseur, un seul) doivent
+être des membres du projet (`400` sinon ; `null` désaffecte) ;
+`contributorIds` **remplace** la liste des contributeurs (membres du projet,
+dédoublonnés). Impossible sur une tâche sans projet ; un changement de projet
+remet responsable, superviseur et contributeurs à zéro. Les membres à compte
+nouvellement impliqués reçoivent une notification `ASSIGNED`.
 
 **Rattachement** (`PATCH`) : le niveau le plus précis l'emporte et déduit les
 niveaux supérieurs — `activityId` (id) ⇒ étape et projet ; `stageId` (id) ⇒
@@ -230,12 +234,13 @@ et description / notes ; `limit` par type (20 max) ; `href` = page dédiée
 
 ## Organisation personnelle (« mes tâches »)
 
-« Mes tâches » = affectées à un membre rattaché à mon compte, **ou** non
-affectées dans un projet dont je suis propriétaire, **ou** mes tâches sans
-projet (`projectId: null`, `projectName: "Sans projet"`). Projets actifs / en pause.
+« Mes tâches » = celles dont je suis responsable, superviseur ou
+contributeur (membre rattaché à mon compte), **ou** non affectées dans un
+projet dont je suis propriétaire, **ou** mes tâches sans projet (`projectId: null`, `projectName: "Sans projet"`). Projets actifs / en pause.
 
 ```ts
 type OrganizerTask = Task & { projectId; projectName; projectColor; stageName; activityName; assigneeName;
+                              roles: { assigned; supervising; contributing; owner };  // pourquoi « à moi »
                               rank: number | null;                     // ordre relatif personnel
                               sessions: { id; date; late }[] };        // mes sessions de travail
 ```

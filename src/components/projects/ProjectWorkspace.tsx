@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, FileText, LayoutDashboard, ListTree, Package, Users } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import { InlineEdit, ProgressBar, toInputDate } from "@/components/ui";
 import { STATUS_LABEL } from "./ProjectList";
 import { ProjectBoard } from "./ProjectBoard";
+import { ProjectKanbanTab } from "./ProjectKanbanTab";
 import { ProjectDashboardTab } from "./ProjectDashboardTab";
 import { TeamTab } from "./TeamTab";
 import { DeliverablesTab } from "./DeliverablesTab";
@@ -26,10 +27,11 @@ export type Run = (fn: () => Promise<Resp>) => Promise<void>;
 
 const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
 
-type TabKey = "dashboard" | "plan" | "livrables" | "documents" | "equipe";
+type TabKey = "dashboard" | "plan" | "kanban" | "livrables" | "documents" | "equipe";
 const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> = [
   { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { key: "plan", label: "Plan", icon: ListTree },
+  { key: "kanban", label: "Kanban", icon: SquareKanban },
   { key: "livrables", label: "Livrables", icon: Package },
   { key: "documents", label: "Documents", icon: FileText },
   { key: "equipe", label: "Équipe", icon: Users },
@@ -160,6 +162,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
       <div className="mt-5">
         {tab === "dashboard" && <ProjectDashboardTab project={project} onGoTo={selectTab} />}
         {tab === "plan" && <ProjectBoard project={project} run={run} />}
+        {tab === "kanban" && <ProjectKanbanTab project={project} run={run} />}
         {tab === "livrables" && <DeliverablesTab project={project} run={run} />}
         {tab === "documents" && <DocumentsTab project={project} run={run} currentUserId={currentUserId} />}
         {tab === "equipe" && <TeamTab project={project} run={run} isOwner={isOwner} currentUserId={currentUserId} />}

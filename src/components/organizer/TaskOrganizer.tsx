@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Grid3x3, ListOrdered } from "lucide-react";
+import { CalendarDays, Grid3x3, ListOrdered, SquareKanban } from "lucide-react";
 import { api } from "@/lib/client";
 import type { OrganizerDto, OrganizerTask, WorkSessionDto } from "@/lib/tasks";
 import type { TaskMutation } from "@/lib/projects";
@@ -9,6 +9,7 @@ import { isFinished } from "@/components/ui";
 import { CalendarView } from "./CalendarView";
 import { MatrixView } from "./MatrixView";
 import { SynthesisView } from "./SynthesisView";
+import { KanbanView } from "./KanbanView";
 
 /**
  * « Organiser mes tâches » : trois vues sur mes tâches ouvertes.
@@ -18,11 +19,12 @@ import { SynthesisView } from "./SynthesisView";
  * Les mutations sont optimistes ; en cas d'erreur, la liste est rechargée.
  */
 
-export type ViewKey = "calendar" | "matrix" | "synthesis";
+export type ViewKey = "synthesis" | "matrix" | "calendar" | "kanban";
 const VIEWS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays }> = [
-  { key: "calendar", label: "Calendrier", icon: CalendarDays },
-  { key: "matrix", label: "Sélection", icon: Grid3x3 },
   { key: "synthesis", label: "Synthèse", icon: ListOrdered },
+  { key: "matrix", label: "Sélection", icon: Grid3x3 },
+  { key: "calendar", label: "Calendrier", icon: CalendarDays },
+  { key: "kanban", label: "Kanban", icon: SquareKanban },
 ];
 
 export type OrganizerActions = {
@@ -34,14 +36,14 @@ export type OrganizerActions = {
 };
 
 function viewFromHash(): ViewKey {
-  if (typeof window === "undefined") return "calendar";
+  if (typeof window === "undefined") return "synthesis";
   const h = window.location.hash.replace("#", "") as ViewKey;
-  return VIEWS.some((v) => v.key === h) ? h : "calendar";
+  return VIEWS.some((v) => v.key === h) ? h : "synthesis";
 }
 
 export function TaskOrganizer({ initial }: { initial: OrganizerDto }) {
   const [tasks, setTasks] = useState(initial.tasks);
-  const [view, setView] = useState<ViewKey>("calendar");
+  const [view, setView] = useState<ViewKey>("synthesis");
   const [saving, setSaving] = useState(0);
 
   useEffect(() => {
@@ -151,7 +153,7 @@ export function TaskOrganizer({ initial }: { initial: OrganizerDto }) {
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Organiser mes tâches</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mes tâches</h1>
           <p className="mt-1 text-sm text-muted">
             {open.length} tâche{open.length > 1 ? "s" : ""} ouverte{open.length > 1 ? "s" : ""} · {open.filter((t) => t.sessions.length > 0).length} planifiée
             {open.filter((t) => t.sessions.length > 0).length > 1 ? "s" : ""}
@@ -183,6 +185,7 @@ export function TaskOrganizer({ initial }: { initial: OrganizerDto }) {
           {view === "calendar" && <CalendarView tasks={tasks} actions={actions} />}
           {view === "matrix" && <MatrixView tasks={open} actions={actions} />}
           {view === "synthesis" && <SynthesisView tasks={open} actions={actions} />}
+          {view === "kanban" && <KanbanView tasks={tasks} actions={actions} />}
         </>
       )}
     </div>

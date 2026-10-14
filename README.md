@@ -21,9 +21,11 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    **priorité** (basse → critique), une **complexité**, des **sessions de
    travail planifiées** et sa **fiche** avec un fil de commentaires
    hiérarchique (réponses aux réponses) et des mentions « @ ».
-   **Organiser mes tâches** : vue calendaire (glisser-déposer des tâches sur
-   les jours, alerte si après l'échéance), matrice priorité × complexité,
-   tableau de synthèse réordonnable.
+   Chaque tâche a un responsable, un **superviseur** et des **contributeurs**.
+   **Mes tâches** : synthèse réordonnable, matrice priorité × complexité, vue
+   calendaire (glisser-déposer des tâches sur les jours, alerte si après
+   l'échéance) et **Kanban** filtrable (semaine, assignation, supervision,
+   contribution). Chaque projet a aussi son onglet **Kanban**.
    Une tâche peut n'avoir **ni projet, ni étape, ni activité** (projet virtuel
    « Sans projet »), et se rattacher à des **nœuds de carte mentale** (qui
    affichent leurs tâches ouvertes ; création ou rattachement depuis le nœud).

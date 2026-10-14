@@ -1,7 +1,7 @@
 import "server-only";
 import type { DeliverableStatus, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isMyTask, listProjects, taskAccessWhere, toTaskDto, type ProjectSummary, type TaskDto } from "@/lib/projects";
+import { TASK_PEOPLE_SELECT, isMyTask, listProjects, taskAccessWhere, toTaskDto, type ProjectSummary, type TaskDto } from "@/lib/projects";
 import { NO_PROJECT_LABEL } from "@/lib/tasks";
 
 /**
@@ -69,7 +69,7 @@ export async function getDashboard(userId: string, options: { horizonDays?: numb
       include: {
         _count: { select: { comments: true } },
         nodes: { select: { nodeId: true } },
-        assignee: { select: { name: true, userId: true } },
+        ...TASK_PEOPLE_SELECT,
         stage: { select: { name: true } },
         project: { select: { id: true, name: true, color: true, ownerId: true } },
       },

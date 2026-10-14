@@ -11,7 +11,7 @@ const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/mindmaps", label: "Cartes mentales", icon: Brain },
   { href: "/projects", label: "Projets", icon: FolderKanban },
-  { href: "/organize", label: "Organiser mes tâches", icon: CalendarCheck2, sub: true },
+  { href: "/organize", label: "Mes tâches", icon: CalendarCheck2 },
   { href: "/notes", label: "Prise de notes", icon: NotebookPen },
 ];
 
@@ -33,14 +33,14 @@ export function AppShell({ user, children }: { user: { name: string; email: stri
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-1">
-      {NAV.map(({ href, label, icon: Icon, sub }) => {
+      {NAV.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
           <Link
             key={href}
             href={href}
             onClick={() => setOpen(false)}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${sub ? "ml-4 py-1.5 text-[13px]" : ""} ${
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               active ? "bg-brand-50 text-brand-700" : "text-ink-2 hover:bg-surface-2"
             }`}
           >

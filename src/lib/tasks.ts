@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
-import { accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
+import { TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 import { sanitizeNotes } from "@/lib/sanitize";
 
 /**
@@ -50,6 +50,8 @@ export type TaskDetailDto = TaskDto & {
   stage: { id: string; name: string } | null;
   activity: { id: string; name: string } | null;
   assignee: MemberDto | null;
+  supervisor: MemberDto | null;
+  contributors: MemberDto[];
   comments: TaskCommentDto[];
   workSessions: WorkSessionDto[];
   /** Nœuds de carte mentale rattachés. */
@@ -95,7 +97,7 @@ function toSessionDto(s: { id: string; date: Date; userId: string; user: { name:
 }
 
 const SESSION_INCLUDE = { user: { select: { name: true } } } satisfies Prisma.WorkSessionInclude;
-const TASK_BASE_INCLUDE = { _count: { select: { comments: true } }, nodes: { select: { nodeId: true } } } satisfies Prisma.TaskInclude;
+const TASK_BASE_INCLUDE = { _count: { select: { comments: true } }, nodes: { select: { nodeId: true } }, contributors: { select: { memberId: true } } } satisfies Prisma.TaskInclude;
 
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
   const t = await prisma.task.findFirst({
@@ -103,6 +105,8 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
     include: {
       ...TASK_BASE_INCLUDE,
       assignee: true,
+      supervisor: true,
+      contributors: { include: { member: true } },
       activity: { select: { id: true, name: true } },
       stage: { select: { id: true, name: true } },
       project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" } } } },
@@ -120,6 +124,8 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
     stage: t.stage,
     activity: t.activity,
     assignee: t.assignee ? toMemberDto(t.assignee) : null,
+    supervisor: t.supervisor ? toMemberDto(t.supervisor) : null,
+    contributors: t.contributors.map((c) => toMemberDto(c.member)),
     comments: t.comments.map((c) => ({
       id: c.id,
       parentId: c.parentId,
@@ -231,6 +237,8 @@ export type OrganizerTask = TaskDto & {
   stageName: string | null;
   activityName: string | null;
   assigneeName: string | null;
+  /** Pourquoi la tâche est « à moi » (filtres du Kanban). */
+  roles: { assigned: boolean; supervising: boolean; contributing: boolean; owner: boolean };
   /** Ordre relatif personnel (vue Synthèse) ; null = jamais ordonnée. */
   rank: number | null;
   /** Mes sessions de travail planifiées sur cette tâche. */
@@ -249,7 +257,7 @@ export async function getMyTasks(userId: string): Promise<OrganizerDto> {
     where: { AND: [taskAccessWhere(userId), { OR: [{ projectId: null }, { project: { status: { in: ["ACTIVE", "ON_HOLD"] } } }] }] },
     include: {
       ...TASK_BASE_INCLUDE,
-      assignee: { select: { name: true, userId: true } },
+      ...TASK_PEOPLE_SELECT,
       activity: { select: { name: true } },
       stage: { select: { name: true } },
       project: { select: { id: true, name: true, color: true, ownerId: true } },
@@ -267,6 +275,12 @@ export async function getMyTasks(userId: string): Promise<OrganizerDto> {
       stageName: t.stage?.name ?? null,
       activityName: t.activity?.name ?? null,
       assigneeName: t.assignee?.name ?? null,
+      roles: {
+        assigned: t.assignee?.userId === userId,
+        supervising: t.supervisor?.userId === userId,
+        contributing: t.contributors.some((c) => c.member.userId === userId),
+        owner: !t.assignee && (t.project?.ownerId ?? t.ownerId) === userId,
+      },
       rank: t.ranks[0]?.rank ?? null,
       sessions: t.workSessions.map((s) => ({ id: s.id, date: dayString(s.date), late: t.dueDate ? dayString(s.date) > dayString(t.dueDate) : false })),
     }));
