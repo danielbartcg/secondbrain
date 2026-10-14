@@ -44,7 +44,12 @@ export type MemberDto = {
   email: string | null;
   role: string | null;
   color: string | null;
+  /** Photo du compte rattaché (null = silhouette). */
+  avatarUrl: string | null;
 };
+
+/** Inclusion de la photo du compte rattaché à un membre. */
+export const MEMBER_INCLUDE = { user: { select: { avatarUrl: true } } } satisfies Prisma.ProjectMemberInclude;
 
 export type TaskDto = {
   id: string;
@@ -194,7 +199,7 @@ export const PROJECT_INCLUDE = {
     },
   },
   tasks: { where: { stageId: null }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], include: TASK_INCLUDE },
-  members: { orderBy: { createdAt: "asc" } },
+  members: { orderBy: { createdAt: "asc" }, include: MEMBER_INCLUDE },
   deliverables: {
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     include: { documents: { orderBy: { createdAt: "desc" }, include: DOCUMENT_INCLUDE } },
@@ -233,8 +238,16 @@ export function toTaskDto(t: TaskRow): TaskDto {
   };
 }
 
-export function toMemberDto(m: { id: string; userId: string | null; name: string; email: string | null; role: string | null; color: string | null }): MemberDto {
-  return { id: m.id, userId: m.userId, name: m.name, email: m.email, role: m.role, color: m.color };
+export function toMemberDto(m: {
+  id: string;
+  userId: string | null;
+  name: string;
+  email: string | null;
+  role: string | null;
+  color: string | null;
+  user?: { avatarUrl: string | null } | null;
+}): MemberDto {
+  return { id: m.id, userId: m.userId, name: m.name, email: m.email, role: m.role, color: m.color, avatarUrl: m.user?.avatarUrl ?? null };
 }
 
 export function toDocumentDto(d: DocumentRow): DocumentDto {
@@ -252,7 +265,7 @@ export function toDocumentDto(d: DocumentRow): DocumentDto {
   };
 }
 
-function toProjectDto(p: ProjectRow): ProjectDto {
+export function toProjectDto(p: ProjectRow): ProjectDto {
   const stages: StageDto[] = p.stages.map((s) => {
     const activities: ActivityDto[] = s.activities.map((a) => {
       const tasks = s.tasks.filter((t) => t.activityId === a.id).map(toTaskDto);
@@ -503,6 +516,33 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
     void _f;
     return summary;
   });
+}
+
+// --- Administration (lecture seule) ---------------------------------------------
+
+export type AdminProjectSummary = ProjectSummary & { ownerName: string; ownerEmail: string; taskCount: number };
+
+/** Tous les projets (administration). Le contrôle du rôle est fait par l'appelant. */
+export async function listAllProjectsAdmin(): Promise<AdminProjectSummary[]> {
+  const rows = await prisma.project.findMany({ orderBy: { updatedAt: "desc" }, include: { ...PROJECT_INCLUDE, owner: { select: { name: true, email: true } } } });
+  return rows.map((p) => {
+    const { stages: _s, tasks: _t, members: _m, deliverables: _d, documents: _doc, folders: _f, notes: _n, ...summary } = toProjectDto(p);
+    void _s;
+    void _t;
+    void _m;
+    void _d;
+    void _doc;
+    void _f;
+    void _n;
+    return { ...summary, ownerName: p.owner.name, ownerEmail: p.owner.email, taskCount: summary.progress.total };
+  });
+}
+
+/** Un projet quelconque (administration, lecture seule). */
+export async function getProjectAdmin(projectId: string): Promise<ProjectDto & { ownerName: string }> {
+  const p = await prisma.project.findUnique({ where: { id: projectId }, include: { ...PROJECT_INCLUDE, owner: { select: { name: true } } } });
+  if (!p) throw notFound("Projet");
+  return { ...toProjectDto(p), ownerName: p.owner.name };
 }
 
 export async function getProject(userId: string, projectId: string): Promise<ProjectDto> {

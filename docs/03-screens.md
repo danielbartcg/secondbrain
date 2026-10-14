@@ -15,9 +15,20 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | `/projects/sans-projet` | `projects/sans-projet/page.tsx` → `listOrphanTasks` | `projects/OrphanTasks` | projet virtuel **« Sans projet »** : tâches orphelines (création, statut, fiche, suppression) |
 | `/organize` | `organize/page.tsx` → `getMyTasks` | `organizer/TaskOrganizer` | **Mes tâches** : Synthèse / Sélection / Calendrier / Kanban (entrée de menu « Mes tâches ») |
 | `/notifications` | `notifications/page.tsx` | `NotificationsPage` | toutes mes notifications (filtre non lues) |
+| `/preferences` | `preferences/page.tsx` → `getProfile` | `PreferencesPage` | **Préférences** : prénom / nom, photo, thème |
+| `/team` | `team/page.tsx` → `listTeamTasks` | `admin/TeamOverview` | **Mon équipe** (managers) : N-1 directs et leurs tâches, lecture seule |
+| `/admin/users` | `admin/users/page.tsx` → `listUsersAdmin` | `admin/AdminUsers` | **Administration** : rôles et managers |
+| `/admin/projects`, `/admin/projects/[id]` | `listAllProjectsAdmin`, `getProjectAdmin` | `admin/AdminProjects`, `admin/AdminProjectView` | tous les projets ; un projet en lecture seule |
+| `/admin/tasks` | `admin/tasks/page.tsx` → `listAllTasksAdmin` | `admin/TaskOverviewTable` | toutes les tâches (recherche, filtre de statut) |
 | `/notes` | `notes/page.tsx` → `children("root")` | `notes/NotesWorkspace` | **Prise de notes** : arborescence paresseuse + document riche par objet ; lien profond `?ref=kind:id` |
 
 ## Coque (`AppShell`)
+
+Menu complet : Tableau de bord, Cartes mentales, Projets, Mes tâches, Prise de
+notes, **Mon équipe** (si l'on a des N-1), **Préférences**, puis
+**Administration** en dernier (administrateurs et super administrateur). Le
+pied de la barre latérale montre la photo (ou la silhouette), le nom et
+l'e-mail, et mène aux Préférences.
 
 Menu : Tableau de bord, Cartes mentales, Projets, **Mes tâches**, **Prise de
 notes**. **Cloche de notifications** (`NotificationsBell`)
@@ -98,6 +109,8 @@ réponse recalculée, recharge en cas d'erreur.
 ## Fiche tâche (`TaskSheet`)
 
 - Fil d'Ariane : projet (ou « Sans projet ») › étape › activité.
+- **Consultation** (administrateur, manager d'un N-1, `canEdit: false`) :
+  bandeau « Consultation en lecture seule », tout le contenu désactivé.
 - Carte principale : badges (statut, priorité, retard, nb commentaires),
   titre éditable, boutons de statut À faire / En cours / Terminée + curseur
   d'avancement, champs **Priorité / Complexité / Responsable / Superviseur**
@@ -155,10 +168,34 @@ bleue avec le nombre de tâches **non clôturées** (terminées comprises).
 Arrivée par `?node=<id>` (recherche, fiche tâche) : nœud sélectionné, centré,
 panneau ouvert, nœuds fermés affichés si nécessaire.
 
+## Préférences (`PreferencesPage`)
+
+- **Identité** : photo (ajouter / changer / retirer ; sinon silhouette),
+  prénom, nom, aperçu du nom affiché, identifiant et rôle.
+- **Thème** : 5 vignettes (Clair, Sombre, Sépia, Océan, Forêt), appliqué
+  immédiatement et mémorisé sur le compte.
+
+## Administration (`/admin`, `admin/*`)
+
+Onglets Utilisateurs · Tous les projets · Toutes les tâches.
+- **Utilisateurs** : recherche ; par compte, rôle (Utilisateur / Administrateur ;
+  « Super administrateur » figé ; pas de modification de son propre rôle),
+  manager (N+1) dans une liste, N-1 en avatars, nombre de projets.
+- **Tous les projets** : tableau (propriétaire, statut, avancement, équipe,
+  tâches) ; un projet s'ouvre en lecture seule (équipe, étapes › activités ›
+  tâches, liens vers les fiches en consultation).
+- **Toutes les tâches** : `TaskOverviewTable` (recherche texte, filtre
+  Ouvertes / Toutes / par statut, responsable, superviseur, contributeurs).
+
+## Mon équipe (`admin/TeamOverview`)
+
+Puces des N-1 (photo, nom, nombre de tâches ouvertes ; clic = filtre) et
+`TaskOverviewTable` de leurs tâches ; les fiches s'ouvrent en lecture seule.
+
 ## Composants partagés (`src/components/ui.tsx`)
 
 `PageHeader`, `Button`, `ProgressBar`, `InlineEdit` (clic pour éditer),
-`QuickAdd`, `EmptyState`, `Avatar` (initiales, couleur stable par id),
+`QuickAdd`, `EmptyState`, `Avatar` (photo `src` sinon silhouette sur couleur stable par id),
 `Badge`, `PriorityFlag`, constantes de libellés/couleurs (`TASK_STATUS_*`,
 `DELIVERABLE_STATUS_*`, `PRIORITY_*` dont `PRIORITY_CHIP`, `COMPLEXITY_*`,
 `NODE_STATUS_LABEL`), helpers `formatDate`, `formatBytes`, `relativeDays`,

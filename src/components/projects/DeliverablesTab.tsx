@@ -146,7 +146,7 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted">
         {assignee && (
           <span className="flex items-center gap-1.5">
-            <Avatar id={assignee.id} name={assignee.name} color={assignee.color} size={20} /> {assignee.name}
+            <Avatar id={assignee.id} name={assignee.name} color={assignee.color} src={assignee.avatarUrl} size={20} /> {assignee.name}
           </span>
         )}
         {d.deliveredAt && <span>Livré le {formatDate(d.deliveredAt)}</span>}

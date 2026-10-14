@@ -108,6 +108,13 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
         <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`}>{saving ? "Enregistrement…" : "Enregistré"}</span>
       </div>
 
+      {!task.canEdit && (
+        <p className="mb-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <Eye className="h-4 w-4 shrink-0" /> Consultation en lecture seule (administration ou tâche d&apos;un membre de votre équipe).
+        </p>
+      )}
+      {/* En consultation, tout le contenu est désactivé (fieldset) et non cliquable. */}
+      <fieldset disabled={!task.canEdit} className={`min-w-0 ${task.canEdit ? "" : "pointer-events-none"}`}>
       {/* Carte principale */}
       <div className="overflow-hidden rounded-2xl border border-line bg-surface">
         <div className="h-1.5" style={{ backgroundColor: color }} />
@@ -187,7 +194,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
             </Field>
             <Field icon={<User className="h-4 w-4" />} label="Responsable">
               <div className="flex items-center gap-2">
-                {task.assignee && <Avatar id={task.assignee.id} name={task.assignee.name} color={task.assignee.color} size={26} />}
+                {task.assignee && <Avatar id={task.assignee.id} name={task.assignee.name} color={task.assignee.color} src={task.assignee.avatarUrl} size={26} />}
                 <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} disabled={!task.project} title={task.project ? undefined : "Rattachez la tâche à un projet pour l'affecter à un membre"} className={`${selectClass} min-w-0 flex-1 disabled:opacity-50`}>
                   <option value="">— Personne —</option>
                   {members.map((m) => (
@@ -201,7 +208,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
             </Field>
             <Field icon={<Eye className="h-4 w-4" />} label="Superviseur">
               <div className="flex items-center gap-2">
-                {task.supervisor && <Avatar id={task.supervisor.id} name={task.supervisor.name} color={task.supervisor.color} size={26} />}
+                {task.supervisor && <Avatar id={task.supervisor.id} name={task.supervisor.name} color={task.supervisor.color} src={task.supervisor.avatarUrl} size={26} />}
                 <select value={task.supervisorId ?? ""} onChange={(e) => patch({ supervisorId: e.target.value || null })} disabled={!task.project} title={task.project ? "Une seule personne supervise la tâche" : "Rattachez la tâche à un projet"} className={`${selectClass} min-w-0 flex-1 disabled:opacity-50`}>
                   <option value="">— Personne —</option>
                   {members.map((m) => (
@@ -267,6 +274,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
 
       {/* Commentaires */}
       <Comments task={task} currentUserId={currentUserId} isOwner={isOwner} onChange={setTask} />
+      </fieldset>
     </div>
   );
 }
@@ -285,7 +293,7 @@ function MemberMultiSelect({ members, value, disabled, onChange }: { members: Me
           <span className="flex min-w-0 flex-1 flex-wrap gap-1">
             {selected.map((m) => (
               <span key={m.id} className="flex items-center gap-1 rounded-full bg-surface-2 py-0.5 pl-0.5 pr-2 text-xs">
-                <Avatar id={m.id} name={m.name} color={m.color} size={18} /> {m.name}
+                <Avatar id={m.id} name={m.name} color={m.color} src={m.avatarUrl} size={18} /> {m.name}
               </span>
             ))}
           </span>
@@ -300,7 +308,7 @@ function MemberMultiSelect({ members, value, disabled, onChange }: { members: Me
               <li key={m.id}>
                 <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2">
                   <input type="checkbox" checked={checked} onChange={() => onChange(checked ? value.filter((id) => id !== m.id) : [...value, m.id])} className="accent-brand-600" />
-                  <Avatar id={m.id} name={m.name} color={m.color} size={22} />
+                  <Avatar id={m.id} name={m.name} color={m.color} src={m.avatarUrl} size={22} />
                   <span className="min-w-0 flex-1 truncate">{m.name}</span>
                   {m.role && <span className="text-xs text-muted">{m.role}</span>}
                 </label>
@@ -674,7 +682,7 @@ function CommentComposer({
                 onClick={() => insertMention(m)}
                 className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${i === highlight ? "bg-brand-50" : "hover:bg-surface-2"}`}
               >
-                <Avatar id={m.id} name={m.name} color={m.color} size={24} />
+                <Avatar id={m.id} name={m.name} color={m.color} src={m.avatarUrl} size={24} />
                 <span className="font-medium">{m.name}</span>
                 {m.role && <span className="text-xs text-muted">{m.role}</span>}
               </button>
@@ -727,7 +735,7 @@ function CommentNode({
   return (
     <li id={`comment-${node.id}`} className={depth > 0 ? "mt-3" : ""}>
       <div className="flex gap-2 sm:gap-3">
-        <Avatar id={node.authorId} name={node.authorName} size={depth === 0 ? 32 : 26} />
+        <Avatar id={node.authorId} name={node.authorName} src={node.authorAvatarUrl} size={depth === 0 ? 32 : 26} />
         <div className="min-w-0 flex-1">
           <div className={`rounded-2xl rounded-tl-sm px-4 py-3 ${highlightId === node.id ? "bg-amber-50 ring-2 ring-amber-300" : "bg-surface-2"}`}>
             <div className="flex items-center gap-2 text-xs text-muted">

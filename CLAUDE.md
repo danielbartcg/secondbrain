@@ -56,7 +56,12 @@ logo amCharts reste affiché (licence gratuite).
    `requireProjectOwner` pour supprimer / gérer l'équipe ; `ownedMap` pour les
    cartes ; `taskAccessWhere` / `accessibleTask` pour les tâches, y compris
    sans projet ; `checkNode` pour un nœud de carte). Ne jamais manipuler une
-   ressource par id seul.
+   ressource par id seul. Administration : `requireAdmin(user)` dans chaque
+   route `/api/v1/admin/**` et `notFound()` dans les pages `/admin/**` ; le
+   rôle admin et la hiérarchie donnent une **lecture seule** (`canEdit: false`),
+   jamais un droit d'écriture. Super administrateur : `src/lib/roles.ts`.
+   Ne pas importer de constantes ou fonctions d'un module « use client »
+   (`ui.tsx`…) dans un composant serveur : passer par un composant client.
 3. Validation zod de toute entrée ; bornes sur longueurs et nombres.
 4. HTML des notes : `sanitizeNotes()` à l'enregistrement **et** au rendu. Pas
    de `dangerouslySetInnerHTML` sur du contenu non assaini. Jamais de regex à

@@ -33,6 +33,11 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    › nœuds, projets › étapes › activités › tâches), chargée au fur et à
    mesure, avec un grand document de notes riches par objet, visible ensuite
    sur l'objet.
+   **Préférences** : prénom et nom affichés, photo de profil (sinon
+   silhouette), 5 thèmes (clair, sombre, sépia, océan, forêt).
+   **Administration** (administrateurs, et le super administrateur codé en
+   dur) : rôles et managers des utilisateurs, tous les projets, toutes les
+   tâches. Un manager voit les tâches de ses N-1 dans « Mon équipe ».
    **Recherche globale** avec auto-complétion sur la page d'accueil (projets,
    tâches, nœuds, cartes).
    **Notifications in-app** (cloche) : tâche assignée, réponse à un

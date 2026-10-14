@@ -32,6 +32,126 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* ==========================================================================
+   Thèmes (Préférences) : on redéfinit les jetons de couleur sur <html>.
+   « light » = valeurs de @theme ci-dessus.
+   ========================================================================== */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #111318;
+  --color-surface: #1a1d24;
+  --color-surface-2: #22262e;
+  --color-surface-3: #2c313b;
+  --color-line: #2f343e;
+  --color-line-strong: #454c58;
+  --color-ink: #eceef2;
+  --color-ink-2: #cbd0d9;
+  --color-muted: #9aa1ad;
+  --color-faint: #6f7683;
+  --color-brand-50: #1d2240;
+  --color-brand-100: #2a3160;
+  --color-brand-500: #7b88ff;
+  --color-brand-600: #6674f5;
+  --color-brand-700: #aab3ff;
+  --color-ok: #4cc47e;
+  --color-warn: #f0b03c;
+  --color-danger: #f07171;
+  --color-red-50: #3a1d20;
+  --color-red-100: #4d2328;
+  --color-red-200: #6b2c32;
+  --color-red-700: #ff9c9c;
+  --color-red-800: #ffb4b4;
+  --color-green-50: #15301f;
+  --color-green-700: #86dca6;
+  --color-amber-50: #33290f;
+  --color-amber-100: #463812;
+  --color-amber-200: #5c4816;
+  --color-amber-700: #f3c56b;
+  --color-amber-800: #f7d48c;
+  --color-amber-900: #fde3a7;
+  --color-violet-50: #2a2142;
+  --color-violet-200: #4b3a78;
+  --color-violet-700: #c4b5fd;
+  --color-slate-100: #262b33;
+  --color-slate-300: #3e4552;
+  --color-slate-700: #c8cfda;
+  --color-indigo-100: #262c55;
+  --color-indigo-300: #3d4790;
+  --color-indigo-800: #c7cdfd;
+}
+html[data-theme="sepia"] {
+  --color-canvas: #f4ecd8;
+  --color-surface: #fbf6ea;
+  --color-surface-2: #f1e7d0;
+  --color-surface-3: #e7dabd;
+  --color-line: #e0d2b3;
+  --color-line-strong: #c9b68f;
+  --color-ink: #3b2f20;
+  --color-ink-2: #4d3f2c;
+  --color-muted: #7a6a52;
+  --color-faint: #a08f74;
+  --color-brand-50: #f6e9d3;
+  --color-brand-100: #ecd6b0;
+  --color-brand-500: #b0702f;
+  --color-brand-600: #9a5f24;
+  --color-brand-700: #7d4c1c;
+}
+html[data-theme="ocean"] {
+  --color-canvas: #eef4f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #e6eff5;
+  --color-surface-3: #d6e5ee;
+  --color-line: #d3e1ea;
+  --color-line-strong: #a9c3d4;
+  --color-ink: #0f2230;
+  --color-ink-2: #23384a;
+  --color-muted: #5b7385;
+  --color-faint: #8aa0b0;
+  --color-brand-50: #e3f4fb;
+  --color-brand-100: #c2e6f5;
+  --color-brand-500: #0ea5e9;
+  --color-brand-600: #0284c7;
+  --color-brand-700: #0369a1;
+}
+html[data-theme="forest"] {
+  --color-canvas: #f1f4ee;
+  --color-surface: #ffffff;
+  --color-surface-2: #e9efe4;
+  --color-surface-3: #dbe5d3;
+  --color-line: #d6e0cd;
+  --color-line-strong: #b0c2a2;
+  --color-ink: #18241a;
+  --color-ink-2: #2d3d2f;
+  --color-muted: #5f7262;
+  --color-faint: #8c9c8e;
+  --color-brand-50: #e5f3e8;
+  --color-brand-100: #c6e6cd;
+  --color-brand-500: #2f9e55;
+  --color-brand-600: #23854a;
+  --color-brand-700: #1b6a3b;
+}
+/* Texte riche (typography) : couleurs reprises des jetons du thème. */
+html[data-theme] .prose {
+  --tw-prose-body: var(--color-ink-2);
+  --tw-prose-headings: var(--color-ink);
+  --tw-prose-lead: var(--color-ink-2);
+  --tw-prose-links: var(--color-brand-700);
+  --tw-prose-bold: var(--color-ink);
+  --tw-prose-counters: var(--color-muted);
+  --tw-prose-bullets: var(--color-muted);
+  --tw-prose-hr: var(--color-line);
+  --tw-prose-quotes: var(--color-ink-2);
+  --tw-prose-quote-borders: var(--color-line-strong);
+  --tw-prose-code: var(--color-ink);
+  --tw-prose-pre-bg: var(--color-surface-3);
+  --tw-prose-pre-code: var(--color-ink);
+}
+html[data-theme="dark"] .react-flow__controls-button {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+  fill: var(--color-ink);
+}
+
 html,
 body {
   height: 100%;

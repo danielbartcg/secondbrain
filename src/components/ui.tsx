@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Flag } from "lucide-react";
+import { Flag, UserRound } from "lucide-react";
 
 /** Petits composants d'interface partagés. */
 
@@ -196,15 +196,42 @@ export function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-/** Pastille d'initiales d'un membre. */
-export function Avatar({ name, color, id, size = 28, className = "", title }: { name: string; color?: string | null; id: string; size?: number; className?: string; title?: string }) {
+/**
+ * Avatar d'une personne : photo de profil si elle existe, sinon silhouette
+ * impersonnelle sur fond de couleur stable (dérivée de l'identifiant).
+ */
+export function Avatar({
+  name,
+  color,
+  id,
+  src,
+  size = 28,
+  className = "",
+  title,
+}: {
+  name: string;
+  color?: string | null;
+  id: string;
+  /** URL de la photo (/media/…) ; absente = silhouette. */
+  src?: string | null;
+  size?: number;
+  className?: string;
+  title?: string;
+}) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} alt={name} title={title ?? name} width={size} height={size} className={`shrink-0 rounded-full object-cover ${className}`} style={{ width: size, height: size }} />
+    );
+  }
   return (
     <span
       title={title ?? name}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${className}`}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.4), backgroundColor: colorFor(id, color) }}
+      aria-label={name}
+      className={`inline-flex shrink-0 items-end justify-center overflow-hidden rounded-full text-white/90 ${className}`}
+      style={{ width: size, height: size, backgroundColor: colorFor(id, color) }}
     >
-      {initials(name)}
+      <UserRound style={{ width: size * 0.82, height: size * 0.82, marginBottom: -size * 0.08 }} strokeWidth={2.2} />
     </span>
   );
 }

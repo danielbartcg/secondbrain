@@ -25,7 +25,7 @@ export type KanbanTask = {
   /** Contexte affiché sous le titre (projet › étape, ou étape › activité). */
   context?: string | null;
   contextColor?: string | null;
-  assignee?: { id: string; name: string; color: string | null } | null;
+  assignee?: { id: string; name: string; color: string | null; avatarUrl?: string | null } | null;
   commentCount?: number;
 };
 
@@ -129,7 +129,7 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
                           )}
                           <span className="tabular-nums">{t.progress}%</span>
                           <span className="ml-auto flex items-center gap-1">
-                            {t.assignee && <Avatar id={t.assignee.id} name={t.assignee.name} color={t.assignee.color} size={20} />}
+                            {t.assignee && <Avatar id={t.assignee.id} name={t.assignee.name} color={t.assignee.color} src={t.assignee.avatarUrl} size={20} />}
                             <button
                               type="button"
                               onClick={() => setMenuFor(menuFor === t.id ? null : t.id)}

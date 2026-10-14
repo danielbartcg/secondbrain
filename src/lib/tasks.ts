@@ -3,7 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
-import { TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
+import { isAdmin } from "@/lib/roles";
+import { MEMBER_INCLUDE, TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 import { sanitizeNotes } from "@/lib/sanitize";
 
 /**
@@ -25,6 +26,8 @@ export type TaskCommentDto = {
   parentId: string | null;
   authorId: string;
   authorName: string;
+  /** Photo de l'auteur (null = silhouette). */
+  authorAvatarUrl: string | null;
   body: string;
   mentions: string[];
   createdAt: string;
@@ -58,6 +61,8 @@ export type TaskDetailDto = TaskDto & {
   nodes: TaskNodeRef[];
   /** Notes riches (HTML assaini), éditables dans « Prise de notes ». */
   notes: string;
+  /** Faux en consultation (administrateur, manager d'un N-1) : fiche en lecture seule. */
+  canEdit: boolean;
 };
 
 const MENTION_RE = /@\[([^\]]+)\]\(([A-Za-z0-9_-]+)\)/g;
@@ -99,24 +104,57 @@ function toSessionDto(s: { id: string; date: Date; userId: string; user: { name:
 const SESSION_INCLUDE = { user: { select: { name: true } } } satisfies Prisma.WorkSessionInclude;
 const TASK_BASE_INCLUDE = { _count: { select: { comments: true } }, nodes: { select: { nodeId: true } }, contributors: { select: { memberId: true } } } satisfies Prisma.TaskInclude;
 
+/**
+ * Tâches « d'une personne » (même définition que `isMyTask`) : responsable,
+ * superviseur, contributeur, ou non affectée dans un de ses projets, ou sans
+ * projet et créée par elle. Sert à la vue manager (tâches des N-1).
+ */
+export function tasksOfUsersWhere(userIds: string[]): Prisma.TaskWhereInput {
+  return {
+    OR: [
+      { assignee: { userId: { in: userIds } } },
+      { supervisor: { userId: { in: userIds } } },
+      { contributors: { some: { member: { userId: { in: userIds } } } } },
+      { assigneeId: null, project: { ownerId: { in: userIds } } },
+      { projectId: null, ownerId: { in: userIds } },
+    ],
+  };
+}
+
+/**
+ * Lecture d'une tâche hors de mes accès : un administrateur lit tout ; un
+ * manager lit les tâches de ses N-1 directs. Aucune modification possible.
+ */
+async function canConsultTask(userId: string, taskId: string): Promise<boolean> {
+  const viewer = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, role: true, reports: { select: { id: true } } } });
+  if (!viewer) return false;
+  if (isAdmin(viewer)) return (await prisma.task.count({ where: { id: taskId } })) > 0;
+  const reports = viewer.reports.map((r) => r.id);
+  if (reports.length === 0) return false;
+  return (await prisma.task.count({ where: { id: taskId, ...tasksOfUsersWhere(reports) } })) > 0;
+}
+
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
+  const canEdit = (await prisma.task.count({ where: { id: taskId, ...taskAccessWhere(userId) } })) > 0;
+  if (!canEdit && !(await canConsultTask(userId, taskId))) throw notFound("Tâche");
   const t = await prisma.task.findFirst({
-    where: { id: taskId, ...taskAccessWhere(userId) },
+    where: { id: taskId },
     include: {
       ...TASK_BASE_INCLUDE,
-      assignee: true,
-      supervisor: true,
-      contributors: { include: { member: true } },
+      assignee: { include: MEMBER_INCLUDE },
+      supervisor: { include: MEMBER_INCLUDE },
+      contributors: { include: { member: { include: MEMBER_INCLUDE } } },
       activity: { select: { id: true, name: true } },
       stage: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" } } } },
-      comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true } } } },
+      project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" }, include: MEMBER_INCLUDE } } },
+      comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true, avatarUrl: true } } } },
       workSessions: { orderBy: { date: "asc" }, include: SESSION_INCLUDE },
       nodes: { select: { nodeId: true, node: { select: { id: true, title: true, mapId: true, map: { select: { title: true } } } } } },
     },
   });
   if (!t) throw notFound("Tâche");
   return {
+    canEdit,
     ...toTaskDto(t),
     project: t.project
       ? { id: t.project.id, name: t.project.name, color: t.project.color, ownerId: t.project.ownerId, members: t.project.members.map(toMemberDto) }
@@ -131,6 +169,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
       parentId: c.parentId,
       authorId: c.authorId,
       authorName: c.author.name,
+      authorAvatarUrl: c.author.avatarUrl,
       body: c.body,
       mentions: c.mentions,
       createdAt: c.createdAt.toISOString(),
@@ -350,4 +389,67 @@ export async function unlinkNodeTask(userId: string, nodeId: string, taskId: str
   await checkNode(prisma, userId, nodeId);
   await prisma.mindNodeTask.deleteMany({ where: { nodeId, taskId } });
   return nodeTasksResult(nodeId);
+}
+
+// --- Consultation : équipe (manager) et administration ------------------------------
+
+export type OverviewTask = TaskDto & {
+  projectName: string;
+  projectColor: string | null;
+  stageName: string | null;
+  ownerName: string;
+  assigneeName: string | null;
+  supervisorName: string | null;
+  contributorNames: string[];
+  /** Personnes concernées (comptes) : responsable, superviseur, contributeurs, ou propriétaire si non affectée. */
+  peopleUserIds: string[];
+};
+
+const OVERVIEW_INCLUDE = {
+  ...TASK_BASE_INCLUDE,
+  owner: { select: { id: true, name: true } },
+  project: { select: { name: true, color: true, ownerId: true } },
+  stage: { select: { name: true } },
+  assignee: { select: { name: true, userId: true } },
+  supervisor: { select: { name: true, userId: true } },
+  contributors: { select: { memberId: true, member: { select: { name: true, userId: true } } } },
+} satisfies Prisma.TaskInclude;
+
+type OverviewRow = Prisma.TaskGetPayload<{ include: typeof OVERVIEW_INCLUDE }>;
+
+function toOverview(t: OverviewRow): OverviewTask {
+  const people = new Set<string>();
+  if (t.assignee?.userId) people.add(t.assignee.userId);
+  if (t.supervisor?.userId) people.add(t.supervisor.userId);
+  for (const c of t.contributors) if (c.member.userId) people.add(c.member.userId);
+  if (!t.assignee) people.add(t.project?.ownerId ?? t.ownerId);
+  return {
+    ...toTaskDto(t),
+    projectName: t.project?.name ?? NO_PROJECT_LABEL,
+    projectColor: t.project?.color ?? null,
+    stageName: t.stage?.name ?? null,
+    ownerName: t.owner.name,
+    assigneeName: t.assignee?.name ?? null,
+    supervisorName: t.supervisor?.name ?? null,
+    contributorNames: t.contributors.map((c) => c.member.name),
+    peopleUserIds: [...people],
+  };
+}
+
+/** Tâches de mes N-1 directs (manager), groupées côté client par personne. */
+export async function listTeamTasks(userId: string): Promise<{ members: Array<{ id: string; name: string; email: string; avatarUrl: string | null }>; tasks: OverviewTask[] }> {
+  const members = await prisma.user.findMany({ where: { managerId: userId }, orderBy: { name: "asc" }, select: { id: true, name: true, email: true, avatarUrl: true } });
+  if (members.length === 0) return { members, tasks: [] };
+  const rows = await prisma.task.findMany({
+    where: tasksOfUsersWhere(members.map((m) => m.id)),
+    orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
+    include: OVERVIEW_INCLUDE,
+  });
+  return { members, tasks: rows.map(toOverview) };
+}
+
+/** Toutes les tâches (administration ; le rôle est vérifié par l'appelant). */
+export async function listAllTasksAdmin(): Promise<OverviewTask[]> {
+  const rows = await prisma.task.findMany({ orderBy: [{ updatedAt: "desc" }], take: 5000, include: OVERVIEW_INCLUDE });
+  return rows.map(toOverview);
 }

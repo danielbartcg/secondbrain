@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, X } from "lucide-react";
+import { Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
+import { Avatar } from "@/components/ui";
 import { api } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
 
@@ -15,12 +16,14 @@ const NAV = [
   { href: "/notes", label: "Prise de notes", icon: NotebookPen },
 ];
 
+export type ShellUser = { id: string; name: string; email: string; avatarUrl: string | null; isAdmin: boolean; reportCount: number };
+
 /**
  * Coque applicative responsive : barre latérale fixe sur grand écran,
  * barre supérieure + tiroir sur mobile. Les pages « plein cadre » (éditeur
  * de carte) utilisent toute la hauteur restante.
  */
-export function AppShell({ user, children }: { user: { name: string; email: string }; children: React.ReactNode }) {
+export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -33,7 +36,13 @@ export function AppShell({ user, children }: { user: { name: string; email: stri
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-1">
-      {NAV.map(({ href, label, icon: Icon }) => {
+      {[
+        ...NAV,
+        ...(user.reportCount > 0 ? [{ href: "/team", label: "Mon équipe", icon: UsersRound }] : []),
+        { href: "/preferences", label: "Préférences", icon: Settings },
+        // L'administration est toujours la dernière entrée du menu.
+        ...(user.isAdmin ? [{ href: "/admin", label: "Administration", icon: ShieldCheck }] : []),
+      ].map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
           <Link
@@ -54,8 +63,13 @@ export function AppShell({ user, children }: { user: { name: string; email: stri
 
   const footer = (
     <div className="mt-auto border-t border-line pt-3">
-      <div className="truncate px-3 text-sm font-medium">{user.name}</div>
-      <div className="truncate px-3 text-xs text-muted">{user.email}</div>
+      <Link href="/preferences" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2" title="Préférences">
+        <Avatar id={user.id} name={user.name} src={user.avatarUrl} size={32} />
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{user.name}</span>
+          <span className="block truncate text-xs text-muted">{user.email}</span>
+        </span>
+      </Link>
       <button
         onClick={logout}
         className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-2 hover:bg-surface-2"

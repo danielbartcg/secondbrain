@@ -14,11 +14,29 @@ datasource db {
 // Comptes et sessions
 // ---------------------------------------------------------------------------
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  /// Nom affiché (« Prénom Nom »), recalculé depuis firstName / lastName.
   name         String
+  firstName    String   @default("")
+  lastName     String   @default("")
+  /// Photo de profil (URL /media/…) ; null = silhouette.
+  avatarUrl    String?
+  /// Thème d'affichage : light · dark · sepia · ocean · forest.
+  theme        String   @default("light")
+  /// ADMIN : accès à l'administration (le super administrateur est codé en dur).
+  role         UserRole @default(USER)
+  /// Manager (N+1) : voit en lecture les tâches de ses N-1.
+  managerId    String?
+  manager      User?    @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports      User[]   @relation("UserManager")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -32,6 +50,8 @@ model User {
   taskRanks     TaskRank[]
   notifications Notification[]
   ownedTasks    Task[]
+
+  @@index([managerId])
 }
 
 /// Session opaque : le même jeton sert de cookie `session` (web) et de

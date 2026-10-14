@@ -28,10 +28,35 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password (≥ 8), name, client? }` | `201 { user, token, expiresAt }` |
+| POST | `/auth/register` | `{ email, password (≥ 8), firstName?, lastName?, name?, client? }` (au moins un des trois noms ; `name` seul = prénom) | `201 { user, token, expiresAt }` |
 | POST | `/auth/login` | `{ email, password, client? }` | `{ user, token, expiresAt }` |
 | POST | `/auth/logout` | — | `{ ok: true }` |
-| GET | `/auth/me` | — | `{ user: { id, email, name, createdAt } }` |
+| GET | `/auth/me` | — | `{ user: { id, email, name, firstName, lastName, avatarUrl, theme, role, isAdmin, createdAt } }` |
+| GET | `/me` | — | `{ profile: Profile }` |
+| PATCH | `/me` | `{ firstName?, lastName?, avatarUrl? (/media/… ou null), theme? }` | `{ profile }` ; le nom affiché est recopié dans mes fiches membres |
+| GET | `/me/team` | — | `{ members: { id, name, email, avatarUrl }[], tasks: OverviewTask[] }` (mes N-1 directs) |
+
+```ts
+type Profile = { id; email; name /* « Prénom Nom » */; firstName; lastName; avatarUrl: string | null;
+                 theme: "light"|"dark"|"sepia"|"ocean"|"forest"; role: "USER"|"ADMIN"; isAdmin; isSuperAdmin;
+                 managerId: string | null; reportCount; createdAt };
+type OverviewTask = Task & { projectName; projectColor; stageName; ownerName; assigneeName; supervisorName;
+                             contributorNames: string[]; peopleUserIds: string[] };
+```
+
+## Administration
+
+Réservé aux administrateurs (`role = ADMIN`) et au super administrateur codé
+en dur (`daniel.barral@outlook.com`) : `403 FORBIDDEN` sinon. Lecture seule sur
+les projets et tâches des autres.
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/admin/users` | — | `{ users: { id, email, name, avatarUrl, role, isAdmin, isSuperAdmin, managerId, reportIds, projectCount, createdAt }[] }` |
+| PATCH | `/admin/users/:id` | `{ role?: "USER"\|"ADMIN", managerId?: string \| null }` | `{ users }` ; `400` : super administrateur, son propre rôle, boucle hiérarchique, soi-même comme manager |
+| GET | `/admin/projects` | — | `{ projects: (ProjectSummary & { ownerName; ownerEmail; taskCount })[] }` |
+| GET | `/admin/projects/:id` | — | `{ project: Project & { ownerName } }` |
+| GET | `/admin/tasks` | — | `{ tasks: OverviewTask[] }` (5 000 max, plus récentes d'abord) |
 | GET | `/users/lookup?email=` | — | `{ user: { id, name, email } \| null }` (e-mail exact ; 60 / 15 min) |
 
 ## Tableau de bord
@@ -80,7 +105,7 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 
 ```ts
 type Progress = { percent; total; done };
-type Member   = { id; userId: string | null; name; email; role; color };
+type Member   = { id; userId: string | null; name; email; role; color; avatarUrl: string | null /* photo du compte */ };
 type Task     = { id; ownerId; projectId: string | null; stageId: string | null; activityId: string | null;  // rattachement facultatif
                   assigneeId; supervisorId: string | null; contributorIds: string[]; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
                   progress: 0..100; priority: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; complexity: "LOW"|"MEDIUM"|"HIGH";
@@ -163,7 +188,7 @@ la rouvre.
 ### Fiche tâche et commentaires
 
 ```ts
-type TaskComment = { id; parentId: string | null; authorId; authorName; body; mentions: string[]; createdAt };
+type TaskComment = { id; parentId: string | null; authorId; authorName; authorAvatarUrl: string | null; body; mentions: string[]; createdAt };
 type WorkSession = { id; date: "AAAA-MM-JJ"; userId; userName; mine: boolean; late: boolean /* après l'échéance */ };
 type TaskDetail  = Task & {
   project: { id; name; color; ownerId; members: Member[] };
@@ -172,6 +197,7 @@ type TaskDetail  = Task & {
   workSessions: WorkSession[];    // toutes les sessions de la tâche (tous membres)
   nodes: { id; title; mapId; mapTitle }[];
   notes: string;                  // HTML assaini (« Prise de notes »)
+  canEdit: boolean;               // false en consultation (administrateur, manager d'un N-1) : lecture seule
 };
 ```
 

@@ -61,7 +61,7 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
             const owner = m.userId === project.ownerId;
             return (
               <li key={m.id} className="flex flex-wrap items-center gap-3 py-3">
-                <Avatar id={m.id} name={m.name} color={m.color} size={36} />
+                <Avatar id={m.id} name={m.name} color={m.color} src={m.avatarUrl} size={36} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     {isOwner ? (

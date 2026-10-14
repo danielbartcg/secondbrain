@@ -51,6 +51,36 @@ Docker + Caddy en production.
   (`ProjectMember.userId`). Suppression du projet et gestion de l'équipe :
   propriétaire seulement. Documents et commentaires : supprimables par leur
   auteur ou le propriétaire.
+- **Rôles** (`src/lib/roles.ts`, `src/lib/users.ts`) : `User.role` = `USER` ou
+  `ADMIN` ; le **super administrateur** est codé en dur
+  (`SUPER_ADMIN_EMAIL = daniel.barral@outlook.com`), toujours administrateur,
+  jamais rétrogradable. On ne peut pas retirer son propre rôle d'admin.
+  Routes `/api/v1/admin/**` : `requireAdmin(user)` ; pages `/admin/**` :
+  `notFound()` sinon.
+- **Hiérarchie** : `User.managerId` (N+1) ; boucles refusées. Un manager voit
+  ses N-1 directs (« Mon équipe ») et leurs tâches (`tasksOfUsersWhere`, même
+  définition que `isMyTask`).
+- **Consultation en lecture seule** : un administrateur lit toute tâche et tout
+  projet (pages d'administration) ; un manager lit les tâches de ses N-1.
+  `getTaskDetail` renvoie alors `canEdit: false` : la fiche est désactivée
+  (`<fieldset disabled>` + `pointer-events: none`) et toutes les mutations
+  restent soumises à `taskAccessWhere` (404 sinon). Aucun droit d'écriture
+  n'est accordé par le rôle ou la hiérarchie.
+
+## Profil et thèmes
+
+- Nom affiché = « Prénom Nom » (`User.name`, recalculé par `updateProfile` et
+  recopié dans les fiches `ProjectMember` rattachées au compte). Inscription :
+  prénom + nom (`name` seul reste accepté pour les anciens clients).
+- Photo : téléversée par `POST /uploads` puis `PATCH /me { avatarUrl }`
+  (chemin `/media/…` validé). Sans photo, `Avatar` affiche une **silhouette**
+  sur fond coloré. `MemberDto.avatarUrl` et `TaskComment.authorAvatarUrl`
+  portent la photo des comptes.
+- Thèmes : `light` (défaut), `dark`, `sepia`, `ocean`, `forest` —
+  `User.theme`, posé côté serveur sur `<html data-theme>` (layout racine, pas de
+  flash) ; chaque thème redéfinit les jetons de couleur `--color-*` dans
+  `globals.css` (et les couleurs `prose`). Le thème sombre active aussi le thème
+  sombre amCharts.
 
 ## Cartes mentales
 

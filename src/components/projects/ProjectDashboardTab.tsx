@@ -120,7 +120,7 @@ export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; 
                       </div>
                     </div>
                     {late && <AlertTriangle className="h-4 w-4 shrink-0 text-danger" />}
-                    {m && <Avatar id={m.id} name={m.name} color={m.color} size={24} />}
+                    {m && <Avatar id={m.id} name={m.name} color={m.color} src={m.avatarUrl} size={24} />}
                   </li>
                 );
               })}
@@ -141,7 +141,7 @@ export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; 
                 <li key={t.id}>
                   <Link href={`/tasks/${t.id}`} className="flex items-center gap-3 py-2 text-sm hover:underline">
                     <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                    {m && <Avatar id={m.id} name={m.name} color={m.color} size={22} />}
+                    {m && <Avatar id={m.id} name={m.name} color={m.color} src={m.avatarUrl} size={22} />}
                     <span className="shrink-0 text-xs text-danger">{formatDate(t.dueDate)}</span>
                   </Link>
                 </li>

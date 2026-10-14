@@ -302,7 +302,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
           <span className={`hidden shrink-0 text-xs md:inline ${!done && new Date(task.dueDate) < new Date() ? "text-danger" : "text-muted"}`}>{formatDate(task.dueDate)}</span>
         )}
         {assignee ? (
-          <Avatar id={assignee.id} name={assignee.name} color={assignee.color} size={24} />
+          <Avatar id={assignee.id} name={assignee.name} color={assignee.color} src={assignee.avatarUrl} size={24} />
         ) : (
           <span className="hidden h-6 w-6 shrink-0 rounded-full border border-dashed border-line-strong sm:inline-block" title="Non affectée" />
         )}

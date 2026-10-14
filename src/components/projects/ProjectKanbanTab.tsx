@@ -12,7 +12,7 @@ export function ProjectKanbanTab({ project, run }: { project: ProjectDto; run: R
     const memberById = new Map(project.members.map((m) => [m.id, m]));
     const toCard = (t: ProjectDto["tasks"][number], context: string | null): KanbanTask => {
       const m = t.assigneeId ? memberById.get(t.assigneeId) : null;
-      return { id: t.id, name: t.name, status: t.status, priority: t.priority, dueDate: t.dueDate, progress: t.progress, context, contextColor: project.color, assignee: m ? { id: m.id, name: m.name, color: m.color } : null, commentCount: t.commentCount };
+      return { id: t.id, name: t.name, status: t.status, priority: t.priority, dueDate: t.dueDate, progress: t.progress, context, contextColor: project.color, assignee: m ? { id: m.id, name: m.name, color: m.color, avatarUrl: m.avatarUrl } : null, commentCount: t.commentCount };
     };
     return [
       ...project.tasks.map((t) => toCard(t, "Sans étape")),

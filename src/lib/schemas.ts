@@ -21,12 +21,35 @@ const isoDate = z
 const nullableId = z.string().min(1).nullable().optional();
 
 // --- Authentification --------------------------------------------------------
-export const registerSchema = z.object({
+export const registerSchema = z
+  .object({
   email: z.string().trim().toLowerCase().email("E-mail invalide").max(200),
   password: z.string().min(8, "8 caractères minimum").max(200),
-  name: z.string().trim().min(1, "Nom requis").max(100),
+  firstName: z.string().trim().max(60).optional(),
+  lastName: z.string().trim().max(60).optional(),
+  /** Ancien champ unique (applications existantes) : devient le prénom. */
+  name: z.string().trim().max(100).optional(),
   /** Libellé du client (« iPhone »…) : utile aux applications mobiles. */
   client: z.string().trim().max(100).optional(),
+})
+  .refine((v) => v.firstName || v.lastName || v.name, { message: "Prénom ou nom requis", path: ["firstName"] });
+
+// --- Profil et administration ------------------------------------------------
+export const themeSchema = z.enum(["light", "dark", "sepia", "ocean", "forest"]);
+export const updateProfileSchema = z.object({
+  firstName: z.string().trim().max(60).optional(),
+  lastName: z.string().trim().max(60).optional(),
+  /** Photo téléversée via /uploads (URL /media/…) ; null = silhouette. */
+  avatarUrl: z
+    .string()
+    .regex(/^\/media\/[A-Za-z0-9/_-]+\.(jpg|jpeg|png|gif|webp)$/, "Photo invalide")
+    .nullable()
+    .optional(),
+  theme: themeSchema.optional(),
+});
+export const adminUpdateUserSchema = z.object({
+  role: z.enum(["USER", "ADMIN"]).optional(),
+  managerId: z.string().min(1).nullable().optional(),
 });
 
 export const loginSchema = z.object({

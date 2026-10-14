@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import type { User } from "@prisma/client";
+import { isAdmin } from "@/lib/roles";
 
 /**
  * Authentification e-mail / mot de passe, sessions opaques persistées en base.
@@ -16,10 +17,21 @@ import type { User } from "@prisma/client";
 export const SESSION_COOKIE = "session";
 const SESSION_DURATION_DAYS = 90;
 
-export type PublicUser = Pick<User, "id" | "email" | "name" | "createdAt">;
+export type PublicUser = Pick<User, "id" | "email" | "name" | "firstName" | "lastName" | "avatarUrl" | "theme" | "role" | "createdAt"> & { isAdmin: boolean };
 
 export function toPublicUser(user: User): PublicUser {
-  return { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    avatarUrl: user.avatarUrl,
+    theme: user.theme,
+    role: user.role,
+    isAdmin: isAdmin(user),
+    createdAt: user.createdAt,
+  };
 }
 
 export async function hashPassword(password: string): Promise<string> {

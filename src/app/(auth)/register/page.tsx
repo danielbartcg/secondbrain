@@ -10,7 +10,8 @@ const field =
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +22,7 @@ export default function RegisterPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.post("/auth/register", { name, email, password, client: "Web" });
+      await api.post("/auth/register", { firstName, lastName, email, password, client: "Web" });
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
@@ -40,10 +41,16 @@ export default function RegisterPage() {
           <p className="mt-1 text-sm text-muted">Votre second cerveau commence ici.</p>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-surface p-6 shadow-sm">
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink-2">Prénom ou pseudo</span>
-            <input required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className={field} />
-          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-ink-2">Prénom</span>
+              <input required autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={field} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-ink-2">Nom</span>
+              <input autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} className={field} />
+            </label>
+          </div>
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-ink-2">E-mail</span>
             <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={field} />

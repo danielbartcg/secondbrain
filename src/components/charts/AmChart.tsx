@@ -58,8 +58,12 @@ export function AmChart({
     if (empty) return;
     let disposed = false;
     let instance: Disposable | null = null;
-    Promise.all([import("@amcharts/amcharts4/core"), import("@amcharts/amcharts4/charts")]).then(([am4core, am4charts]) => {
+    const dark = document.documentElement.dataset.theme === "dark";
+    Promise.all([import("@amcharts/amcharts4/core"), import("@amcharts/amcharts4/charts"), dark ? import("@amcharts/amcharts4/themes/dark") : Promise.resolve(null)]).then(([am4core, am4charts, darkTheme]) => {
       if (disposed || !ref.current) return;
+      // Thème « sombre » de l'application : thème sombre amCharts (textes clairs).
+      am4core.unuseAllThemes();
+      if (darkTheme) am4core.useTheme(darkTheme.default);
       instance = build(am4core, am4charts, ref.current);
     });
     return () => {

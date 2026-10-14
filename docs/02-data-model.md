@@ -30,7 +30,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `User` | `id`, `email` (unique), `passwordHash`, `name`, timestamps | propriétaire des cartes et des projets, auteur des commentaires et dépôts |
+| `User` | `id`, `email` (unique), `passwordHash`, `name` (affiché, = « Prénom Nom »), `firstName`, `lastName`, `avatarUrl?`, `theme` (`light` · `dark` · `sepia` · `ocean` · `forest`), `role` (`USER` · `ADMIN`), `managerId?` (N+1, `SetNull`), timestamps | propriétaire des cartes et des projets, auteur des commentaires et dépôts ; `reports` = N-1 directs ; super administrateur codé en dur (e-mail) |
 | `Session` | `id`, `token` (unique, 256 bits), `userId`, `label?`, `expiresAt`, `createdAt` | jeton unique cookie **et** Bearer ; `label` = client (« Web », « iPhone ») |
 
 ## Cartes mentales
@@ -102,6 +102,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `20261012200606_organizer_threads_notifications` | `MindNode.status`, `Task.priority/complexity`, `TaskComment.parentId`, `WorkSession`, `TaskRank`, `Notification` |
 | `20261012201500_notification_task_updated` | renomme la valeur `COMMENT` → `TASK_UPDATED` de `NotificationType` (`ALTER TYPE … RENAME VALUE`) |
 | `20261013120000_node_positions` | `MindNode.x` / `y` (position manuelle) |
+| `20261014150000_users_profile_roles` | `User.firstName` (reprise : ancien `name`), `lastName`, `avatarUrl`, `theme`, `role` (`UserRole`), `managerId` |
 | `20261014090000_task_supervisor_contributors` | `Task.supervisorId`, `TaskContributor` |
 | `20261013150000_object_notes` | `notes` (HTML) sur `Project`, `Stage`, `Activity`, `Task` |
 | `20261013080000_orphan_tasks_node_links` | `Task.ownerId` / `projectId` (reprise : projet déduit de l'étape, propriétaire du projet), `Task.stageId` nullable, `MindNodeTask` |

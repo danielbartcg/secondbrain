@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { getCurrentUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: { default: "Second Brain", template: "%s · Second Brain" },
@@ -14,9 +15,14 @@ export const viewport: Viewport = {
   themeColor: "#f6f5f2",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+const THEMES = ["light", "dark", "sepia", "ocean", "forest"];
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Thème préféré de l'utilisateur connecté (Préférences) ; clair par défaut.
+  const user = await getCurrentUser().catch(() => null);
+  const theme = user && THEMES.includes(user.theme) ? user.theme : "light";
   return (
-    <html lang="fr" className="h-full">
+    <html lang="fr" className="h-full" data-theme={theme}>
       <body className="min-h-full">{children}</body>
     </html>
   );
