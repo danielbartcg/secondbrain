@@ -226,6 +226,38 @@ const dayDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date au format AAAA-MM-
 export const createWorkSessionSchema = z.object({ date: dayDate });
 export const orderMyTasksSchema = z.object({ taskIds: z.array(z.string().min(1)).max(2_000) });
 
+// --- Synchronisation hors ligne ---------------------------------------------------
+export const SYNC_ENTITIES = [
+  "MindMap",
+  "MindNode",
+  "MindNodeTask",
+  "Project",
+  "Stage",
+  "Activity",
+  "Task",
+  "TaskContributor",
+  "WorkSession",
+  "TaskComment",
+] as const;
+export const syncPushSchema = z.object({
+  ops: z
+    .array(
+      z.object({
+        /** Identifiant unique de l'opération (idempotence). */
+        opId: z.string().regex(/^[A-Za-z0-9_-]{8,80}$/),
+        entity: z.enum(SYNC_ENTITIES),
+        /** Identifiant de l'objet ; composite « a:b » pour MindNodeTask (nodeId:taskId) et TaskContributor (taskId:memberId). */
+        id: z.string().min(1).max(120),
+        op: z.enum(["create", "update", "delete"]),
+        fields: z.record(z.unknown()).optional(),
+        /** Version (seq) connue de chaque champ modifié ; "*" = version de l'objet entier. */
+        base: z.record(z.number().int().min(0)).optional(),
+      }),
+    )
+    .max(500),
+});
+export type SyncOpInput = z.infer<typeof syncPushSchema>["ops"][number];
+
 // --- Prise de notes ------------------------------------------------------------
 export const updateNotesSchema = z.object({ notes: z.string().max(500_000) });
 

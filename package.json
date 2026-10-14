@@ -20,7 +20,8 @@
     "prod:logs": "tsx ops/logs.ts",
     "prod:exec": "tsx ops/exec.ts",
     "prod:env": "tsx ops/env.ts",
-    "prod:backup": "tsx ops/backup.ts"
+    "prod:backup": "tsx ops/backup.ts",
+    "test:sync": "tsx scripts/sync-e2e.ts"
   },
   "dependencies": {
     "@amcharts/amcharts4": "^4.10.40",

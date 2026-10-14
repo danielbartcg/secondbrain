@@ -90,6 +90,19 @@ logo amCharts reste affiché (licence gratuite).
 - Vérifier `npm run typecheck` puis `npm run build` avant de conclure ; tester
   dans le navigateur (dev server) les parcours touchés.
 
+## Synchronisation hors ligne
+
+- Les écritures sont journalisées par le déclencheur PostgreSQL `sb_sync_log`
+  (`SyncLog`) : rien à faire dans les fonctions métier. **Nouvelle table
+  synchronisée** ⇒ `CREATE TRIGGER` + portée dans la fonction (migration) +
+  `src/lib/sync.ts` (fetch, visibilité, opérations) + docs 05.
+- Changement incompatible des données synchronisées ou du protocole ⇒
+  incrémenter `SYNC_PROTOCOL_VERSION` (les applications demanderont une mise
+  à jour) — jamais de compatibilité ascendante.
+- Toute évolution touchant tâches, projets ou cartes : relancer
+  `npm run test:sync` (serveur de dev lancé) en plus des vérifications
+  habituelles. Le site web reste strictement en ligne.
+
 ## Production
 
 - Config dans `.env.deploy` (gitignoré) ; mode d'emploi dans

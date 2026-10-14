@@ -182,7 +182,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
 
 // --- Commentaires ------------------------------------------------------------
 
-export async function addComment(userId: string, taskId: string, body: string, parentId?: string | null): Promise<TaskDetailDto> {
+export async function addComment(userId: string, taskId: string, body: string, parentId?: string | null, id?: string): Promise<TaskDetailDto> {
   const t = await prisma.task.findFirst({
     where: { id: taskId, ...taskAccessWhere(userId) },
     select: { id: true, name: true, projectId: true, assignee: { select: { userId: true } } },
@@ -200,7 +200,7 @@ export async function addComment(userId: string, taskId: string, body: string, p
 
   await prisma.$transaction(async (tx) => {
     const comment = await tx.taskComment.create({
-      data: { taskId, authorId: userId, parentId: parent?.id ?? null, body: resolved.body, mentions: resolved.mentions },
+      data: { id, taskId, authorId: userId, parentId: parent?.id ?? null, body: resolved.body, mentions: resolved.mentions },
     });
     await tx.task.update({ where: { id: taskId }, data: { updatedAt: new Date() } });
 
@@ -246,13 +246,13 @@ async function sessionsOf(userId: string, taskId: string, dueDate: Date | null):
 }
 
 /** Planifie une session de travail (idempotent pour un même jour). */
-export async function addWorkSession(userId: string, taskId: string, date: string): Promise<WorkSessionDto[]> {
+export async function addWorkSession(userId: string, taskId: string, date: string, id?: string): Promise<WorkSessionDto[]> {
   const t = await accessibleTask(userId, taskId);
   const day = new Date(`${date}T00:00:00.000Z`);
   if (Number.isNaN(day.getTime())) throw badRequest("Date invalide.");
   await prisma.workSession.upsert({
     where: { taskId_userId_date: { taskId, userId, date: day } },
-    create: { taskId, userId, date: day },
+    create: { id, taskId, userId, date: day },
     update: {},
   });
   return sessionsOf(userId, taskId, t.dueDate);

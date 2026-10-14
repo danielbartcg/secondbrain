@@ -233,6 +233,49 @@ type NodeTasks = { nodeId; tasks: (Task & { projectName; projectColor })[]; task
 `MindNode` expose aussi `taskCount` et `openTaskCount`. Créer une tâche depuis
 un nœud : `POST /tasks { name, nodeId }`.
 
+## Synchronisation hors ligne (applications)
+
+Réservé aux applications desktop / iPhone (le web reste en ligne). En-tête
+**`X-Sync-Protocol: 1`** obligatoire : sinon `426 UPGRADE_REQUIRED` (« mettez
+l'application à jour »), `details.serverVersion` donne la version attendue.
+
+| Méthode | Route | Réponse |
+| --- | --- | --- |
+| GET | `/sync/pull` (sans curseur) | **instantané** du périmètre : `{ protocol, cursor, hasMore: false, snapshot: true, scope, changes }` |
+| GET | `/sync/pull?cursor=N[&limit=1000]` | changements depuis `N` (pages ; reboucler tant que `hasMore`) |
+| GET | `/sync/pull?project=<id>` ou `?map=<id>` | instantané d'un élément entré dans le périmètre (`cursor: null` : ne pas toucher au curseur) |
+| POST | `/sync/push` | `{ ops: Op[] }` (500 max, rejouées dans l'ordre) → `{ protocol, results: OpResult[] }` |
+
+```ts
+type Change  = { entity; id; op: "upsert" | "delete"; data?: Row /* colonnes, dates ISO */; seqs?: { [champ]: seq; "*": seq } };
+type Scope   = { projectIds: string[]; mapIds: string[] };  // purger localement ce qui n'y figure plus
+type Op      = { opId /* unique, [A-Za-z0-9_-]{8,80} */; entity; id /* généré par le client, cuid */;
+                 op: "create" | "update" | "delete"; fields?: Row; base?: { [champ]: seq; "*"?: seq } };
+type OpResult = { opId; status: "applied" | "conflict" | "rejected"; conflicts?: { field; serverValue }[];
+                  deleted?: boolean; error?: { code; message }; data?: Row; seqs?: { … } /* état après l'opération */ };
+```
+
+Entités : `MindMap` (create `{ title, rootId? }`), `MindNode` (`{ mapId, parentId, title, order?, notes, color, collapsed, status, x, y }` ;
+changer `parentId` = déplacer), `MindNodeTask` (id `nodeId:taskId`, create / delete), `Project`, `Stage`, `Activity`, `Task`
+(mêmes champs que l'API REST, plus `notes`), `TaskContributor` (id `taskId:memberId`, create / delete), `WorkSession`
+(`{ taskId, date }`), `TaskComment` (`{ taskId, body, parentId? }`, pas de modification). Lecture seule :
+`ProjectMember`, `Deliverable`, `Document` (sans chemin de stockage), `Folder`.
+
+Règles :
+- **Mise à jour** : chaque champ est appliqué si sa version serveur ≤ `base[champ]`
+  (à défaut `base["*"]`) ; sinon il est refusé (`conflicts`, valeur serveur
+  conservée) et les autres champs passent. Objet supprimé ou devenu
+  inaccessible : `conflict` + `deleted: true` (la suppression gagne).
+- **Suppression** : refusée (`conflict`) si l'objet a été modifié après
+  `base["*"]` ; un objet déjà supprimé → `applied`.
+- **Création** : identifiant fourni par le client ; s'il existe déjà et vous
+  appartient → `applied` (renvoi), sinon `409 ID_TAKEN` (`rejected`).
+- `rejected` : validation, accès refusé, objet parent introuvable — le client
+  abandonne l'opération et se resynchronise.
+- Le client **fusionne** ses opérations en attente sur un même objet (création
+  + modifications = une création) et utilise les `seqs` renvoyées comme
+  nouvelles versions de base.
+
 ## Prise de notes
 
 ```ts

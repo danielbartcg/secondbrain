@@ -92,6 +92,15 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 - Toute mutation d'un projet ou d'une carte passe par une transaction qui
   verrouille la ligne parente (`SELECT … FOR UPDATE`).
 
+## Synchronisation (applications hors ligne)
+
+| Modèle | Champs | Notes |
+| --- | --- | --- |
+| `SyncLog` | `seq` (BIGSERIAL), `entity`, `entityId`, `field?`, `op` (`UPSERT` · `DELETE`), `projectId?`, `mapId?`, `ownerId?`, `at` | alimenté **uniquement par le déclencheur** `sb_sync_log` sur MindMap, MindNode, MindNodeTask, Project, ProjectMember, Stage, Activity, Task, TaskContributor, WorkSession, TaskComment, Deliverable, Document, Folder. `field` null = création / suppression ; `updatedAt` / `createdAt` ignorés. `entityId` composite « nodeId:taskId » (MindNodeTask) et « taskId:memberId » (TaskContributor). Une tâche qui change de projet produit une suppression pour l'ancienne portée. |
+| `AppliedOp` | `userId`, `opId` (clé composite), `result` (JSON), `createdAt` | opérations déjà rejouées : un renvoi renvoie le même résultat sans réappliquer |
+
+Version d'un champ = `max(seq)` de ses lignes `UPSERT` (ou de la création).
+
 ## Migrations
 
 `prisma/migrations/` est versionné :
@@ -105,6 +114,7 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 | `20261012200606_organizer_threads_notifications` | `MindNode.status`, `Task.priority/complexity`, `TaskComment.parentId`, `WorkSession`, `TaskRank`, `Notification` |
 | `20261012201500_notification_task_updated` | renomme la valeur `COMMENT` → `TASK_UPDATED` de `NotificationType` (`ALTER TYPE … RENAME VALUE`) |
 | `20261013120000_node_positions` | `MindNode.x` / `y` (position manuelle) |
+| `20261014220000_sync_log` | `SyncLog`, `AppliedOp`, fonction `sb_sync_log()` et déclencheurs sur les 14 tables synchronisées |
 | `20261014190000_task_closed_at` | `Task.closedAt` (reprise : `updatedAt` des tâches déjà clôturées) |
 | `20261014150000_users_profile_roles` | `User.firstName` (reprise : ancien `name`), `lastName`, `avatarUrl`, `theme`, `role` (`UserRole`), `managerId` |
 | `20261014090000_task_supervisor_contributors` | `Task.supervisorId`, `TaskContributor` |

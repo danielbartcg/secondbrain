@@ -554,10 +554,11 @@ export async function getProject(userId: string, projectId: string): Promise<Pro
   return toProjectDto(p);
 }
 
-export async function createProject(userId: string, input: CreateProjectInput): Promise<ProjectDto> {
+export async function createProject(userId: string, input: CreateProjectInput, id?: string): Promise<ProjectDto> {
   const owner = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, email: true } });
   const p = await prisma.project.create({
     data: {
+      id,
       ownerId: userId,
       name: input.name,
       description: input.description,
@@ -640,12 +641,13 @@ export async function lookupUserByEmail(email: string): Promise<{ id: string; na
 
 // --- Étapes ------------------------------------------------------------------
 
-export async function createStage(userId: string, projectId: string, input: CreateStageInput): Promise<ProjectDto> {
+export async function createStage(userId: string, projectId: string, input: CreateStageInput, id?: string): Promise<ProjectDto> {
   await requireProjectAccess(userId, projectId);
   return mutateProject(projectId, async (tx) => {
     const count = await tx.stage.count({ where: { projectId } });
     await tx.stage.create({
       data: {
+        id,
         projectId,
         name: input.name,
         description: input.description,
@@ -678,11 +680,11 @@ export async function deleteStage(userId: string, stageId: string): Promise<Proj
 
 // --- Activités ---------------------------------------------------------------
 
-export async function createActivity(userId: string, stageId: string, input: CreateActivityInput): Promise<ProjectDto> {
+export async function createActivity(userId: string, stageId: string, input: CreateActivityInput, id?: string): Promise<ProjectDto> {
   const projectId = await stageProjectId(userId, stageId);
   return mutateProject(projectId, async (tx) => {
     const count = await tx.activity.count({ where: { stageId } });
-    await tx.activity.create({ data: { stageId, name: input.name, description: input.description, order: count } });
+    await tx.activity.create({ data: { id, stageId, name: input.name, description: input.description, order: count } });
   });
 }
 
@@ -819,6 +821,7 @@ export async function createTask(
   userId: string,
   target: { projectId?: string | null; stageId?: string | null; activityId?: string | null; nodeId?: string | null },
   input: CreateTaskInput,
+  id?: string,
 ): Promise<TaskMutation> {
   const att = await resolveAttachment(userId, target);
   await checkNode(prisma, userId, target.nodeId);
@@ -833,6 +836,7 @@ export async function createTask(
     const count = await tx.task.count({ where: siblingWhere({ ...att, ownerId: userId }) });
     const created = await tx.task.create({
       data: {
+        id,
         ownerId: userId,
         projectId: att.projectId,
         stageId: att.stageId,

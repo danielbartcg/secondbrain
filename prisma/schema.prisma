@@ -382,6 +382,47 @@ enum NotificationType {
   ASSIGNED
 }
 
+// ---------------------------------------------------------------------------
+// Synchronisation hors ligne (applications desktop / iPhone) — docs/05-offline-sync.md
+// ---------------------------------------------------------------------------
+
+enum SyncOp {
+  UPSERT
+  DELETE
+}
+
+/// Journal des écritures, alimenté par un déclencheur PostgreSQL sur chaque
+/// table synchronisée : une ligne par création, par champ modifié ou par
+/// suppression. `seq` sert de curseur de synchro et de version par champ.
+model SyncLog {
+  seq       BigInt   @id @default(autoincrement())
+  entity    String
+  entityId  String
+  /// Champ modifié ; null = création ou suppression (tous les champs).
+  field     String?
+  op        SyncOp
+  /// Portée de diffusion : projet, carte, ou propriétaire (tâches sans projet, cartes).
+  projectId String?
+  mapId     String?
+  ownerId   String?
+  at        DateTime @default(now())
+
+  @@index([projectId, seq])
+  @@index([mapId, seq])
+  @@index([ownerId, seq])
+  @@index([entityId])
+}
+
+/// Opérations déjà rejouées (idempotence des renvois après coupure réseau).
+model AppliedOp {
+  opId      String
+  userId    String
+  result    Json
+  createdAt DateTime @default(now())
+
+  @@id([userId, opId])
+}
+
 /// Notification in-app : destinataire, type, texte, lien ; `readAt` null = non lue.
 model Notification {
   id        String           @id @default(cuid())

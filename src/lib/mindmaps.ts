@@ -124,9 +124,10 @@ export async function listMindMaps(userId: string): Promise<MindMapSummary[]> {
   }));
 }
 
-export async function createMindMap(userId: string, title: string): Promise<MindMapDto> {
+/** `ids` : identifiants générés hors ligne par une application (carte et nœud racine). */
+export async function createMindMap(userId: string, title: string, ids: { id?: string; rootId?: string } = {}): Promise<MindMapDto> {
   const map = await prisma.mindMap.create({
-    data: { ownerId: userId, title, nodes: { create: { title, order: 0 } } },
+    data: { id: ids.id, ownerId: userId, title, nodes: { create: { id: ids.rootId, title, order: 0 } } },
   });
   return getMindMap(userId, map.id);
 }
@@ -187,12 +188,12 @@ async function resequence(tx: Tx, mapId: string, parentId: string, insertId?: st
   }
 }
 
-export async function createNode(userId: string, mapId: string, input: CreateNodeInput): Promise<MindNodeDto> {
+export async function createNode(userId: string, mapId: string, input: CreateNodeInput, id?: string): Promise<MindNodeDto> {
   const node = await mutateMap(userId, mapId, async (tx) => {
     const parent = await tx.mindNode.findFirst({ where: { id: input.parentId, mapId } });
     if (!parent) throw notFound("Nœud parent");
     const created = await tx.mindNode.create({
-      data: { mapId, parentId: parent.id, title: input.title, order: 1_000_000 },
+      data: { id, mapId, parentId: parent.id, title: input.title, order: 1_000_000 },
     });
     await resequence(tx, mapId, parent.id, created.id, input.index);
     if (parent.collapsed) await tx.mindNode.update({ where: { id: parent.id }, data: { collapsed: false } });

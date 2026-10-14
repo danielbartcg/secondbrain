@@ -84,6 +84,7 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:migrate` / `db:deploy` / `db:studio` | Prisma |
 | `npm run user:create -- --email=… --password=… [--name=…]` | créer / réinitialiser un utilisateur |
+| `npm run test:sync` | tests de bout en bout de la synchro hors ligne (serveur de dev lancé, `BASE_URL` facultatif) |
 | `npm run prod:setup` | provisionner / mettre à jour l'infrastructure serveur (idempotent) |
 | `npm run prod:deploy` | mettre en production (push préalable obligatoire) |
 | `npm run prod:status` / `prod:logs` / `prod:exec` / `prod:env` / `prod:backup` / `prod:restore` | exploitation |

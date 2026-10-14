@@ -165,6 +165,24 @@ Les notes sont **visibles sur l'objet** : aperçu `NotesPreview` (projet, fiche
 tâche), icône carnet sur les étapes / activités / tâches du Plan, lien
 « Ouvrir dans Prise de notes » dans le panneau de carte ; DTO `hasNotes`.
 
+## Synchronisation hors ligne (`src/lib/sync.ts`)
+
+Socle serveur des applications desktop / iPhone (détail : docs/05-offline-sync.md).
+- Un **déclencheur PostgreSQL** (`sb_sync_log`) journalise dans `SyncLog` toute
+  écriture sur les tables synchronisées (création, champ modifié, suppression),
+  quelle que soit son origine (web ou application). Aucune fonction métier n'a
+  à s'en soucier ; une nouvelle table synchronisée = un `CREATE TRIGGER` +
+  sa portée dans la fonction.
+- `GET /sync/pull` : instantané puis changements depuis un curseur, avec la
+  version (`seq`) de chaque champ ; `POST /sync/push` : rejoue les
+  opérations hors ligne **par les fonctions métier existantes**, conflit par
+  champ (le serveur gagne), idempotence par `opId` (`AppliedOp`).
+- Version de protocole `SYNC_PROTOCOL_VERSION` (en-tête `X-Sync-Protocol`) :
+  une application incompatible reçoit 426 et doit se mettre à jour. Pas de
+  compatibilité ascendante à maintenir.
+- Le **site web reste strictement en ligne** (décision du 14/10/2026).
+- Tests de bout en bout : `npm run test:sync` (`scripts/sync-e2e.ts`).
+
 ## Recherche globale (`src/lib/search.ts`)
 
 `GET /api/v1/search?q=` : projets (nom, description), tâches (nom,
