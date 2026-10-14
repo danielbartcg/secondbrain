@@ -279,6 +279,9 @@ model Task {
   order        Int            @default(0)
   startDate    DateTime?
   dueDate      DateTime?
+  /// Date de clôture : posée automatiquement au passage à CLOSED, effacée à la
+  /// réouverture, modifiable tant que la tâche est clôturée.
+  closedAt     DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 

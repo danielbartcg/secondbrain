@@ -110,7 +110,7 @@ type Member   = { id; userId: string | null; name; email; role; color; avatarUrl
 type Task     = { id; ownerId; projectId: string | null; stageId: string | null; activityId: string | null;  // rattachement facultatif
                   assigneeId; supervisorId: string | null; contributorIds: string[]; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
                   progress: 0..100; priority: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; complexity: "LOW"|"MEDIUM"|"HIGH";
-                  order; startDate; dueDate; commentCount; hasNotes; nodeIds: string[] /* nœuds de carte */; updatedAt };
+                  order; startDate; dueDate; closedAt: string | null /* date de clôture */; commentCount; hasNotes; nodeIds: string[] /* nœuds de carte */; updatedAt };
 type TaskMutation = { project: Project | null; task: Task | null };   // réponse des mutations de tâche
 type Activity = { id; stageId; name; description; hasNotes; order; progress; tasks: Task[] };
 type Stage    = { id; projectId; name; description; hasNotes; order; startDate; dueDate; progress; activities: Activity[]; tasks: Task[] };
@@ -159,7 +159,7 @@ complet recalculé** (`{ project }`).
 | POST | `/stages/:id/tasks` | tâche directement sous l'étape → `201 TaskMutation` |
 | POST | `/activities/:id/tasks` | tâche sous une activité → `201 TaskMutation` |
 | GET | `/tasks/:id` | → `{ task: TaskDetail }` (voir fiche tâche) |
-| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, supervisorId?, contributorIds?, order?, projectId?, stageId?, activityId? }` → `TaskMutation` |
+| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, closedAt?, assigneeId?, supervisorId?, contributorIds?, order?, projectId?, stageId?, activityId? }` → `TaskMutation` |
 | DELETE | `/tasks/:id` | → `{ project: Project \| null, task: null }` |
 
 Corps d'une tâche à la création : `{ name, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, supervisorId?, contributorIds? }`
@@ -182,7 +182,9 @@ celles de mes projets **et** mes tâches sans projet.
 Cohérence statut / avancement : `progress = 100 ⇒ DONE` (une tâche `CLOSED`
 le reste), `progress = 0 ⇒ TODO`, sinon `IN_PROGRESS` ; `status = DONE` ou
 `CLOSED ⇒ 100`, `TODO ⇒ 0`, `IN_PROGRESS` sans avancement cohérent ⇒ 50.
-`CLOSED` (clôture) est une action **manuelle** : `PATCH { status: "CLOSED" }`,
+`closedAt` est posée automatiquement au passage à `CLOSED`, effacée à la
+réouverture, et modifiable (`PATCH { closedAt }`) uniquement sur une tâche
+clôturée. `CLOSED` (clôture) est une action **manuelle** : `PATCH { status: "CLOSED" }`,
 proposée dans l'interface une fois la tâche terminée ; `PATCH { status: "DONE" }`
 la rouvre.
 

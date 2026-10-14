@@ -154,6 +154,8 @@ export const createFreeTaskSchema = createTaskSchema.extend({
 });
 export const updateTaskSchema = createTaskSchema.partial().extend({
   order: z.number().int().min(0).optional(),
+  /** Date de clôture (modifiable seulement sur une tâche clôturée). */
+  closedAt: isoDate,
   /**
    * Rattachement : activityId (id) ⇒ étape et projet déduits ; stageId (id) ⇒
    * projet déduit ; projectId (id) ⇒ sans étape ; null détache le niveau et

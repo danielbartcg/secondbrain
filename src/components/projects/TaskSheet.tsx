@@ -172,67 +172,92 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
             <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-36 accent-brand-600" title="Avancement" />
           </div>
 
-          {/* Champs */}
-          <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field icon={<Flag className="h-4 w-4" />} label="Priorité">
-              <select value={task.priority} onChange={(e) => patch({ priority: e.target.value })} className={`${selectClass} w-full`}>
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABEL[p]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field icon={<Gauge className="h-4 w-4" />} label="Complexité">
-              <select value={task.complexity} onChange={(e) => patch({ complexity: e.target.value })} className={`${selectClass} w-full`}>
-                {COMPLEXITIES.map((c) => (
-                  <option key={c} value={c}>
-                    {COMPLEXITY_LABEL[c]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field icon={<User className="h-4 w-4" />} label="Responsable">
-              <div className="flex items-center gap-2">
-                {task.assignee && <Avatar id={task.assignee.id} name={task.assignee.name} color={task.assignee.color} src={task.assignee.avatarUrl} size={26} />}
-                <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} disabled={!task.project} title={task.project ? undefined : "Rattachez la tâche à un projet pour l'affecter à un membre"} className={`${selectClass} min-w-0 flex-1 disabled:opacity-50`}>
-                  <option value="">— Personne —</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                      {m.role ? ` (${m.role})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </Field>
-            <Field icon={<Eye className="h-4 w-4" />} label="Superviseur">
-              <div className="flex items-center gap-2">
-                {task.supervisor && <Avatar id={task.supervisor.id} name={task.supervisor.name} color={task.supervisor.color} src={task.supervisor.avatarUrl} size={26} />}
-                <select value={task.supervisorId ?? ""} onChange={(e) => patch({ supervisorId: e.target.value || null })} disabled={!task.project} title={task.project ? "Une seule personne supervise la tâche" : "Rattachez la tâche à un projet"} className={`${selectClass} min-w-0 flex-1 disabled:opacity-50`}>
-                  <option value="">— Personne —</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                      {m.role ? ` (${m.role})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </Field>
-            <Field icon={<Users className="h-4 w-4" />} label="Contributeurs">
-              <MemberMultiSelect members={members} value={task.contributorIds} disabled={!task.project} onChange={(contributorIds) => patch({ contributorIds })} />
-            </Field>
-            <Field icon={<CalendarDays className="h-4 w-4" />} label="Début">
-              <input type="date" value={toInputDate(task.startDate)} onChange={(e) => patch({ startDate: e.target.value || null })} className={`${selectClass} w-full`} />
-            </Field>
-            <Field icon={<CalendarDays className="h-4 w-4" />} label="Échéance">
-              <input type="date" value={toInputDate(task.dueDate)} onChange={(e) => patch({ dueDate: e.target.value || null })} className={`${selectClass} w-full ${late ? "border-red-300 text-danger" : ""}`} />
-            </Field>
-          </dl>
-
           {/* Rattachement : projet › étape › activité, tous facultatifs */}
           <AttachmentBlock task={task} patch={patch} />
+
+          {/* Qualification */}
+          <Block icon={<Gauge className="h-4 w-4" />} title="Qualification">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SubField icon={<Flag className="h-3.5 w-3.5" />} label="Priorité">
+                <select value={task.priority} onChange={(e) => patch({ priority: e.target.value })} className={`${selectClass} w-full`}>
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {PRIORITY_LABEL[p]}
+                    </option>
+                  ))}
+                </select>
+              </SubField>
+              <SubField icon={<Gauge className="h-3.5 w-3.5" />} label="Complexité">
+                <select value={task.complexity} onChange={(e) => patch({ complexity: e.target.value })} className={`${selectClass} w-full`}>
+                  {COMPLEXITIES.map((c) => (
+                    <option key={c} value={c}>
+                      {COMPLEXITY_LABEL[c]}
+                    </option>
+                  ))}
+                </select>
+              </SubField>
+            </div>
+          </Block>
+
+          {/* Acteurs */}
+          <Block icon={<Users className="h-4 w-4" />} title="Acteurs" hint={task.project ? undefined : "rattachez la tâche à un projet pour désigner des personnes"}>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SubField icon={<User className="h-3.5 w-3.5" />} label="Responsable">
+                <div className="flex items-center gap-2">
+                  {task.assignee && <Avatar id={task.assignee.id} name={task.assignee.name} color={task.assignee.color} src={task.assignee.avatarUrl} size={26} />}
+                  <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} disabled={!task.project} className={`${selectClass} min-w-0 flex-1 disabled:opacity-50`}>
+                    <option value="">— Personne —</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                        {m.role ? ` (${m.role})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </SubField>
+              <SubField icon={<Eye className="h-3.5 w-3.5" />} label="Superviseur">
+                <div className="flex items-center gap-2">
+                  {task.supervisor && <Avatar id={task.supervisor.id} name={task.supervisor.name} color={task.supervisor.color} src={task.supervisor.avatarUrl} size={26} />}
+                  <select value={task.supervisorId ?? ""} onChange={(e) => patch({ supervisorId: e.target.value || null })} disabled={!task.project} title="Une seule personne supervise la tâche" className={`${selectClass} min-w-0 flex-1 disabled:opacity-50`}>
+                    <option value="">— Personne —</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                        {m.role ? ` (${m.role})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </SubField>
+              <SubField icon={<Users className="h-3.5 w-3.5" />} label="Contributeurs">
+                <MemberMultiSelect members={members} value={task.contributorIds} disabled={!task.project} onChange={(contributorIds) => patch({ contributorIds })} />
+              </SubField>
+            </div>
+          </Block>
+
+          {/* Calendrier */}
+          <Block icon={<CalendarDays className="h-4 w-4" />} title="Calendrier">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SubField icon={<CalendarDays className="h-3.5 w-3.5" />} label="Début">
+                <input type="date" value={toInputDate(task.startDate)} onChange={(e) => patch({ startDate: e.target.value || null })} className={`${selectClass} w-full`} />
+              </SubField>
+              <SubField icon={<CalendarDays className="h-3.5 w-3.5" />} label="Échéance">
+                <input type="date" value={toInputDate(task.dueDate)} onChange={(e) => patch({ dueDate: e.target.value || null })} className={`${selectClass} w-full ${late ? "border-red-300 text-danger" : ""}`} />
+              </SubField>
+              <SubField icon={<Lock className="h-3.5 w-3.5" />} label="Date de clôture">
+                <input
+                  type="date"
+                  value={toInputDate(task.closedAt)}
+                  disabled={task.status !== "CLOSED"}
+                  onChange={(e) => e.target.value && patch({ closedAt: e.target.value })}
+                  title={task.status === "CLOSED" ? "Modifiable tant que la tâche est clôturée" : "Se remplit automatiquement à la clôture"}
+                  className={`${selectClass} w-full disabled:opacity-50`}
+                />
+                {task.status !== "CLOSED" && <p className="mt-1 text-[11px] text-faint">Remplie automatiquement à la clôture.</p>}
+              </SubField>
+            </div>
+          </Block>
 
           {/* Nœuds de carte mentale */}
           <NodeLinks task={task} onChange={(nodes) => setTask((t) => ({ ...t, nodes }))} />
@@ -326,13 +351,27 @@ function MemberMultiSelect({ members, value, disabled, onChange }: { members: Me
   );
 }
 
-function Field({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+/** Bloc titré de la fiche (Qualification, Acteurs, Calendrier), même style que « Rattachement ». */
+function Block({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-line bg-surface-2/60 p-3">
-      <dt className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+    <section className="mt-4 rounded-xl border border-line bg-surface-2/60 p-3">
+      <h2 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
+        {icon} {title}
+        {hint && <span className="font-normal text-faint">— {hint}</span>}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/** Champ d'un bloc : petit libellé au-dessus de la valeur. */
+function SubField({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <span className="mb-1 flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted">
         {icon} {label}
-      </dt>
-      <dd>{children}</dd>
+      </span>
+      {children}
     </div>
   );
 }
@@ -369,7 +408,7 @@ function AttachmentBlock({ task, patch }: { task: TaskDetailDto; patch: (data: R
   const activities = stages.find((s) => s.id === task.stageId)?.activities ?? [];
 
   return (
-    <div className="mt-4 rounded-xl border border-line bg-surface-2/60 p-3">
+    <div className="mt-6 rounded-xl border border-line bg-surface-2/60 p-3">
       <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
         <FolderKanban className="h-4 w-4" /> Rattachement
         <span className="font-normal text-faint">— projet, étape et activité sont facultatifs</span>

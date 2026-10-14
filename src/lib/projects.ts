@@ -73,6 +73,8 @@ export type TaskDto = {
   order: number;
   startDate: string | null;
   dueDate: string | null;
+  /** Date de clôture (null si la tâche n'est pas clôturée). */
+  closedAt: string | null;
   commentCount: number;
   /** Des notes riches existent (« Prise de notes »). */
   hasNotes: boolean;
@@ -231,6 +233,7 @@ export function toTaskDto(t: TaskRow): TaskDto {
     order: t.order,
     startDate: iso(t.startDate),
     dueDate: iso(t.dueDate),
+    closedAt: iso(t.closedAt),
     commentCount: t._count.comments,
     hasNotes: hasHtmlContent(t.notes),
     nodeIds: t.nodes.map((n) => n.nodeId),
@@ -846,6 +849,7 @@ export async function createTask(
         order: count,
         startDate: toDate(input.startDate) ?? null,
         dueDate: toDate(input.dueDate) ?? null,
+        closedAt: status === "CLOSED" ? new Date() : null,
         ...(target.nodeId ? { nodes: { create: { nodeId: target.nodeId } } } : {}),
       },
     });
@@ -886,6 +890,20 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
 
   return mutateTask(att.projectId, async (tx) => {
     const { status, progress } = reconcile(t, input);
+
+    // Date de clôture : automatique à la clôture, effacée à la réouverture,
+    // modifiable seulement tant que la tâche est clôturée.
+    let closedAt: Date | null | undefined = undefined;
+    if (status === "CLOSED" && t.status !== "CLOSED") closedAt = new Date();
+    if (status !== "CLOSED" && t.status === "CLOSED") closedAt = null;
+    if (input.closedAt !== undefined) {
+      if (status !== "CLOSED") {
+        if (input.closedAt !== null) throw badRequest("La date de clôture n'est modifiable que sur une tâche clôturée.");
+      } else {
+        if (input.closedAt === null) throw badRequest("Une tâche clôturée garde une date de clôture.");
+        closedAt = toDate(input.closedAt);
+      }
+    }
     // Changement de projet : l'affectation (membre de l'ancien projet) tombe, sauf nouvelle affectation valide.
     let assigneeId = input.assigneeId;
     let supervisorId = input.supervisorId;
@@ -921,6 +939,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
         supervisorId,
         startDate: toDate(input.startDate),
         dueDate: toDate(input.dueDate),
+        closedAt,
         projectId: att.projectId,
         stageId: att.stageId,
         activityId: att.activityId,
@@ -942,6 +961,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     if (input.complexity !== undefined && input.complexity !== t.complexity) changes.push("complexité");
     if (input.startDate !== undefined && iso(toDate(input.startDate)) !== iso(t.startDate)) changes.push("date de début");
     if (input.dueDate !== undefined && iso(toDate(input.dueDate)) !== iso(t.dueDate)) changes.push("échéance");
+    if (input.closedAt !== undefined && status === "CLOSED" && t.status === "CLOSED" && iso(toDate(input.closedAt)) !== iso(t.closedAt)) changes.push("date de clôture");
     if (moved) changes.push("rattachement");
     const supervisorChanged = updated.supervisorId !== t.supervisorId;
     if (supervisorChanged) changes.push("superviseur");

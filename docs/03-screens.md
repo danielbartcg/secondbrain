@@ -113,10 +113,15 @@ réponse recalculée, recharge en cas d'erreur.
   bandeau « Consultation en lecture seule », tout le contenu désactivé.
 - Carte principale : badges (statut, priorité, retard, nb commentaires),
   titre éditable, boutons de statut À faire / En cours / Terminée + curseur
-  d'avancement, champs **Priorité / Complexité / Responsable / Superviseur**
-  (un seul membre) **/ Contributeurs** (sélection multiple à cases à cocher,
-  avatars) — désactivés sans projet — **/ Début / Échéance**, description,
-  suppression.
+  d'avancement, puis des blocs titrés, dans cet ordre :
+  1. **Rattachement** : Projet › Étape › Activité (voir ci-dessous) ;
+  2. **Qualification** : Priorité, Complexité ;
+  3. **Acteurs** : Responsable, Superviseur (un seul membre), Contributeurs
+     (sélection multiple à cases à cocher, avatars) — désactivés sans projet ;
+  4. **Calendrier** : Début, Échéance, **Date de clôture** (remplie
+     automatiquement à la clôture, modifiable tant que la tâche est clôturée,
+     grisée sinon) ;
+  puis description et suppression.
 - **Rattachement** : trois sélecteurs **Projet › Étape › Activité**, tous
   facultatifs (« Sans projet », « Sans étape », « Sans activité ») ; les listes
   se chargent à la demande ; changer de projet efface étape, activité et
