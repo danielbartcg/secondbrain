@@ -1,8 +1,11 @@
 # Hors ligne, synchronisation et applications natives
 
 > Statut (15/10/2026) : **phase 1** (socle serveur), **phase 2** (client hors
-> ligne) et **phase 3** (application desktop Windows) **implémentées et
-> testées** ; **phase 4** (iPhone) à faire — nécessite un Mac ou une CI macOS.
+> ligne) et **phase 3** (application desktop Windows) **implémentées, testées
+> et en production** (installateur sur `/app`) ; **phase 4** (iPhone)
+> **préparée** (projet Capacitor, workflow TestFlight) mais **jamais compilée
+> ni testée** : il faut un compte Apple Developer et le premier passage du
+> workflow macOS (docs/10-deployment.md).
 >
 > Décisions prises avec Daniel le 14/10/2026 : interface web embarquée dans
 > une coque native ; **modification** hors ligne ; conflits **par champ**, le
@@ -112,19 +115,38 @@ Page **Conflits** : votre valeur et la valeur retenue, « Copier ma valeur ».
   fichier servi par `/downloads/<fichier>`. Le bouton « Mise à jour
   nécessaire » de l'application y mène.
 
-## 6. Phasage et vérifications
+## 6. Application iPhone (`capacitor.config.ts`, `native/ios`)
+
+- Même interface que le desktop (build Vite `native/electron/renderer`),
+  servie par Capacitor depuis `capacitor://localhost` ; données locales dans
+  l'IndexedDB de la WebView de l'application (non purgée comme celle de Safari).
+- Requêtes serveur : `fetch` ordinaire, détourné vers la pile réseau native
+  par **CapacitorHttp** (pas de CORS, aucun changement côté serveur).
+- Images des notes : l'API locale renvoie des URL `/media/…` **absolues**
+  (serveur) et les remet en relatif à l'enregistrement
+  (`native/src/local/platform.ts`) ; elles se chargent en ligne, et hors
+  ligne seulement si la WebView les a gardées en cache.
+- Zones sûres (encoche) : la WebView reste dans la zone sûre, fond assorti.
+- `Info.plist` : nom « Second Brain », région `fr`, pas de chiffrement non
+  exempté (évite la question d'export à chaque build). Icône générée par
+  `node native/scripts/make-icon.mjs --ios`.
+- Build et envoi TestFlight : docs/10-deployment.md.
+- Non disponible sur iPhone pour l'instant : téléchargement des documents de
+  projet (lien vers une route authentifiée par cookie).
+
+## 7. Phasage et vérifications
 
 | Phase | Contenu | Vérification |
 | --- | --- | --- |
 | 1. Socle serveur ✅ | `SyncLog`, `AppliedOp`, `pull` / `push`, conflits par champ, protocole | `npm run test:sync` (39 vérifications) |
-| 2. Client hors ligne ✅ | magasin, API locale, moteur, conflits, interface Vite | `npm run test:native` (38 vérifications : hors ligne réel, conflits, images, parité locale = serveur, persistance) + parcours dans le navigateur (`npm run native:dev`) |
+| 2. Client hors ligne ✅ | magasin, API locale, moteur, conflits, interface Vite | `npm run test:native` (41 vérifications : hors ligne réel, conflits, images, parité locale = serveur, persistance) + parcours dans le navigateur (`npm run native:dev`) |
 | 3. Desktop ✅ | coque Electron, installateur, publication | `npm run desktop:smoke` (connexion réelle facultative : `SB_SMOKE_SERVER/EMAIL/PASSWORD`), test de l'exécutable empaqueté |
-| 4. iPhone | coque Capacitor (même `native/`), `CapacitorHttp` pour les requêtes, médias absolus, ergonomie tactile, TestFlight | à faire sur Mac / CI macOS (compte Apple Developer) |
+| 4. iPhone (préparé) | coque Capacitor (même `native/`), `CapacitorHttp`, médias absolus, icône, workflow TestFlight | réécriture des médias couverte par `test:native` ; compilation et essai sur iPhone **à faire** (workflow macOS + compte Apple) |
 
 Pour l'App Store plus tard : suppression du compte depuis l'application et
 politique de confidentialité obligatoires.
 
-## 7. Décisions complémentaires (14/10/2026)
+## 8. Décisions complémentaires (14/10/2026)
 
 1. **Suppression contre modification** : une suppression faite sur le serveur
    l'emporte sur une modification hors ligne ; une suppression faite hors
@@ -137,7 +159,7 @@ politique de confidentialité obligatoires.
    (version de protocole), elle demande une mise à jour ; aucune
    compatibilité ascendante.
 
-## 8. Limites connues
+## 9. Limites connues
 
 - Hors ligne, les photos des autres membres et les noms d'auteurs de
   commentaires qui ne sont pas membres d'un projet commun ne sont pas connus

@@ -4,7 +4,8 @@ import { SYNC_PROTOCOL } from "./types";
  * Accès au serveur depuis l'application native. Trois transports :
  *  - coque Electron : le processus principal fait la requête (pas de CORS) ;
  *  - navigateur en développement (Vite) : relais /__remote vers le serveur ;
- *  - tests Node : `fetch` natif sur l'URL absolue.
+ *  - iPhone (Capacitor) et tests Node : `fetch` sur l'URL absolue (sur iPhone,
+ *    CapacitorHttp le fait passer par la pile réseau native : pas de CORS).
  * Toutes les requêtes portent le jeton Bearer et la version de protocole.
  */
 

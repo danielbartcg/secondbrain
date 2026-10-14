@@ -14,6 +14,7 @@ import "fake-indexeddb/auto";
 import { randomBytes } from "node:crypto";
 import { createRuntime, type Runtime } from "../src/local/runtime";
 import { setForcedOffline } from "../src/local/remote";
+import { mediaRewriter } from "../src/local/platform";
 
 const BASE = (process.env.BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 let passes = 0;
@@ -195,7 +196,15 @@ async function main() {
   const again = await createRuntime({ dbName: name, installTransport: false });
   check("données, curseur et conflits rechargés", again.store.get("Task", offId)?.name === "Créée hors ligne" && again.store.meta.cursor === rt.store.meta.cursor && again.store.conflicts.length === rt.store.conflicts.length);
 
-  console.log("\n10. Nettoyage");
+  console.log("\n10. iPhone : URL des médias");
+  const media = mediaRewriter(() => "https://sb.example");
+  const dto = { notes: '<p><img src="/media/2026/a.png"></p>', avatarUrl: "/media/u/b.webp", other: "texte /media/ inchangé" };
+  const abs = media.toAbsolute(dto);
+  check("affichage : médias absolus", abs.notes.includes('src="https://sb.example/media/2026/a.png"') && abs.avatarUrl === "https://sb.example/media/u/b.webp" && abs.other === dto.other, abs);
+  check("enregistrement : médias relatifs (aller-retour exact)", JSON.stringify(media.toRelative(abs)) === JSON.stringify(dto));
+  check("sans serveur : inchangé", mediaRewriter(() => "").toAbsolute(dto) === dto);
+
+  console.log("\n11. Nettoyage");
   await http("DELETE", `/projects/${pid}`, A.token);
   await http("DELETE", `/projects/${bProj.data.project.id}`, B.token);
   await http("DELETE", `/mindmaps/${mapId}`, A.token);

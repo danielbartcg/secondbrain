@@ -28,10 +28,14 @@
     "desktop:dev": "node native/scripts/desktop-dev.mjs",
     "desktop:build": "npm run native:build && electron-builder --config native/electron-builder.yml --win",
     "desktop:smoke": "npm run native:build && electron native/electron --smoke-test",
-    "desktop:publish": "tsx ops/desktop-publish.ts"
+    "desktop:publish": "tsx ops/desktop-publish.ts",
+    "ios:sync": "npm run native:build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@amcharts/amcharts4": "^4.10.40",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "@prisma/client": "6.19.3",
     "@tiptap/extension-image": "^2.27.3",
     "@tiptap/extension-link": "2.27.3",
@@ -52,6 +56,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@tailwindcss/postcss": "4.3.3",
     "@tailwindcss/typography": "0.5.20",
     "@tailwindcss/vite": "4.3.3",

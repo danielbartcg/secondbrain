@@ -117,7 +117,11 @@ logo amCharts reste affiché (licence gratuite).
   test:native` (serveur de dev lancé) en plus de `test:sync` ; pour la coque,
   `npm run desktop:smoke`.
 - Nouvelle version de l'application : incrémenter `native/electron/package.json`,
-  `npm run desktop:build` puis `npm run desktop:publish`.
+  `npm run desktop:build` puis `npm run desktop:publish`. iPhone : workflow
+  GitHub « iOS TestFlight » (manuel) ; `native/ios` est le projet Xcode généré
+  par Capacitor (`capacitor.config.ts`), ne modifier que `Info.plist` et l'icône.
+- Images de notes : toujours stockées en `/media/…` relatif ; sur iPhone, le
+  transport les rend absolues à l'affichage (`native/src/local/platform.ts`).
 
 ## Production
 

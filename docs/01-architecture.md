@@ -178,7 +178,10 @@ fonctionne hors ligne sur les projets et cartes (docs/05-offline-sync.md) :
   (`project-model.ts`, `task-model.ts`), réexportés par `projects.ts` et
   `tasks.ts` : **toute règle métier pure se modifie là**, une fois pour les
   deux côtés ;
-- `AppShell` accepte un `statusSlot` (état de synchro dans l'application).
+- `AppShell` accepte un `statusSlot` (état de synchro dans l'application) ;
+- même client pour l'iPhone via **Capacitor** (`capacitor.config.ts`, projet
+  Xcode `native/ios`, build par GitHub Actions macOS) ; `platform()` distingue
+  desktop, iOS et navigateur.
 
 ## Synchronisation hors ligne (`src/lib/sync.ts`)
 

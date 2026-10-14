@@ -2,6 +2,7 @@ import { setApiTransport } from "@/lib/client";
 import { createLocalApi } from "./api";
 import { LocalDb } from "./db";
 import { LocalModel } from "./model";
+import { mediaRewriter, platform } from "./platform";
 import { NetworkError, remote, setRemoteSession } from "./remote";
 import { Store } from "./store";
 import { SyncEngine } from "./sync";
@@ -26,7 +27,14 @@ export async function createRuntime(opts: { factory?: IDBFactory; dbName?: strin
   const model = new LocalModel(store);
   const sync = new SyncEngine(store);
   const handle = createLocalApi(store, sync, model);
-  if (opts.installTransport !== false) setApiTransport(handle);
+  if (opts.installTransport !== false) {
+    if (platform() === "ios") {
+      // iPhone : URL de médias absolues à l'affichage, relatives à l'enregistrement.
+      const media = mediaRewriter(() => store.meta.serverUrl);
+      const isPlain = (b: unknown) => b !== null && typeof b === "object" && (Array.isArray(b) || Object.getPrototypeOf(b) === Object.prototype);
+      setApiTransport(async (method, path, body) => media.toAbsolute(await handle(method, path, isPlain(body) ? media.toRelative(body) : body)));
+    } else setApiTransport(handle);
+  }
   setRemoteSession({ serverUrl: store.meta.serverUrl, token: store.meta.token });
   if (typeof window !== "undefined" && window.secondBrain && store.meta.token) await window.secondBrain.setSession({ serverUrl: store.meta.serverUrl, token: store.meta.token });
 

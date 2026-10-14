@@ -78,6 +78,25 @@ npm run prod:env -- --set ALLOW_REGISTRATION=false --restart
 - `tools` (profil `tools`) : étage `builder` de la même image, pour les
   migrations et les scripts. Même uid 1001 que l'application.
 
+## Application iPhone (TestFlight)
+
+Pas de build iOS possible sous Windows : le workflow GitHub Actions
+`.github/workflows/ios-testflight.yml` (déclenchement manuel, runner macOS)
+construit l'interface, synchronise `native/ios`, archive et envoie le build à
+App Store Connect (numéro de build = numéro d'exécution du workflow).
+
+Préalables, une fois :
+1. compte Apple Developer (99 €/an) ; créer l'app `fr.danielbartcg.secondbrain`
+   dans App Store Connect ;
+2. clé d'API App Store Connect (rôle Admin, pour la signature automatique) ;
+3. secrets du dépôt : `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`,
+   `ASC_KEY_P8_BASE64` (`base64 -w0 AuthKey_XXXX.p8`) ;
+4. dans TestFlight, ajouter les testeurs (internes : immédiat ; externes :
+   revue bêta d'Apple).
+
+Sur un Mac, alternative manuelle : `npm ci`, `npm run ios:sync`,
+`npm run ios:open`, puis Product → Archive dans Xcode.
+
 ## Sauvegardes
 
 `ops/server/backup.sh` (cron quotidien 3h25 + `prod:backup`) produit
