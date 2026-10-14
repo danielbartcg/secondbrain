@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Check, Loader2, Palette, Trash2, UserRound } from "lucide-react";
-import { api, uploadImage } from "@/lib/client";
+import { Camera, Check, KeyRound, Loader2, Palette, Trash2, UserRound } from "lucide-react";
+import { ApiClientError, api, uploadImage } from "@/lib/client";
 import type { ProfileDto, Theme } from "@/lib/users";
 import { Avatar, Button, PageHeader, inputClass } from "@/components/ui";
 
@@ -142,6 +142,9 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
         </div>
       </section>
 
+      {/* Mot de passe */}
+      <PasswordSection />
+
       {/* Thème */}
       <section className="mt-6 rounded-2xl border border-line bg-surface p-5">
         <h2 className="flex items-center gap-2 font-semibold">
@@ -173,5 +176,72 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
         </div>
       </section>
     </div>
+  );
+}
+
+/** Changement de mot de passe : actuel, nouveau, confirmation. Les autres sessions sont fermées. */
+function PasswordSection() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const mismatch = confirm.length > 0 && confirm !== next;
+  const tooShort = next.length > 0 && next.length < 8;
+  const same = next.length > 0 && next === current;
+  const canSubmit = current.length > 0 && next.length >= 8 && confirm === next && !same && !busy;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.post("/me/password", { currentPassword: current, newPassword: next, confirmPassword: confirm });
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+      setMessage({ ok: true, text: "Mot de passe modifié. Vos autres sessions (autres appareils) ont été déconnectées." });
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiClientError ? err.message : "Modification impossible." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-2xl border border-line bg-surface p-5">
+      <h2 className="flex items-center gap-2 font-semibold">
+        <KeyRound className="h-5 w-5 text-brand-600" /> Mot de passe
+      </h2>
+      <form onSubmit={submit} className="mt-4 space-y-3">
+        <label className="block sm:max-w-sm">
+          <span className="mb-1 block text-xs font-medium text-muted">Mot de passe actuel</span>
+          <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} className={`${inputClass} w-full`} />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted">Nouveau mot de passe (8 caractères min.)</span>
+            <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className={`${inputClass} w-full ${tooShort || same ? "border-red-300" : ""}`} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted">Confirmation</span>
+            <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={`${inputClass} w-full ${mismatch ? "border-red-300" : ""}`} />
+          </label>
+        </div>
+        {(tooShort || mismatch || same) && (
+          <p className="text-xs text-danger">
+            {tooShort ? "Le nouveau mot de passe doit faire au moins 8 caractères. " : ""}
+            {same ? "Le nouveau mot de passe doit être différent de l'actuel. " : ""}
+            {mismatch ? "La confirmation ne correspond pas." : ""}
+          </p>
+        )}
+        {message && <p className={`rounded-lg px-3 py-2 text-sm ${message.ok ? "bg-green-50 text-green-700" : "bg-red-50 text-danger"}`}>{message.text}</p>}
+        <Button type="submit" disabled={!canSubmit}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} Changer le mot de passe
+        </Button>
+      </form>
+    </section>
   );
 }

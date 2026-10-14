@@ -172,6 +172,9 @@ panneau ouvert, nœuds fermés affichés si nécessaire.
 
 - **Identité** : photo (ajouter / changer / retirer ; sinon silhouette),
   prénom, nom, aperçu du nom affiché, identifiant et rôle.
+- **Mot de passe** : actuel, nouveau (8 caractères min., différent de
+  l'actuel), confirmation, contrôles en direct ; après changement, les autres
+  sessions (autres appareils) sont déconnectées.
 - **Thème** : 5 vignettes (Clair, Sombre, Sépia, Océan, Forêt), appliqué
   immédiatement et mémorisé sur le compte.
 

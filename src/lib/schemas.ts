@@ -36,6 +36,16 @@ export const registerSchema = z
 
 // --- Profil et administration ------------------------------------------------
 export const themeSchema = z.enum(["light", "dark", "sepia", "ocean", "forest"]);
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Mot de passe actuel requis").max(200),
+    newPassword: z.string().min(8, "8 caractères minimum").max(200),
+    /** Confirmation (facultative côté API, vérifiée si fournie). */
+    confirmPassword: z.string().max(200).optional(),
+  })
+  .refine((v) => v.confirmPassword === undefined || v.confirmPassword === v.newPassword, { message: "La confirmation ne correspond pas", path: ["confirmPassword"] })
+  .refine((v) => v.newPassword !== v.currentPassword, { message: "Le nouveau mot de passe doit être différent de l'actuel", path: ["newPassword"] });
+
 export const updateProfileSchema = z.object({
   firstName: z.string().trim().max(60).optional(),
   lastName: z.string().trim().max(60).optional(),

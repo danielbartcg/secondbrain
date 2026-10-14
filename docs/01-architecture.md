@@ -43,7 +43,10 @@ Docker + Caddy en production.
 - Anti-CSRF : les requêtes mutantes authentifiées par cookie doivent porter
   un `Origin` égal à l'hôte (`src/lib/api.ts`).
 - Rate limiting en mémoire : `login`/`register` (10 / 15 min / IP),
-  `users/lookup` (60 / 15 min / utilisateur).
+  `users/lookup` (60 / 15 min / utilisateur), changement de mot de passe
+  (10 / 15 min / compte).
+- Changement de mot de passe (`POST /me/password`) : vérification de l'actuel,
+  bcrypt coût 12, suppression des autres sessions du compte.
 - `ALLOW_REGISTRATION=false` ferme l'inscription publique ; les comptes se
   créent alors avec `scripts/create-user.ts`.
 - **Projets partagés** : un projet est visible et modifiable par son

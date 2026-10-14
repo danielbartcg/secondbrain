@@ -34,6 +34,7 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 | GET | `/auth/me` | — | `{ user: { id, email, name, firstName, lastName, avatarUrl, theme, role, isAdmin, createdAt } }` |
 | GET | `/me` | — | `{ profile: Profile }` |
 | PATCH | `/me` | `{ firstName?, lastName?, avatarUrl? (/media/… ou null), theme? }` | `{ profile }` ; le nom affiché est recopié dans mes fiches membres |
+| POST | `/me/password` | `{ currentPassword, newPassword (≥ 8, ≠ actuel), confirmPassword? }` | `{ ok: true }` ; `400 INVALID_CREDENTIALS` si l'actuel est faux ; `429` après 10 essais / 15 min ; ferme les **autres** sessions |
 | GET | `/me/team` | — | `{ members: { id, name, email, avatarUrl }[], tasks: OverviewTask[] }` (mes N-1 directs) |
 
 ```ts
