@@ -233,6 +233,15 @@ type NodeTasks = { nodeId; tasks: (Task & { projectName; projectColor })[]; task
 `MindNode` expose aussi `taskCount` et `openTaskCount`. Créer une tâche depuis
 un nœud : `POST /tasks { name, nodeId }`.
 
+## Téléchargements (public)
+
+| Méthode | Route | Réponse |
+| --- | --- | --- |
+| GET | `/downloads/SecondBrain-Setup-<x.y.z>.exe` (hors `/api`) | installateur Windows publié (`attachment`) ; nom strictement contrôlé, 404 sinon |
+
+La page publique `/app` lit `DATA_DIR/downloads/latest.json` (`version`,
+`file`, `size`, `sha256`, `publishedAt`).
+
 ## Synchronisation hors ligne (applications)
 
 Réservé aux applications desktop / iPhone (le web reste en ligne). En-tête

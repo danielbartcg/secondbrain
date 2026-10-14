@@ -1,108 +1,128 @@
-# Hors ligne et synchronisation (conception — non implémenté)
+# Hors ligne, synchronisation et applications natives
 
-> Statut : **phase 1 (socle serveur) implémentée** — `src/lib/sync.ts`,
-> `/api/v1/sync/*`, migration `20261014220000_sync_log`, tests
-> `npm run test:sync`. Phases 2 à 4 en cours. Décisions prises avec Daniel le
-> 14/10/2026 :
-> interface web embarquée dans une coque native ; **modification** hors ligne ;
-> conflits **par champ**, le serveur gagne et l'utilisateur est notifié ;
-> périmètre hors ligne = **projets et cartes mentales** (pas les fichiers des
-> documents) ; diffusion **TestFlight** et installateur direct, stores plus
-> tard ; ordre : **socle de synchro**, puis **desktop**, puis **iPhone**.
+> Statut (15/10/2026) : **phase 1** (socle serveur), **phase 2** (client hors
+> ligne) et **phase 3** (application desktop Windows) **implémentées et
+> testées** ; **phase 4** (iPhone) à faire — nécessite un Mac ou une CI macOS.
+>
+> Décisions prises avec Daniel le 14/10/2026 : interface web embarquée dans
+> une coque native ; **modification** hors ligne ; conflits **par champ**, le
+> serveur gagne et l'utilisateur est notifié ; périmètre hors ligne =
+> **projets et cartes mentales** (pas les fichiers des documents) ; diffusion
+> **TestFlight** et installateur direct, stores plus tard ; ordre : socle de
+> synchro, puis desktop, puis iPhone ; **le site web reste strictement en
+> ligne** ; **simplicité** : une application incompatible demande une mise à
+> jour, aucune compatibilité ascendante.
 
-## 1. Architecture cible
+## 1. Architecture
 
 ```
-┌──────────── Application (desktop Tauri / iPhone Capacitor) ────────────┐
-│  Interface React existante (cartes, Kanban, fiche tâche, éditeur riche) │
-│        │ lit / écrit                                                    │
-│  Magasin local (SQLite)  ◄──── pull : changements depuis le curseur ──┐ │
-│        │                                                              │ │
-│  File d'attente (outbox) ───── push : mutations + versions de base ──►│ │
-└───────────────────────────────────────────────────────────────────────┼─┘
-                                                                        ▼
+┌──────── Application native (Electron aujourd'hui ; Capacitor/iPhone demain) ───────┐
+│  Composants React du site (src/components) — empaquetés par Vite (native/)          │
+│     │  api.get/post… (src/lib/client.ts, transport remplacé)                        │
+│     ▼                                                                               │
+│  API locale (native/src/local/api.ts) : mêmes routes /api/v1, même forme de DTO     │
+│     │ lit / écrit                         │ hors périmètre : relais serveur (en ligne)│
+│     ▼                                     ▼                                         │
+│  Magasin local (IndexedDB, store.ts)   File d'attente (outbox) ── push ──┐          │
+│     ▲                                                                    │          │
+│     └──────────── pull : changements depuis le curseur ◄───────────────┐ │          │
+└────────────────────────────────────────────────────────────────────────┼─┼──────────┘
+                                                                         │ ▼
                          API /api/v1/sync (Next.js) ─► logique métier src/lib ─► PostgreSQL
+                                   ▲ journal SyncLog alimenté par déclencheur
 ```
 
-- Le web reste tel quel (en ligne, rendu serveur). Les applications utilisent
-  un **build « app »** du même code, rendu côté client, qui lit un magasin
-  local au lieu de l'API. Une interface `DataSource` unique masque la
-  différence (en ligne : API ; app : SQLite + synchro).
-- Toutes les écritures synchronisées repassent par les **fonctions métier
-  existantes** (`updateTask`, `reconcile`, contrôles d'accès, notifications) :
-  une seule source de règles.
+- **Une seule interface** : les écrans de l'application sont les composants du
+  site. `next/link` et `next/navigation` sont remplacés par un petit routeur
+  (`native/src/shims`), `api` (client.ts) reçoit un **transport** qui sert les
+  routes depuis la base locale (`setApiTransport`, nul sur le site).
+- **Mêmes DTO et mêmes règles** : les constructeurs de DTO et les règles pures
+  (`toProjectDto`, `toTaskDto`, `reconcile`, `isMyTask`, `resolveMentions`…)
+  sont dans `src/lib/shared/` et servent au serveur comme au client. L'API
+  locale applique les mêmes règles que le serveur pour un affichage immédiat ;
+  le serveur rejoue l'opération et reste l'autorité.
+- Choix **Electron plutôt que Tauri** : pas de chaîne Rust sur le poste, et
+  IndexedDB est durable dans Chromium (profil applicatif). Le même client
+  tournera dans la WebView de Capacitor (IndexedDB d'application iOS).
 
 ## 2. Périmètre synchronisé
 
-| Synchronisé hors ligne (lecture + écriture) | Lecture seule hors ligne | Non disponible hors ligne |
+| Synchronisé hors ligne (lecture + écriture) | Lecture seule hors ligne | Relayé au serveur (en ligne seulement) |
 | --- | --- | --- |
-| Cartes, nœuds (titre, notes, statut, couleur, position, repli), liens nœud ↔ tâche ; projets, étapes, activités, tâches (tous champs, contributeurs, sessions de travail), notes des objets, commentaires (ajout) | Équipe des projets, livrables, liste des documents | Contenu des fichiers documents, notifications, administration, recherche serveur (remplacée par une recherche locale) |
+| Cartes, nœuds (titre, notes, statut, couleur, position, repli), liens nœud ↔ tâche ; projets, étapes, activités, tâches (tous champs, contributeurs, sessions de travail), notes des objets, commentaires (ajout / suppression) | Équipe des projets, livrables, liste des documents et dossiers | Gestion d'équipe, livrables, documents (dépôt, téléchargement), profil et mot de passe, notifications (liste vide hors ligne), administration, « Mon équipe » |
 
-## 3. Côté serveur
+Recherche, tableau de bord, « Mes tâches » et arborescence « Prise de notes »
+sont calculés localement. L'ordre personnel « Mes tâches » est gardé
+localement et envoyé au serveur quand c'est possible.
 
-**Schéma** (tables synchronisées : `MindMap`, `MindNode`, `MindNodeTask`,
-`Project`, `Stage`, `Activity`, `Task`, `TaskContributor`, `WorkSession`,
-`TaskComment`) :
-- `SyncLog` : journal global à numéro croissant (`seq` BIGSERIAL) — une ligne
-  par champ modifié ou par suppression : `seq, entity, entityId, field | null,
-  op (UPSERT | DELETE), projectId?, mapId?, at, userId`. Sert de **curseur** de
-  synchro et de **version par champ** (le `seq` de la dernière écriture d'un
-  champ).
-- `AppliedOp` : identifiants des opérations déjà appliquées (idempotence des
-  renvois après coupure).
-- Création hors ligne : les identifiants (cuid) sont **générés par le client**
-  et acceptés par l'API.
+## 3. Côté serveur (`src/lib/sync.ts`)
 
-**Points d'API**
-- `GET /sync/pull?cursor=N` → enregistrements modifiés et suppressions depuis
-  `N`, filtrés par les accès de l'utilisateur, par pages ; nouveau curseur.
-  Premier lancement : instantané complet du périmètre.
-- `POST /sync/push { ops: [{ opId, entity, id, op, fields: {champ: valeur},
-  base: {champ: seq} }] }` → pour chaque opération : `applied`, ou
-  `conflict` avec les champs refusés et leurs valeurs serveur.
+- **Journal `SyncLog`** alimenté par le déclencheur PostgreSQL `sb_sync_log`
+  sur les 14 tables (création, champ modifié, suppression ; portée projet /
+  carte / propriétaire). Toute écriture — web ou application — est journalisée
+  sans code applicatif. `seq` = curseur de synchro et **version par champ**.
+- **`GET /sync/pull`** : instantané complet (premier lancement), puis
+  changements depuis un curseur (pages), avec les versions des champs ;
+  instantané ciblé `?project=` / `?map=` pour un élément entrant dans le
+  périmètre ; `scope` = projets et cartes visibles (le client purge le reste).
+- **`POST /sync/push`** : rejoue les opérations **par les fonctions métier
+  existantes** (accès, invariants, notifications), identifiants fournis par le
+  client, idempotence par `opId` (`AppliedOp`), état serveur et versions
+  renvoyés après chaque opération.
+- **Conflits** : un champ n'est appliqué que si personne ne l'a modifié depuis
+  la version connue du client ; sinon valeur serveur conservée et renvoyée. Une
+  suppression est refusée si l'objet a changé depuis ; une modification d'un
+  objet supprimé sur le serveur est refusée (la suppression gagne).
+- **Version de protocole** `SYNC_PROTOCOL_VERSION` (en-tête
+  `X-Sync-Protocol`) : sinon **426** et l'application demande une mise à jour.
 
-**Règle de conflit (par champ)** : un champ est appliqué si son `seq` serveur
-est égal au `base` envoyé (personne ne l'a modifié depuis la lecture) ; sinon
-la valeur serveur est conservée et le champ est renvoyé en conflit. Les autres
-champs de la même opération sont appliqués normalement.
+## 4. Côté application (`native/src/local`)
 
-## 4. Côté application
+| Module | Rôle |
+| --- | --- |
+| `db.ts` | IndexedDB : `rows` (« Entité\|id » → données + versions), `outbox`, `conflicts`, `meta` |
+| `store.ts` | tables en mémoire, écritures regroupées en base, suppressions en cascade (comme les clés étrangères) |
+| `model.ts` | reconstruit les DTO serveur depuis la base locale (constructeurs partagés) : projet, tâche, fiche, cartes, mes tâches, tableau de bord, notes, recherche |
+| `api.ts` | routes `/api/v1` locales : écritures avec les règles du serveur + opération en file ; relais serveur hors périmètre (503 `OFFLINE` hors ligne) ; images collées hors ligne gardées en `data:` |
+| `sync.ts` | moteur : file **fusionnée** (création + modifications = une création ; création + suppression = rien), versions capturées à la modification, push par lots, conflits → historique, mise à niveau des versions des opérations suivantes, pull, purge du périmètre, téléversement des images `data:` avant envoi, 426 → « mise à jour nécessaire », 401 → reconnexion |
+| `remote.ts` | transport serveur : pont Electron (processus principal), relais Vite en développement, `fetch` en test |
+| `runtime.ts` | assemblage, connexion (`signIn`) et déconnexion |
 
-- **Magasin local SQLite** : mêmes tables que le serveur + `seq` par champ +
-  curseur de synchro + outbox.
-- **Outbox** : chaque action enregistre une opération (avec `opId` et les
-  `base` des champs touchés) et met à jour le magasin local immédiatement
-  (interface instantanée, comme aujourd'hui).
-- **Synchro** : au démarrage, au retour du réseau, toutes les 30 s en ligne et
-  après chaque écriture : push de l'outbox dans l'ordre, puis pull.
-- **Conflits** : notification « Les valeurs les plus récentes proviennent du
-  serveur : vos modifications sur … ont été écrasées », avec le détail
-  (objet, champ, votre valeur, valeur retenue).
-- **Images collées hors ligne** : conservées localement, téléversées à la
-  reconnexion, puis l'URL `blob:` est remplacée dans les notes.
-- **Authentification** : jeton Bearer (déjà supporté) rangé dans le trousseau
-  du système ; l'application reste utilisable hors ligne avec le jeton en
-  cache ; reconnexion demandée seulement en ligne si le jeton a expiré.
+Synchronisation : au démarrage, au retour du réseau / du focus, toutes les
+30 s et 1,5 s après une écriture. Écrans : bandeau « Des modifications sont
+arrivées du serveur — Actualiser » sur les écrans d'édition, actualisation
+automatique des listes. Encart d'état au-dessus du menu (en ligne / hors ligne,
+modifications en attente, dernière synchro, conflits, bascule « Hors ligne »).
+Page **Conflits** : votre valeur et la valeur retenue, « Copier ma valeur ».
 
-## 5. Coques natives
+## 5. Application desktop (`native/electron`)
 
-- **Desktop** : Tauri 2 (Windows, macOS), SQLite via le plugin officiel,
-  installateur direct, mises à jour automatiques.
-- **iPhone** : Capacitor (WebView + SQLite natif), distribution TestFlight
-  (compte Apple Developer, 99 $/an). Ajustements tactiles : carte mentale
-  (pincer-zoomer, appui long pour déplacer), Kanban (menu « … » déjà présent).
-- **Pour les stores plus tard** : l'App Store impose notamment la
-  **suppression du compte depuis l'application** et une politique de
-  confidentialité ; à prévoir avant la publication.
+- `main.cjs` : protocole `app://local/` (interface depuis `renderer/`, repli
+  `index.html`), relais `/media/…` avec **cache disque** (images visibles hors
+  ligne) et `/api/v1/documents/…` avec le jeton ; requêtes serveur par IPC
+  (`sb:fetch`, `sb:upload`) ; liens externes dans le navigateur ; instance
+  unique ; menu français ; mode `--smoke-test` (profil jetable).
+- `preload.cjs` : `window.secondBrain` (contexte isolé, bac à sable).
+- Empaquetage `electron-builder` (`native/electron-builder.yml`) : NSIS
+  Windows x64, sans aucune dépendance npm embarquée (≈ 110 Mo, essentiellement
+  le moteur Electron). Non signé : avertissement SmartScreen à la première
+  installation.
+- Distribution : `npm run desktop:publish` dépose l'installateur et
+  `latest.json` dans `data/downloads` du serveur ; page publique **`/app`**,
+  fichier servi par `/downloads/<fichier>`. Le bouton « Mise à jour
+  nécessaire » de l'application y mène.
 
-## 6. Phasage
+## 6. Phasage et vérifications
 
 | Phase | Contenu | Vérification |
 | --- | --- | --- |
-| 1. Socle serveur | `SyncLog`, `AppliedOp`, identifiants client, `pull` / `push`, conflits par champ, périmètre d'accès | Tests automatisés (Vitest) : scénarios hors ligne, conflits, suppressions, renvois |
-| 2. Client hors ligne | `DataSource`, magasin local, outbox, synchro, notifications de conflit, build « app » ; testable d'abord dans un navigateur | Coupures réseau simulées, deux clients concurrents |
-| 3. Desktop | Coque Tauri, trousseau, installateur, mises à jour | Installation Windows, hors ligne réel |
-| 4. iPhone | Coque Capacitor, ergonomie tactile, TestFlight | Tests sur appareil |
+| 1. Socle serveur ✅ | `SyncLog`, `AppliedOp`, `pull` / `push`, conflits par champ, protocole | `npm run test:sync` (39 vérifications) |
+| 2. Client hors ligne ✅ | magasin, API locale, moteur, conflits, interface Vite | `npm run test:native` (38 vérifications : hors ligne réel, conflits, images, parité locale = serveur, persistance) + parcours dans le navigateur (`npm run native:dev`) |
+| 3. Desktop ✅ | coque Electron, installateur, publication | `npm run desktop:smoke` (connexion réelle facultative : `SB_SMOKE_SERVER/EMAIL/PASSWORD`), test de l'exécutable empaqueté |
+| 4. iPhone | coque Capacitor (même `native/`), `CapacitorHttp` pour les requêtes, médias absolus, ergonomie tactile, TestFlight | à faire sur Mac / CI macOS (compte Apple Developer) |
+
+Pour l'App Store plus tard : suppression du compte depuis l'application et
+politique de confidentialité obligatoires.
 
 ## 7. Décisions complémentaires (14/10/2026)
 
@@ -116,3 +136,13 @@ champs de la même opération sont appliqués normalement.
 4. **Simplicité** : si l'application n'est plus compatible avec l'API
    (version de protocole), elle demande une mise à jour ; aucune
    compatibilité ascendante.
+
+## 8. Limites connues
+
+- Hors ligne, les photos des autres membres et les noms d'auteurs de
+  commentaires qui ne sont pas membres d'un projet commun ne sont pas connus
+  (silhouette, « Utilisateur »).
+- Les nouveaux objets créés hors ligne par l'application n'envoient leurs
+  notifications qu'à la synchro (le serveur les émet en rejouant l'opération).
+- L'ordre des éléments (renumérotation) calculé localement peut être corrigé
+  par le serveur à la synchro suivante.

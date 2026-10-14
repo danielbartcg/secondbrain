@@ -23,7 +23,11 @@ export type ShellUser = { id: string; name: string; email: string; avatarUrl: st
  * barre supérieure + tiroir sur mobile. Les pages « plein cadre » (éditeur
  * de carte) utilisent toute la hauteur restante.
  */
-export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
+/**
+ * `statusSlot` : encart facultatif affiché au-dessus du menu (l'application
+ * native y place l'état de synchronisation). Absent sur le site.
+ */
+export function AppShell({ user, children, statusSlot }: { user: ShellUser; children: React.ReactNode; statusSlot?: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -90,6 +94,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
           </Link>
           <NotificationsBell align="left" />
         </div>
+        {statusSlot}
         {nav}
         {footer}
       </aside>
@@ -119,6 +124,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
                   <X className="h-5 w-5" />
                 </button>
               </div>
+              {statusSlot}
               {nav}
               {footer}
             </div>

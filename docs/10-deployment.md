@@ -60,6 +60,7 @@ inutile, le serveur tire GitHub).
 | `npm run prod:env` / `-- --set CLE=valeur --restart` | lire / modifier le `.env` serveur (jamais à la main) |
 | `npm run prod:backup [-- --pull]` | sauvegarde immédiate (dump + uploads + documents), rapatriement optionnel |
 | `npm run prod:restore -- --file=db-….dump --yes` | restauration (destructive, sauvegarde préalable automatique) |
+| `npm run desktop:build` puis `npm run desktop:publish` | construit l'installateur Windows (`native/release/`) puis le dépose dans `data/downloads` du serveur (page `/app`) |
 
 Fermer les inscriptions une fois les comptes créés :
 
@@ -72,7 +73,8 @@ npm run prod:env -- --set ALLOW_REGISTRATION=false --restart
 - `db` : PostgreSQL 16, volume `postgres_data`, publié sur `127.0.0.1:55432`
   en production (`DB_PORT`) — jamais exposé publiquement.
 - `app` : image standalone Next.js, port `APP_PORT:3000`, volumes
-  `./data/uploads` et `./data/documents`.
+  `./data/uploads`, `./data/documents` et `./data/downloads` (installateurs
+  de l'application desktop, non sauvegardés : republiables).
 - `tools` (profil `tools`) : étage `builder` de la même image, pour les
   migrations et les scripts. Même uid 1001 que l'application.
 
@@ -89,7 +91,7 @@ existent (non configuré pour l'instant).
 - Les commandes distantes sont encodées en base64 (`ops/lib/ssh.ts`) : pas
   d'échappement à gérer, et `docker compose run` ne peut pas avaler le reste du
   script.
-- `data/uploads` et `data/documents` doivent exister **avant** le premier
+- `data/uploads`, `data/documents` et `data/downloads` doivent exister **avant** le premier
   `docker compose up`, sinon Docker les crée en root et l'application
   (uid 1001) ne peut plus écrire. `provision.sh` et `deploy.ts` s'en chargent.
 - Un fichier `.sh` modifié sous Windows doit rester en LF (`.gitattributes`).

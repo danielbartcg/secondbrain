@@ -1,0 +1,4 @@
+/* Feuille de style du site + sources à analyser par Tailwind (composants partagés et application native). */
+@import "../../src/app/globals.css";
+@source "../../src";
+@source "../src";

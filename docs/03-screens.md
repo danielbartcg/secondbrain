@@ -15,7 +15,8 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | `/projects/sans-projet` | `projects/sans-projet/page.tsx` → `listOrphanTasks` | `projects/OrphanTasks` | projet virtuel **« Sans projet »** : tâches orphelines (création, statut, fiche, suppression) |
 | `/organize` | `organize/page.tsx` → `getMyTasks` | `organizer/TaskOrganizer` | **Mes tâches** : Synthèse / Sélection / Calendrier / Kanban (entrée de menu « Mes tâches ») |
 | `/notifications` | `notifications/page.tsx` | `NotificationsPage` | toutes mes notifications (filtre non lues) |
-| `/preferences` | `preferences/page.tsx` → `getProfile` | `PreferencesPage` | **Préférences** : prénom / nom, photo, thème |
+| `/preferences` | `preferences/page.tsx` → `getProfile` | `PreferencesPage` | **Préférences** : prénom / nom, photo, mot de passe, application desktop, thème |
+| `/app` | `app/page.tsx` → `latestDesktop` (public, hors coque) | — | téléchargement de l'application desktop (version, taille, empreinte), avertissement SmartScreen, iPhone « bientôt » |
 | `/team` | `team/page.tsx` → `listTeamTasks` | `admin/TeamOverview` | **Mon équipe** (managers) : N-1 directs et leurs tâches, lecture seule |
 | `/admin/users` | `admin/users/page.tsx` → `listUsersAdmin` | `admin/AdminUsers` | **Administration** : rôles et managers |
 | `/admin/projects`, `/admin/projects/[id]` | `listAllProjectsAdmin`, `getProjectAdmin` | `admin/AdminProjects`, `admin/AdminProjectView` | tous les projets ; un projet en lecture seule |
@@ -172,6 +173,21 @@ rattachées (statut cliquable, projet ou « Sans projet », fiche, détachement)
 bleue avec le nombre de tâches **non clôturées** (terminées comprises).
 Arrivée par `?node=<id>` (recherche, fiche tâche) : nœud sélectionné, centré,
 panneau ouvert, nœuds fermés affichés si nécessaire.
+
+## Application native (`native/src`)
+
+Mêmes écrans que le site (routeur `native/src/App.tsx`), plus :
+- **Connexion** (`screens/Login.tsx`) : serveur, e-mail, mot de passe ; premier
+  téléchargement des données ;
+- **encart de synchronisation** (`ui/SyncPanel.tsx`, au-dessus du menu) : en
+  ligne / hors ligne, modifications en attente, dernière synchro, conflits,
+  bouton « Synchroniser », bascule « Hors ligne » ;
+- bandeau « Des modifications sont arrivées du serveur — Actualiser » sur les
+  écrans d'édition (les listes s'actualisent seules) ;
+- **Conflits** (`/conflicts`, `screens/Conflicts.tsx`) : type, élément, champ,
+  votre valeur / valeur retenue, « Copier ma valeur », effacer ;
+- « Disponible uniquement en ligne » pour les écrans relayés au serveur ;
+- « Mise à jour nécessaire » (bloquant) quand le serveur répond 426.
 
 ## Préférences (`PreferencesPage`)
 

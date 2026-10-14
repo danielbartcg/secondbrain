@@ -21,7 +21,14 @@
     "prod:exec": "tsx ops/exec.ts",
     "prod:env": "tsx ops/env.ts",
     "prod:backup": "tsx ops/backup.ts",
-    "test:sync": "tsx scripts/sync-e2e.ts"
+    "test:sync": "tsx scripts/sync-e2e.ts",
+    "test:native": "tsx native/tests/offline-e2e.ts",
+    "native:dev": "vite --config native/vite.config.mts",
+    "native:build": "vite build --config native/vite.config.mts",
+    "desktop:dev": "node native/scripts/desktop-dev.mjs",
+    "desktop:build": "npm run native:build && electron-builder --config native/electron-builder.yml --win",
+    "desktop:smoke": "npm run native:build && electron native/electron --smoke-test",
+    "desktop:publish": "tsx ops/desktop-publish.ts"
   },
   "dependencies": {
     "@amcharts/amcharts4": "^4.10.40",
@@ -47,15 +54,21 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "@tailwindcss/typography": "0.5.20",
+    "@tailwindcss/vite": "4.3.3",
     "@types/d3-hierarchy": "3.1.7",
     "@types/node": "22.20.5",
     "@types/react": "19.1.8",
     "@types/react-dom": "19.1.6",
     "@types/sanitize-html": "2.16.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3",
+    "fake-indexeddb": "6.2.5",
     "postcss": "8.5.3",
     "prisma": "6.19.3",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.15",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
   }
 }

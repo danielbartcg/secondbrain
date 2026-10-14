@@ -1,6 +1,7 @@
 # =============================================================================
 # Second Brain : application Next.js + PostgreSQL.
-# ./data/uploads (images des notes) et ./data/documents (documents de projet)
+# ./data/uploads (images des notes), ./data/documents (documents de projet) et
+# ./data/downloads (installateurs de l'application desktop, publiés par desktop:publish)
 # sont montés en volume.
 # Guide : docs/10-deployment.md
 # =============================================================================
@@ -45,6 +46,7 @@ services:
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/documents:/app/data/documents
+      - ./data/downloads:/app/data/downloads
 
   # Conteneur d'outillage : étage `builder` de l'image (arbre npm complet :
   # CLI Prisma, tsx, scripts/). Profil `tools` : jamais démarré par `up`,
@@ -69,6 +71,7 @@ services:
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/documents:/app/data/documents
+      - ./data/downloads:/app/data/downloads
 
 volumes:
   postgres_data:

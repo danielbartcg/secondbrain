@@ -17,7 +17,18 @@ export class ApiClientError extends Error {
   }
 }
 
+/**
+ * Transport alternatif : l'application native (native/) sert l'API depuis sa
+ * base locale hors ligne. Sur le site, il reste nul et rien ne change.
+ */
+export type ApiTransport = (method: string, path: string, body?: unknown) => Promise<unknown>;
+let transport: ApiTransport | null = null;
+export function setApiTransport(t: ApiTransport | null) {
+  transport = t;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (transport) return (await transport(method, path, body)) as T;
   const res = await fetch(`/api/v1${path}`, {
     method,
     headers: body instanceof FormData ? {} : { "Content-Type": "application/json" },

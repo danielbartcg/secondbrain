@@ -103,6 +103,22 @@ logo amCharts reste affiché (licence gratuite).
   `npm run test:sync` (serveur de dev lancé) en plus des vérifications
   habituelles. Le site web reste strictement en ligne.
 
+## Application native (`native/`)
+
+- Les écrans de l'application sont les composants du site : une évolution
+  d'écran vaut pour les deux. Un composant ne doit dépendre que de `api`
+  (`src/lib/client.ts`), de `next/link` / `next/navigation` (remplacés dans
+  l'application) et de modules sans `server-only`.
+- Règles métier **pures** et constructeurs de DTO : dans `src/lib/shared/`
+  (partagés serveur / application). Une nouvelle route `/api/v1` utilisée par
+  un écran hors ligne doit exister dans `native/src/local/api.ts` (sinon elle
+  est relayée au serveur et indisponible hors ligne).
+- Après toute évolution touchant projets, tâches ou cartes : `npm run
+  test:native` (serveur de dev lancé) en plus de `test:sync` ; pour la coque,
+  `npm run desktop:smoke`.
+- Nouvelle version de l'application : incrémenter `native/electron/package.json`,
+  `npm run desktop:build` puis `npm run desktop:publish`.
+
 ## Production
 
 - Config dans `.env.deploy` (gitignoré) ; mode d'emploi dans

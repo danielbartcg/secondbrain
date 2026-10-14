@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Check, KeyRound, Loader2, Palette, Trash2, UserRound } from "lucide-react";
+import { Camera, Check, KeyRound, Loader2, Monitor, Palette, Trash2, UserRound } from "lucide-react";
 import { ApiClientError, api, uploadImage } from "@/lib/client";
 import type { ProfileDto, Theme } from "@/lib/users";
 import { Avatar, Button, PageHeader, inputClass } from "@/components/ui";
@@ -142,6 +142,9 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
         </div>
       </section>
 
+      {/* Application desktop */}
+      <DesktopSection />
+
       {/* Mot de passe */}
       <PasswordSection />
 
@@ -242,6 +245,32 @@ function PasswordSection() {
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} Changer le mot de passe
         </Button>
       </form>
+    </section>
+  );
+}
+
+/** Application desktop : lien de téléchargement (site) ou version installée (application). */
+function DesktopSection() {
+  const [desktop, setDesktop] = useState<{ version: string } | null>(null);
+  useEffect(() => {
+    if (window.secondBrain) setDesktop({ version: window.secondBrain.version });
+  }, []);
+  return (
+    <section className="mt-6 rounded-2xl border border-line bg-surface p-5">
+      <h2 className="flex items-center gap-2 font-semibold">
+        <Monitor className="h-5 w-5 text-brand-600" /> Application desktop
+      </h2>
+      {desktop ? (
+        <p className="mt-1 text-sm text-muted">Vous utilisez l'application desktop, version {desktop.version}. Vos projets et cartes restent disponibles hors ligne.</p>
+      ) : (
+        <p className="mt-1 text-sm text-muted">
+          Projets et cartes mentales disponibles hors ligne, synchronisés automatiquement :{" "}
+          <a href="/app" className="font-medium text-brand-700 hover:underline">
+            télécharger l'application pour Windows
+          </a>
+          .
+        </p>
+      )}
     </section>
   );
 }

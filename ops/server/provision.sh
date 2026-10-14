@@ -146,7 +146,7 @@ fi
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$BACKUP_DIR"
 # Créé à l'avance : sinon Docker le crée en root au premier montage et
 # l'application (uid 1001) ne peut pas y écrire.
-install -d -o 1001 -g 1001 "$APP_DIR/data/uploads" "$APP_DIR/data/documents"
+install -d -o 1001 -g 1001 "$APP_DIR/data/uploads" "$APP_DIR/data/documents" "$APP_DIR/data/downloads"
 
 step "Fichier .env"
 if [ ! -f "$APP_DIR/.env" ]; then

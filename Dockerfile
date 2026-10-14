@@ -31,7 +31,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-RUN mkdir -p /app/data/uploads /app/data/documents && chown -R nextjs:nodejs /app/data
+RUN mkdir -p /app/data/uploads /app/data/documents /app/data/downloads && chown -R nextjs:nodejs /app/data
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0

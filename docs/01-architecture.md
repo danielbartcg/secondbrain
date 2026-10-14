@@ -165,6 +165,21 @@ Les notes sont **visibles sur l'objet** : aperçu `NotesPreview` (projet, fiche
 tâche), icône carnet sur les étapes / activités / tâches du Plan, lien
 « Ouvrir dans Prise de notes » dans le panneau de carte ; DTO `hasNotes`.
 
+## Application native (`native/`)
+
+Application desktop Windows (Electron) qui embarque l'interface du site et
+fonctionne hors ligne sur les projets et cartes (docs/05-offline-sync.md) :
+- les écrans sont les composants de `src/components`, empaquetés par Vite ;
+  `next/link` / `next/navigation` sont remplacés par un petit routeur ;
+- `api` (`src/lib/client.ts`) reçoit un transport (`setApiTransport`) qui
+  sert `/api/v1` depuis une **API locale** sur IndexedDB ; sur le site il
+  reste nul ;
+- les DTO et règles pures sont partagés via `src/lib/shared/`
+  (`project-model.ts`, `task-model.ts`), réexportés par `projects.ts` et
+  `tasks.ts` : **toute règle métier pure se modifie là**, une fois pour les
+  deux côtés ;
+- `AppShell` accepte un `statusSlot` (état de synchro dans l'application).
+
 ## Synchronisation hors ligne (`src/lib/sync.ts`)
 
 Socle serveur des applications desktop / iPhone (détail : docs/05-offline-sync.md).

@@ -15,3 +15,7 @@ npm-debug.log*
 
 # Données locales (uploads de dev)
 /data/
+
+# Application native (build Vite, installateurs Electron)
+/native/electron/renderer/
+/native/release/

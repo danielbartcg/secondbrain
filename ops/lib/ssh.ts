@@ -155,3 +155,15 @@ export function shellQuote(value: string): string {
 export function inRepo(cfg: DeployConfig, command: string): string {
   return `set -euo pipefail\ncd ${shellQuote(cfg.dir)}\n${command}`;
 }
+
+/** Envoie un fichier local vers le serveur (installateur de l'application desktop…). */
+export function scpUpload(cfg: DeployConfig, localPath: string, remotePath: string): void {
+  const args = ["-o", "StrictHostKeyChecking=accept-new", "-P", cfg.port];
+  if (cfg.keyFile) args.push("-i", cfg.keyFile);
+  args.push(localPath, `${cfg.user}@${cfg.host}:${remotePath}`);
+  const result = spawnSync("scp", args, { stdio: "inherit", shell: false });
+  if (result.error || (result.status ?? 1) !== 0) {
+    console.error(`Envoi impossible : ${localPath}`);
+    process.exit(result.status ?? 1);
+  }
+}

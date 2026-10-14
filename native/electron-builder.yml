@@ -1,0 +1,39 @@
+# Empaquetage de l'application desktop (npm run desktop:build).
+# Dossier applicatif = native/electron (main.cjs, preload.cjs, renderer/ produit par Vite) :
+# aucune dépendance npm n'est embarquée.
+appId: fr.danielbar-tcg.secondbrain
+productName: Second Brain
+copyright: Daniel Barral
+electronVersion: 44.7.2
+# Binaire Electron déjà installé (node_modules) : copié tel quel, pas d'archive à extraire
+# (l'extraction échoue sous Windows quand l'antivirus verrouille electron.exe).
+electronDist: node_modules/electron/dist
+directories:
+  app: native/electron
+  output: native/release
+  buildResources: native/build
+files:
+  - main.cjs
+  - preload.cjs
+  - package.json
+  - renderer/**
+  # Aucune dépendance npm : l'interface est déjà empaquetée par Vite dans renderer/.
+  - "!**/node_modules/**"
+# Ne pas remonter au package.json racine (dépendances du site Next).
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: native/build/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Second Brain
+  artifactName: SecondBrain-Setup-${version}.${ext}
+mac:
+  target: dmg
+  icon: native/build/icon.png
+  category: public.app-category.productivity

@@ -1,0 +1,9 @@
+{
+  "name": "secondbrain-desktop",
+  "productName": "Second Brain",
+  "version": "0.1.0",
+  "description": "Second Brain — application desktop (projets et cartes mentales, hors ligne).",
+  "author": "Daniel Barral",
+  "main": "main.cjs",
+  "private": true
+}

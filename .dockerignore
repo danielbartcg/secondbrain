@@ -13,3 +13,5 @@ out
 docs
 README.md
 CLAUDE.md
+native/release
+native/electron/renderer

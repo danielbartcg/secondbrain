@@ -38,6 +38,10 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    **Administration** (administrateurs, et le super administrateur codé en
    dur) : rôles et managers des utilisateurs, tous les projets, toutes les
    tâches. Un manager voit les tâches de ses N-1 dans « Mon équipe ».
+   **Application desktop Windows** (`native/`, Electron) : mêmes écrans,
+   projets et cartes **utilisables hors ligne**, synchronisation automatique
+   (conflits par champ, le serveur l'emporte, historique « Conflits ») ;
+   téléchargement sur `/app`.
    **Recherche globale** avec auto-complétion sur la page d'accueil (projets,
    tâches, nœuds, cartes).
    **Notifications in-app** (cloche) : tâche assignée, réponse à un
@@ -84,6 +88,11 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:migrate` / `db:deploy` / `db:studio` | Prisma |
 | `npm run user:create -- --email=… --password=… [--name=…]` | créer / réinitialiser un utilisateur |
+| `npm run test:native` | tests de bout en bout du client hors ligne de l'application (serveur de dev lancé) |
+| `npm run native:dev` / `native:build` | interface de l'application native dans le navigateur (Vite, relais vers le serveur de dev) / build |
+| `npm run desktop:dev` | application desktop Electron en développement (Vite + Electron ; serveur Next lancé à part) |
+| `npm run desktop:smoke` | test de démarrage de l'application desktop (profil jetable ; connexion réelle avec `SB_SMOKE_SERVER`, `SB_SMOKE_EMAIL`, `SB_SMOKE_PASSWORD`) |
+| `npm run desktop:build` / `desktop:publish` | installateur Windows (`native/release/`) / publication sur le serveur (page `/app`) |
 | `npm run test:sync` | tests de bout en bout de la synchro hors ligne (serveur de dev lancé, `BASE_URL` facultatif) |
 | `npm run prod:setup` | provisionner / mettre à jour l'infrastructure serveur (idempotent) |
 | `npm run prod:deploy` | mettre en production (push préalable obligatoire) |
