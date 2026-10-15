@@ -75,9 +75,9 @@ export function KanbanView({ tasks, actions }: { tasks: OrganizerTask[]; actions
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-sm text-muted">
+        <label className="flex w-full min-w-0 items-center gap-2 text-sm text-muted sm:w-auto">
           Filtre
-          <select value={filter} onChange={(e) => setFilter(e.target.value as FilterKey)} className={selectClass}>
+          <select value={filter} onChange={(e) => setFilter(e.target.value as FilterKey)} className={`${selectClass} min-w-0 max-w-full flex-1 sm:flex-none`}>
             {FILTERS.map((f) => (
               <option key={f.key} value={f.key}>
                 {f.label}

@@ -131,19 +131,19 @@ export function CalendarView({ tasks, actions }: { tasks: OrganizerTask[]; actio
 
       {/* Grille mensuelle */}
       <section className="rounded-2xl border border-line bg-surface">
-        <header className="flex items-center gap-2 border-b border-line px-3 py-2">
-          <button type="button" onClick={() => shift(-1)} className="rounded-lg p-1.5 hover:bg-surface-2" title="Mois précédent">
+        <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+          <button type="button" onClick={() => shift(-1)} className="rounded-lg p-2 hover:bg-surface-2 md:p-1.5" title="Mois précédent" aria-label="Mois précédent">
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => shift(1)} className="rounded-lg p-1.5 hover:bg-surface-2" title="Mois suivant">
+          <button type="button" onClick={() => shift(1)} className="rounded-lg p-2 hover:bg-surface-2 md:p-1.5" title="Mois suivant" aria-label="Mois suivant">
             <ChevronRight className="h-4 w-4" />
           </button>
           <h2 className="text-sm font-semibold capitalize sm:text-base">{monthLabel}</h2>
-          <button type="button" onClick={() => setCursor({ year: now.getFullYear(), month: now.getMonth() })} className="ml-auto rounded-lg border border-line-strong px-2 py-1 text-xs hover:bg-surface-2">
+          <button type="button" onClick={() => setCursor({ year: now.getFullYear(), month: now.getMonth() })} className="ml-auto rounded-lg border border-line-strong px-2.5 py-1.5 text-xs hover:bg-surface-2 md:px-2 md:py-1">
             Aujourd&apos;hui
           </button>
           {selectedTask && (
-            <span className="hidden text-xs text-brand-700 sm:inline">Cliquez un jour pour « {byId.get(selectedTask)?.name} »</span>
+            <span className="w-full text-xs text-brand-700 sm:w-auto">Cliquez un jour pour « {byId.get(selectedTask)?.name} »</span>
           )}
         </header>
         <div className="grid grid-cols-7 border-b border-line text-center text-[11px] font-medium uppercase tracking-wide text-muted">
@@ -171,7 +171,7 @@ export function CalendarView({ tasks, actions }: { tasks: OrganizerTask[]; actio
                 onDrop={(e) => dropOnDay(e, date)}
                 onClick={() => clickDay(date)}
                 className={`min-h-[4.5rem] border-b border-r border-line p-1 transition-colors sm:min-h-24 ${inMonth ? (weekend ? "bg-surface-2/40" : "") : "bg-surface-2/70 text-faint"} ${
-                  dragOver === date ? "bg-brand-50 ring-2 ring-inset ring-brand-400" : ""
+                  dragOver === date ? "bg-brand-50 ring-2 ring-inset ring-brand-500" : ""
                 } ${selectedTask ? "cursor-pointer hover:bg-brand-50" : ""}`}
               >
                 <div className="flex items-center justify-between">
@@ -194,7 +194,7 @@ export function CalendarView({ tasks, actions }: { tasks: OrganizerTask[]; actio
                       }}
                       onClick={(e) => e.stopPropagation()}
                       className={`group flex cursor-grab items-center gap-1 rounded border px-1 py-0.5 text-[10px] leading-tight active:cursor-grabbing sm:text-[11px] ${PRIORITY_CHIP[task.priority]} ${
-                        late ? "border-red-500 ring-1 ring-red-300" : ""
+                        late ? "border-danger ring-1 ring-red-200" : ""
                       } ${isFinished(task.status) ? "opacity-50 line-through" : ""}`}
                       title={`${task.name} — ${task.projectName}${late ? " — APRÈS L'ÉCHÉANCE" : ""}`}
                     >
@@ -209,8 +209,9 @@ export function CalendarView({ tasks, actions }: { tasks: OrganizerTask[]; actio
                           e.stopPropagation();
                           void actions.removeSession(task.id, id);
                         }}
-                        className="shrink-0 rounded opacity-40 hover:bg-white/60 hover:opacity-100"
+                        className="-my-1 -mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded opacity-60 hover:bg-surface/60 hover:opacity-100 sm:m-0 sm:h-auto sm:w-auto sm:opacity-40"
                         title="Retirer cette session"
+                        aria-label={`Retirer la session de « ${task.name} »`}
                       >
                         <X className="h-3 w-3" />
                       </button>

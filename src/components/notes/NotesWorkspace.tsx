@@ -7,6 +7,7 @@ import { Brain, ChevronDown, ChevronRight, ExternalLink, FolderKanban, Inbox, La
 import { api } from "@/lib/client";
 import type { NoteDocument, NoteKind, TreeItem } from "@/lib/notes";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { toast } from "@/components/ui";
 
 /**
  * « Prise de notes » : à gauche, l'arborescence de tous les objets (cartes
@@ -34,7 +35,7 @@ function ItemIcon({ item, className = "h-4 w-4" }: { item: Pick<TreeItem, "kind"
   return <Icon className={`${className} shrink-0`} style={item.color ? { color: item.color } : undefined} />;
 }
 
-type TreeState = Record<string, { items: TreeItem[] | null; loading: boolean; open: boolean }>;
+type TreeState = Record<string, { items: TreeItem[] | null; loading: boolean; open: boolean; error?: boolean }>;
 
 export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
   const router = useRouter();
@@ -44,6 +45,8 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
   const [current, setCurrent] = useState<string | null>(initialRef);
   const [doc, setDoc] = useState<NoteDocument | null>(null);
   const [docLoading, setDocLoading] = useState(false);
+  const [docError, setDocError] = useState(false);
+  const [docTick, setDocTick] = useState(0);
   const [drawer, setDrawer] = useState(false);
   const [saving, setSaving] = useState<"idle" | "pending" | "saving" | "error">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,7 +59,8 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
       const { children } = await api.get<{ children: TreeItem[] }>(`/notes/tree?parent=${encodeURIComponent(ref)}`);
       setTree((t) => ({ ...t, [ref]: { items: children, loading: false, open: true } }));
     } catch {
-      setTree((t) => ({ ...t, [ref]: { items: [], loading: false, open: true } }));
+      // items reste nul : un nouveau clic sur la branche relance le chargement.
+      setTree((t) => ({ ...t, [ref]: { items: null, loading: false, open: true, error: true } }));
     }
   }, []);
 
@@ -66,13 +70,13 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
     else setTree((t) => ({ ...t, [ref]: { ...s, open: !s.open } }));
   };
 
-  /** Envoie les notes en attente (immédiatement). */
-  const flush = useCallback(async () => {
+  /** Envoie les notes en attente (immédiatement) ; `false` si l'enregistrement a échoué. */
+  const flush = useCallback(async (): Promise<boolean> => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = null;
     const html = pendingHtml.current;
     const ref = current;
-    if (html === null || !ref) return;
+    if (html === null || !ref) return true;
     pendingHtml.current = null;
     setSaving("saving");
     try {
@@ -85,8 +89,12 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
         for (const [k, v] of Object.entries(t)) next[k] = { ...v, items: v.items?.map((i) => (i.ref === ref ? { ...i, hasNotes: has } : i)) ?? null };
         return next;
       });
+      return true;
     } catch {
+      // On conserve le texte non enregistré (sauf saisie plus récente) pour réessayer.
+      if (pendingHtml.current === null) pendingHtml.current = html;
       setSaving("error");
+      return false;
     }
   }, [current]);
 
@@ -105,6 +113,7 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
     }
     let alive = true;
     setDocLoading(true);
+    setDocError(false);
     api
       .get<{ document: NoteDocument }>(`/notes/${current.replace(":", "/")}`)
       .then(({ document }) => {
@@ -114,13 +123,17 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
         for (const crumb of document.breadcrumb) if (!tree[crumb.ref]?.items) void load(crumb.ref);
         if (document.breadcrumb.length === 0 && document.kind !== "root" && document.kind !== "section") void load(document.kind === "mindmap" ? "section:mindmaps" : "section:projects");
       })
-      .catch(() => alive && setDoc(null))
+      .catch(() => {
+        if (!alive) return;
+        setDoc(null);
+        setDocError(true);
+      })
       .finally(() => alive && setDocLoading(false));
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current]);
+  }, [current, docTick]);
 
   // Enregistre avant de quitter la page.
   useEffect(() => {
@@ -141,7 +154,10 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
 
   const select = async (ref: string) => {
     if (ref === current) return;
-    await flush();
+    if (!(await flush())) {
+      toast("Vos dernières notes n'ont pas pu être enregistrées : réessayez avant de changer d'élément.", "error");
+      return;
+    }
     setSaving("idle");
     setCurrent(ref);
     setDrawer(false);
@@ -178,12 +194,30 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
               </div>
               {open && renderItems(item.ref, depth + 1)}
               {open && st?.items?.length === 0 && !st.loading && <p className="ml-9 py-1 text-xs text-faint">Vide</p>}
+              {open && st?.error && !st.items && !st.loading && (
+                <p className="ml-9 py-1 text-xs text-danger">
+                  Chargement impossible.{" "}
+                  <button type="button" onClick={() => void load(item.ref)} className="underline hover:text-ink">
+                    Réessayer
+                  </button>
+                </p>
+              )}
             </li>
           );
         })}
       </ul>
     );
   };
+
+  // Tiroir mobile : Échap le ferme.
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawer(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawer]);
 
   const treePanel = (
     <div className="flex h-full flex-col">
@@ -203,7 +237,7 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
       {/* Arborescence : colonne (≥ md) ou tiroir (mobile) */}
       <aside className="hidden w-72 shrink-0 border-r border-line bg-surface md:block lg:w-80">{treePanel}</aside>
       {drawer && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Arborescence des notes">
           <div className="absolute inset-0 bg-black/30" onClick={() => setDrawer(false)} />
           <div className="absolute inset-y-0 left-0 w-80 max-w-[88vw] bg-surface shadow-xl">{treePanel}</div>
         </div>
@@ -212,7 +246,7 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
       {/* Document */}
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface/95 px-3 py-2 backdrop-blur sm:px-6">
-          <button type="button" onClick={() => setDrawer(true)} className="rounded-lg p-1.5 hover:bg-surface-2 md:hidden" aria-label="Arborescence">
+          <button type="button" onClick={() => setDrawer(true)} className="rounded-lg p-1.5 hover:bg-surface-2 md:hidden" aria-label="Arborescence" aria-expanded={drawer}>
             <PanelLeft className="h-5 w-5" />
           </button>
           <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto text-xs text-muted scrollbar-none">
@@ -226,8 +260,13 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
             ))}
             {doc && <span className="shrink-0 font-medium text-ink">{doc.title}</span>}
           </nav>
-          <span className={`shrink-0 text-xs ${saving === "error" ? "text-danger" : saving === "idle" ? "text-faint" : "text-warn"}`}>
+          <span role="status" className={`flex shrink-0 items-center gap-2 text-xs ${saving === "error" ? "text-danger" : saving === "idle" ? "text-faint" : "text-warn"}`}>
             {saving === "idle" ? (doc?.editable ? "Enregistré" : "") : saving === "error" ? "Erreur d'enregistrement" : "Enregistrement…"}
+            {saving === "error" && (
+              <button type="button" onClick={() => void flush()} className="rounded-lg border border-line-strong px-2 py-1 font-medium text-ink hover:bg-surface-2">
+                Réessayer
+              </button>
+            )}
           </span>
         </div>
 
@@ -235,6 +274,13 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-muted">
             {docLoading ? (
               <Loader2 className="h-6 w-6 animate-spin" />
+            ) : current && docError ? (
+              <>
+                <p className="max-w-md text-sm text-danger">Impossible de charger ce document.</p>
+                <button type="button" onClick={() => setDocTick((t) => t + 1)} className="rounded-lg border border-line-strong px-3 py-1.5 text-sm text-ink hover:bg-surface-2">
+                  Réessayer
+                </button>
+              </>
             ) : (
               <>
                 <NotebookPen className="h-10 w-10 text-faint" />

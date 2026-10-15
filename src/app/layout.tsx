@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { cache } from "react";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -8,19 +9,33 @@ export const metadata: Metadata = {
   applicationName: "Second Brain",
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-  themeColor: "#f6f5f2",
+/** Couleur de fond (--color-canvas) de chaque thème, pour la barre du navigateur mobile. */
+const THEME_CANVAS: Record<string, string> = {
+  light: "#f6f5f2",
+  dark: "#111318",
+  sepia: "#f4ecd8",
+  ocean: "#eef4f8",
+  forest: "#f1f4ee",
 };
 
-const THEMES = ["light", "dark", "sepia", "ocean", "forest"];
+/** Thème préféré de l'utilisateur connecté (Préférences) ; clair par défaut. Une seule lecture par requête. */
+const currentTheme = cache(async (): Promise<string> => {
+  const user = await getCurrentUser().catch(() => null);
+  return user && user.theme in THEME_CANVAS ? user.theme : "light";
+});
+
+export async function generateViewport(): Promise<Viewport> {
+  const theme = await currentTheme();
+  return {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    themeColor: THEME_CANVAS[theme],
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Thème préféré de l'utilisateur connecté (Préférences) ; clair par défaut.
-  const user = await getCurrentUser().catch(() => null);
-  const theme = user && THEMES.includes(user.theme) ? user.theme : "light";
+  const theme = await currentTheme();
   return (
     <html lang="fr" className="h-full" data-theme={theme}>
       <body className="min-h-full">{children}</body>

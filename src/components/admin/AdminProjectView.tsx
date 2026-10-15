@@ -65,6 +65,9 @@ export function AdminProjectView({ project }: { project: ProjectDto & { ownerNam
           </ul>
         </section>
       )}
+      {project.tasks.length === 0 && project.stages.length === 0 && (
+        <p className="mt-4 rounded-2xl border border-dashed border-line-strong bg-surface p-6 text-center text-sm text-muted">Aucune étape ni tâche.</p>
+      )}
       {project.stages.map((s) => (
         <section key={s.id} className="mt-4 rounded-2xl border border-line bg-surface">
           <h3 className="flex items-center gap-2 border-b border-line px-3 py-2 text-sm font-semibold">

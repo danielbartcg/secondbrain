@@ -36,19 +36,35 @@ Docker + Caddy en production.
 
 ## Authentification et droits
 
-- E-mail + mot de passe (bcrypt coût 12). Sessions **opaques** en base
-  (`Session.token`, 256 bits), 90 jours. Web : cookie `session` HTTP-only,
+- E-mail + mot de passe (bcrypt coût 12, 72 octets maximum : limite de
+  bcrypt). Sessions **opaques** de 256 bits, 90 jours ; la base ne stocke que
+  l'**empreinte SHA-256** du jeton (`Session.token`, `hashSessionToken()`).
+  La connexion compare toujours une empreinte bcrypt (factice si le compte
+  n'existe pas : pas d'énumération par le temps de réponse). Web : cookie `session` HTTP-only,
   `SameSite=Lax`, `Secure` en production. Mobile : même jeton en
   `Authorization: Bearer` (prioritaire sur le cookie).
 - Anti-CSRF : les requêtes mutantes authentifiées par cookie doivent porter
-  un `Origin` égal à l'hôte (`src/lib/api.ts`).
-- Rate limiting en mémoire : `login`/`register` (10 / 15 min / IP),
-  `users/lookup` (60 / 15 min / utilisateur), changement de mot de passe
-  (10 / 15 min / compte).
+  un `Origin` égal à l'hôte (sans `Origin` : `Sec-Fetch-Site: cross-site`
+  refusé) et un corps `Content-Type: application/json` (`parseBody`, sinon
+  `415`) (`src/lib/api.ts`).
+- Rate limiting en mémoire (`src/lib/rate-limit.ts`, 50 000 clés max, purge
+  des fenêtres expirées) : `login`/`register` (10 / 15 min / IP) et `login`
+  (10 / 15 min / compte), `users/lookup` (60 / 15 min / utilisateur),
+  changement de mot de passe (10 / 15 min / compte), `uploads` (120 / 15 min),
+  documents de projet (60 / 15 min), `sync/push` (300 / 15 min) par
+  utilisateur. L'IP = valeur la plus **à droite** de `X-Forwarded-For` (posée
+  par Caddy ; l'application n'est publiée que sur `127.0.0.1`).
+- En-têtes de sécurité : `src/middleware.ts` pose la CSP des pages avec un
+  **nonce** par requête (`script-src 'self' 'nonce-…' 'strict-dynamic'`,
+  `'unsafe-eval'` en développement seulement ; amCharts 4 n'en a pas besoin) ;
+  `next.config.ts` pose HSTS, `X-Frame-Options`, etc. et une CSP stricte sur
+  `/api`, `/media`, `/downloads`. Les téléchargements de documents ont leur
+  propre CSP (`sandbox`, sauf PDF).
 - Changement de mot de passe (`POST /me/password`) : vérification de l'actuel,
   bcrypt coût 12, suppression des autres sessions du compte.
-- `ALLOW_REGISTRATION=false` ferme l'inscription publique ; les comptes se
-  créent alors avec `scripts/create-user.ts`.
+- `ALLOW_REGISTRATION=false` ferme l'inscription publique (défaut des
+  nouvelles installations, `provision.sh`) ; les comptes se créent alors avec
+  `scripts/create-user.ts`.
 - **Projets partagés** : un projet est visible et modifiable par son
   propriétaire et par les membres de l'équipe rattachés à un compte
   (`ProjectMember.userId`). Suppression du projet et gestion de l'équipe :
@@ -56,10 +72,24 @@ Docker + Caddy en production.
   auteur ou le propriétaire.
 - **Rôles** (`src/lib/roles.ts`, `src/lib/users.ts`) : `User.role` = `USER` ou
   `ADMIN` ; le **super administrateur** est codé en dur
-  (`SUPER_ADMIN_EMAIL = daniel.barral@outlook.com`), toujours administrateur,
-  jamais rétrogradable. On ne peut pas retirer son propre rôle d'admin.
-  Routes `/api/v1/admin/**` : `requireAdmin(user)` ; pages `/admin/**` :
-  `notFound()` sinon.
+  (`SUPER_ADMIN_EMAIL = daniel.barral@outlook.com`, surchargeable par la
+  variable d'environnement `SUPER_ADMIN_EMAIL`), toujours administrateur,
+  jamais rétrogradable ; ce compte ne peut pas être créé par l'inscription
+  publique (`409`), seulement par `scripts/create-user.ts`. On ne peut pas
+  retirer son propre rôle d'admin. Routes `/api/v1/admin/**` :
+  `requireAdmin(user)` ; les fonctions métier d'administration
+  (`listUsersAdmin`, `listAllProjectsAdmin`, `getProjectAdmin`,
+  `listAllTasksAdmin`) reçoivent l'utilisateur et le vérifient elles-mêmes ;
+  **chaque** page `/admin/**` appelle `requireAdminPage()`
+  (`src/lib/admin-page.ts`, `notFound()` sinon) — le layout seul ne suffit
+  pas (rendu partiel RSC).
+- Pages `(app)` qui lisent des données côté serveur : chacune appelle
+  `requireUser()` elle-même (pas seulement le layout).
+- Sortir une tâche de son projet (`projectId: null`) : réservé à son créateur
+  (`Task.ownerId`) ou au propriétaire du projet (`403` sinon).
+- Cartes et tâches : la fiche tâche ne liste que les nœuds des cartes de
+  l'utilisateur ; les tâches d'un nœud et ses compteurs ne comptent que les
+  tâches accessibles (`taskAccessWhere`).
 - **Hiérarchie** : `User.managerId` (N+1) ; boucles refusées. Un manager voit
   ses N-1 directs (« Mon équipe ») et leurs tâches (`tasksOfUsersWhere`, même
   définition que `isMyTask`).
@@ -264,11 +294,67 @@ Table `Notification` (destinataire, type, titre, texte, `href`, `readAt`).
 | `REPLY` | réponse à un commentaire | auteur du commentaire parent | fiche tâche `#comment-<id>` |
 | `MENTION` | `@[Nom]` d'un membre à compte | membre mentionné | idem |
 
+| `MESSAGE` | nouveau message dans une conversation | autres participants | `/messages/<id>` ; **regroupée** par conversation ; lue quand la conversation est lue |
+
+**Administration → Notifications** (`src/lib/settings.ts`) : chaque type
+peut être désactivé pour tout le monde (plus créé du tout) et privé de copie
+e-mail. **Copies e-mail** : `notify()` marque la notification
+`emailState = PENDING` si l'envoi est activé (serveur SMTP + expéditeur +
+interrupteur), le type le permet et le destinataire n'a pas désactivé les
+e-mails (Préférences). L'envoyeur `src/lib/mailer.ts` (nodemailer), démarré
+par `src/instrumentation.ts` dans le processus Next, relève les notifications
+en attente **toutes les 10 s, hors transaction** (jamais d'appel SMTP dans une
+transaction), 20 par passage, abandon après 24 h. Une notification regroupée
+qui se rafraîchit ne renvoie pas d'e-mail. Le mot de passe SMTP est chiffré
+(AES-256-GCM, clé dérivée de `SESSION_SECRET`) et jamais renvoyé au client.
+
+**E-mails de compte** (`src/lib/account-email.ts`, seulement si l'envoi est
+configuré) : bienvenue + lien de validation à l'inscription, validation
+après changement d'adresse, mot de passe oublié (lien 1 h, ferme toutes les
+sessions). Liens à usage unique (`EmailToken`, empreinte seule). La
+validation est **informative** : elle n'empêche jamais la connexion ; elle
+est visible dans Administration → Utilisateurs.
+
 Client : magasin partagé `src/lib/notifications-store.ts` (un seul
 rafraîchissement toutes les 60 s + au focus, partagé entre la cloche de la
 barre latérale et celle de l'en-tête mobile), composant `NotificationsBell`
 (compteur, panneau, clic = marquer lue + naviguer, bascule lue / non lue,
 « Tout lu ») et page `/notifications`.
+
+## Messagerie interne (`src/lib/messages.ts`)
+
+Conversations entre deux utilisateurs ou plus (`/messages`) : accès réservé
+aux participants (`requireParticipant`, 404 sinon) ; contacts proposés =
+membres de mes projets, manager et N-1, interlocuteurs passés (tout le monde
+pour un administrateur), les autres par e-mail exact (`/users/lookup`).
+Messages en HTML assaini (`sanitizeNotes` à l'écriture et au rendu), même
+éditeur riche que les notes en variante compacte (emoji, images collées,
+Ctrl+Entrée). Réponse à un message précis (`replyToId`, citation cliquable
+qui met le message d'origine en évidence). Vu / non vu par participant
+(`lastReadAt`) : coches « envoyé » / « vu », « Vu par … » en groupe,
+séparateur « Nouveaux messages », « Marquer comme non lu ». Suppression par
+l'auteur (contenu effacé, place conservée). Rafraîchissement par
+interrogation : le fil ouvert toutes les 4 s (`?since=`), la liste toutes les
+15 s, le badge du menu toutes les 30 s (`messages-store.ts`). 300 envois /
+15 min / utilisateur. En ligne uniquement dans l'application desktop.
+
+## Connecteur MCP pour Claude (`src/lib/mcp.ts`)
+
+Serveur MCP « Streamable HTTP » **sans état** sur `POST /api/v1/mcp`
+(JSON-RPC 2.0, réponses JSON, pas de flux SSE ; protocole 2025-06-18,
+2025-03-26 ou 2024-11-05). Authentification par **clé d'accès personnelle**
+`Authorization: Bearer sb_…` (`src/lib/api-keys.ts`, Préférences →
+Connecteur Claude) ; une clé ne vaut pas session et inversement. Outils
+**en lecture seule**, qui réutilisent la logique métier avec le périmètre de
+l'utilisateur : `whoami`, `get_dashboard`, `list_projects`, `get_project`,
+`list_my_tasks`, `list_tasks` (N-1), `get_task`, `list_mind_maps`,
+`get_mind_map`, `browse_notes`, `read_note`, `search`, `list_users`
+(administrateurs). Un **administrateur** n'accède aux projets et tâches des
+autres que s'il le demande **explicitement** (`admin_access: true`) ; sans ce
+drapeau, son périmètre est le sien. Protection « DNS rebinding » (en-tête
+`Origin` étranger refusé), 600 requêtes / 15 min / compte. Claude Desktop s'y
+connecte via `mcp-remote` (configuration générée dans les Préférences) ;
+Claude Code via `claude mcp add --transport http`.
 
 ## Tableau de bord personnel (`src/lib/dashboard.ts`)
 

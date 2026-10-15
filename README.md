@@ -42,6 +42,12 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    projets et cartes **utilisables hors ligne**, synchronisation automatique
    (conflits par champ, le serveur l'emporte, historique « Conflits ») ;
    téléchargement sur `/app`.
+   **Messagerie interne** (fils à plusieurs, vu / non vu, réponse à un
+   message précis, suppression, emoji) ; **notifications par e-mail**
+   (SMTP et activation par type dans l'administration, préférence
+   personnelle) ; mot de passe oublié et validation d'adresse ;
+   **connecteur MCP** pour interroger ses projets, cartes et notes depuis
+   Claude Desktop (clés d'accès dans les Préférences).
    **Recherche globale** avec auto-complétion sur la page d'accueil (projets,
    tâches, nœuds, cartes).
    **Notifications in-app** (cloche) : tâche assignée, réponse à un
@@ -88,6 +94,7 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:migrate` / `db:deploy` / `db:studio` | Prisma |
 | `npm run user:create -- --email=… --password=… [--name=…]` | créer / réinitialiser un utilisateur |
+| `npm run test:features` | tests de bout en bout des e-mails (faux serveur SMTP local), de la messagerie, des comptes (mot de passe oublié, validation, changement d'adresse) et du connecteur MCP (serveur de dev lancé) |
 | `npm run test:native` | tests de bout en bout du client hors ligne de l'application (serveur de dev lancé) |
 | `npm run native:dev` / `native:build` | interface de l'application native dans le navigateur (Vite, relais vers le serveur de dev) / build |
 | `npm run desktop:dev` | application desktop Electron en développement (Vite + Electron ; serveur Next lancé à part) |
@@ -106,9 +113,10 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `DATABASE_URL` | connexion PostgreSQL |
 | `SESSION_SECRET` | secret serveur (généré en production) |
 | `NEXT_PUBLIC_SITE_URL` | URL publique |
-| `ALLOW_REGISTRATION` | `false` pour fermer les inscriptions (`user:create` reste possible) |
+| `ALLOW_REGISTRATION` | `false` pour fermer les inscriptions (`user:create` reste possible) ; `false` par défaut sur une nouvelle installation |
+| `SUPER_ADMIN_EMAIL` | facultatif : e-mail du super administrateur (défaut codé dans `src/lib/roles.ts`) |
 | `DATA_DIR` | répertoire des fichiers (`./data` par défaut, `/app/data` en Docker) : `uploads/` images des notes, `documents/` documents de projet |
-| `APP_PORT` | port local publié par docker compose (3001 en production) |
+| `APP_PORT` | port publié par docker compose sur `127.0.0.1` uniquement (3001 en production) |
 | `DB_PORT` | publication locale de PostgreSQL (`127.0.0.1:5433` en dev, `127.0.0.1:55432` en prod) |
 
 ## Documentation

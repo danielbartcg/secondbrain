@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, CalendarDays, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
-import { InlineEdit, ProgressBar, toInputDate } from "@/components/ui";
+import { InlineEdit, ProgressBar, errorMessage, toInputDate, toast } from "@/components/ui";
 import { STATUS_LABEL } from "./ProjectList";
 import { ProjectBoard } from "./ProjectBoard";
 import { ProjectKanbanTab } from "./ProjectKanbanTab";
@@ -46,6 +46,8 @@ function tabFromHash(): TabKey {
 export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectDto; currentUserId: string }) {
   const [project, setProject] = useState(initial);
   const [saving, setSaving] = useState(0);
+  /** « Enregistré » ne s'affiche qu'après une première sauvegarde. */
+  const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<TabKey>("dashboard");
 
   useEffect(() => {
@@ -72,11 +74,12 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
         }
       } catch (e) {
         console.error(e);
-        alert(e instanceof Error ? e.message : "Erreur");
+        toast(errorMessage(e, "Enregistrement impossible."), "error");
         const { project } = await api.get<Resp>(`/projects/${initial.id}`).catch(() => ({ project: null }));
         if (project) setProject(project);
       } finally {
         setSaving((s) => s - 1);
+        setSaved(true);
       }
     },
     [initial.id],
@@ -91,23 +94,32 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
         <Link href="/projects" className="flex items-center gap-1 hover:text-ink">
           <ArrowLeft className="h-4 w-4" /> Projets
         </Link>
-        <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`}>{saving ? "Enregistrement…" : "Enregistré"}</span>
+        <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`} role="status">{saving ? "Enregistrement…" : saved ? "Enregistré" : ""}</span>
       </div>
 
       {/* En-tête */}
       <div className="rounded-2xl border border-line bg-surface p-5">
         <div className="flex flex-wrap items-start gap-3">
-          <div className="flex items-center gap-1" title="Couleur">
+          <div className="flex flex-wrap items-center gap-1.5 md:gap-1" role="group" aria-label="Couleur du projet">
             {COLORS.map((c) => (
               <button
                 key={c}
+                type="button"
                 onClick={() => patchProject({ color: c })}
                 style={{ backgroundColor: c }}
-                className={`h-4 w-4 rounded-full ${project.color === c ? "ring-2 ring-brand-500 ring-offset-1" : "opacity-60 hover:opacity-100"}`}
+                title={`Couleur ${c}`}
+                aria-label={`Couleur ${c}`}
+                aria-pressed={project.color === c}
+                className={`h-7 w-7 rounded-full md:h-4 md:w-4 ${project.color === c ? "ring-2 ring-brand-500 ring-offset-1" : "opacity-60 hover:opacity-100"}`}
               />
             ))}
           </div>
-          <select value={project.status} onChange={(e) => patchProject({ status: e.target.value })} className="ml-auto rounded-lg border border-line-strong bg-surface px-2 py-1 text-xs font-medium">
+          <select
+            value={project.status}
+            onChange={(e) => patchProject({ status: e.target.value })}
+            aria-label="Statut du projet"
+            className="ml-auto rounded-lg border border-line-strong bg-surface px-2 py-1 text-base font-medium sm:text-xs"
+          >
             {Object.entries(STATUS_LABEL).map(([k, v]) => (
               <option key={k} value={k}>
                 {v}
@@ -142,10 +154,13 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
       <NotesPreview html={project.notes} noteRef={`project:${project.id}`} title="Notes du projet" className="mt-4" />
 
       {/* Onglets */}
-      <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line">
+      <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="Sections du projet">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
             onClick={() => selectTab(key)}
             className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
               tab === key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-ink"
@@ -159,7 +174,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
         ))}
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5" role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
         {tab === "dashboard" && <ProjectDashboardTab project={project} onGoTo={selectTab} />}
         {tab === "plan" && <ProjectBoard project={project} run={run} />}
         {tab === "kanban" && <ProjectKanbanTab project={project} run={run} />}
@@ -176,7 +191,7 @@ export function DateField({ label, value, onChange }: { label: string; value: st
     <label className="flex items-center gap-2 text-muted">
       <CalendarDays className="h-4 w-4" />
       <span>{label}</span>
-      <input type="date" value={toInputDate(value)} onChange={(e) => onChange(e.target.value || null)} className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink" />
+      <input type="date" value={toInputDate(value)} onChange={(e) => onChange(e.target.value || null)} className="rounded border border-line bg-surface px-1.5 py-0.5 text-base text-ink sm:text-xs" />
     </label>
   );
 }

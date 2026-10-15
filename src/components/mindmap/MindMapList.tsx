@@ -6,30 +6,54 @@ import { useRouter } from "next/navigation";
 import { Brain, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindMapSummary } from "@/lib/mindmaps";
-import { Button, EmptyState, InlineEdit, PageHeader, formatDate } from "@/components/ui";
+import { Button, EmptyState, InlineEdit, PageHeader, errorMessage, formatDate } from "@/components/ui";
 
 export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
   const router = useRouter();
   const [maps, setMaps] = useState(initial);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     const t = title.trim() || "Nouvelle carte";
-    const { mindmap } = await api.post<{ mindmap: MindMapDto }>("/mindmaps", { title: t });
-    router.push(`/mindmaps/${mindmap.id}`);
+    setBusy(true);
+    setError(null);
+    try {
+      const { mindmap } = await api.post<{ mindmap: MindMapDto }>("/mindmaps", { title: t });
+      router.push(`/mindmaps/${mindmap.id}`);
+    } catch (err) {
+      setError(errorMessage(err, "Création impossible."));
+      setBusy(false);
+    }
   }
 
   async function rename(id: string, t: string) {
+    const previous = maps;
+    setError(null);
     setMaps((ms) => ms.map((m) => (m.id === id ? { ...m, title: t } : m)));
-    await api.patch(`/mindmaps/${id}`, { title: t });
+    try {
+      await api.patch(`/mindmaps/${id}`, { title: t });
+    } catch (err) {
+      setMaps(previous);
+      setError(errorMessage(err, "Renommage impossible."));
+    }
   }
 
   async function remove(id: string, t: string) {
     if (!confirm(`Supprimer la carte « ${t} » et tous ses nœuds ?`)) return;
+    const previous = maps;
+    setError(null);
     setMaps((ms) => ms.filter((m) => m.id !== id));
-    await api.delete(`/mindmaps/${id}`);
+    try {
+      await api.delete(`/mindmaps/${id}`);
+    } catch (err) {
+      setMaps(previous);
+      setError(errorMessage(err, "Suppression impossible."));
+    }
   }
 
   return (
@@ -51,15 +75,23 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Titre de la carte (idée centrale)"
-            className="flex-1 rounded-lg border border-line-strong px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            aria-label="Titre de la carte"
+            className="flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
           />
           <div className="flex gap-2">
-            <Button type="submit">Créer</Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Création…" : "Créer"}
+            </Button>
             <Button variant="ghost" onClick={() => setCreating(false)}>
               Annuler
             </Button>
           </div>
         </form>
+      )}
+      {error && (
+        <p role="alert" className="mb-4 text-sm text-danger">
+          {error}
+        </p>
       )}
 
       {maps.length === 0 ? (
@@ -77,9 +109,11 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
                   <Brain className="h-5 w-5" />
                 </div>
                 <button
+                  type="button"
                   onClick={() => remove(m.id, m.title)}
                   title="Supprimer"
-                  className="rounded-lg p-1.5 text-faint opacity-0 transition-opacity hover:bg-red-50 hover:text-danger group-hover:opacity-100 focus:opacity-100 max-md:opacity-100"
+                  aria-label={`Supprimer la carte « ${m.title} »`}
+                  className="rounded-lg p-2 md:p-1.5 text-faint opacity-0 transition-opacity hover:bg-red-50 hover:text-danger group-hover:opacity-100 focus:opacity-100 max-md:opacity-100"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

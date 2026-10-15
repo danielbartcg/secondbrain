@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import type { User } from "@prisma/client";
@@ -34,6 +34,28 @@ export function toPublicUser(user: User): PublicUser {
   };
 }
 
+/**
+ * Empreinte SHA-256 (hex) d'un jeton de session : seule l'empreinte est stockée
+ * en base (colonne `Session.token`), le jeton en clair ne vit que chez le client.
+ */
+export function hashSessionToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+/** Empreinte bcrypt (coût 12) factice, calculée une fois : voir `verifyPasswordOrDummy`. */
+let dummyHash: Promise<string> | null = null;
+
+/**
+ * Vérifie le mot de passe ; si le compte n'existe pas, compare quand même à une
+ * empreinte factice de même coût (temps de réponse identique : pas d'énumération).
+ */
+export async function verifyPasswordOrDummy(password: string, hash: string | null | undefined): Promise<boolean> {
+  if (hash) return bcrypt.compare(password, hash);
+  dummyHash ??= bcrypt.hash(randomBytes(16).toString("hex"), 12);
+  await bcrypt.compare(password, await dummyHash);
+  return false;
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
@@ -49,7 +71,7 @@ export async function createSession(
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000);
-  await prisma.session.create({ data: { token, userId, expiresAt, label: options.label ?? null } });
+  await prisma.session.create({ data: { token: hashSessionToken(token), userId, expiresAt, label: options.label ?? null } });
   if (options.setCookie !== false) {
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE, token, {
@@ -65,7 +87,7 @@ export async function createSession(
 
 export async function destroySession(): Promise<void> {
   const token = await getSessionToken();
-  if (token) await prisma.session.deleteMany({ where: { token } });
+  if (token) await prisma.session.deleteMany({ where: { token: hashSessionToken(token) } });
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
 }
@@ -88,7 +110,7 @@ export async function isCookieAuthenticated(): Promise<boolean> {
 export async function getCurrentUser(): Promise<User | null> {
   const token = await getSessionToken();
   if (!token) return null;
-  const session = await prisma.session.findUnique({ where: { token }, include: { user: true } });
+  const session = await prisma.session.findUnique({ where: { token: hashSessionToken(token) }, include: { user: true } });
   if (!session) return null;
   if (session.expiresAt < new Date()) {
     await prisma.session.delete({ where: { id: session.id } }).catch(() => {});

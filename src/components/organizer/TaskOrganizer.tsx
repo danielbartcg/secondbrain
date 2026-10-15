@@ -5,14 +5,14 @@ import { CalendarDays, Grid3x3, ListOrdered, SquareKanban } from "lucide-react";
 import { api } from "@/lib/client";
 import type { OrganizerDto, OrganizerTask, WorkSessionDto } from "@/lib/tasks";
 import type { TaskMutation } from "@/lib/projects";
-import { isFinished } from "@/components/ui";
+import { errorMessage, isFinished, toast } from "@/components/ui";
 import { CalendarView } from "./CalendarView";
 import { MatrixView } from "./MatrixView";
 import { SynthesisView } from "./SynthesisView";
 import { KanbanView } from "./KanbanView";
 
 /**
- * « Organiser mes tâches » : trois vues sur mes tâches ouvertes.
+ * « Mes tâches » : quatre vues sur mes tâches ouvertes.
  *  - Calendrier : glisser-déposer les tâches sur les jours (sessions de travail) ;
  *  - Sélection : matrice priorité (vertical) × complexité (horizontal) ;
  *  - Synthèse : tableau ordonnable par glisser-déposer (ordre relatif personnel).
@@ -45,6 +45,8 @@ export function TaskOrganizer({ initial }: { initial: OrganizerDto }) {
   const [tasks, setTasks] = useState(initial.tasks);
   const [view, setView] = useState<ViewKey>("synthesis");
   const [saving, setSaving] = useState(0);
+  /** « Enregistré » ne s'affiche qu'après une première sauvegarde. */
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setView(viewFromHash());
@@ -72,10 +74,11 @@ export function TaskOrganizer({ initial }: { initial: OrganizerDto }) {
         await remote();
       } catch (e) {
         console.error(e);
-        alert(e instanceof Error ? e.message : "Erreur");
+        toast(errorMessage(e, "Modification annulée."), "error");
         await reload().catch(() => {});
       } finally {
         setSaving((s) => s - 1);
+        setSaved(true);
       }
     },
     [reload],
@@ -159,12 +162,14 @@ export function TaskOrganizer({ initial }: { initial: OrganizerDto }) {
             {open.filter((t) => t.sessions.length > 0).length > 1 ? "s" : ""}
           </p>
         </div>
-        <span className={`text-xs ${saving ? "text-warn" : "text-faint"}`}>{saving ? "Enregistrement…" : "Enregistré"}</span>
-        <div className="ml-auto flex w-full gap-1 rounded-xl bg-surface-2 p-1 sm:w-auto">
+        <span className={`text-xs ${saving ? "text-warn" : "text-faint"}`} role="status">{saving ? "Enregistrement…" : saved ? "Enregistré" : ""}</span>
+        <div className="ml-auto flex w-full gap-1 rounded-xl bg-surface-2 p-1 sm:w-auto" role="tablist" aria-label="Vues">
           {VIEWS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               type="button"
+              role="tab"
+              aria-selected={view === key}
               onClick={() => selectView(key)}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors sm:flex-none ${
                 view === key ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"

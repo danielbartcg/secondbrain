@@ -9,7 +9,7 @@ export default async function ProjectsPage() {
   const [projects, orphans] = await Promise.all([listProjects(user.id), listOrphanTasks(user.id)]);
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-      <ProjectList initial={projects} orphanCount={orphans.filter((t) => t.status !== "CLOSED").length} />
+      <ProjectList initial={projects} orphanCount={orphans.filter((t) => t.status !== "CLOSED").length} currentUserId={user.id} />
     </div>
   );
 }

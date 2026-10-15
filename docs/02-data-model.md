@@ -24,14 +24,21 @@ Task.assigneeId → ProjectMember (responsable) ; Task.supervisorId → ProjectM
 Task ──< TaskContributor >── ProjectMember   contributeurs (n-n)
 Project ──< Deliverable (stageId? → Stage, assigneeId? → ProjectMember)
 Project ──< Document (deliverableId? → Deliverable, uploadedById? → User)
+User ──< EmailToken                         liens à usage unique (validation, mot de passe oublié)
+User ──< ApiKey                             clés d'accès personnelles (connecteur MCP)
+Conversation ──< ConversationParticipant >── User   (lastReadAt : vu / non vu)
+Conversation ──< Message (author? → User ; replyToId? → Message : réponse citée)
+AppSettings (une ligne « global »)          SMTP, e-mails, notifications activées
 ```
 
 ## Comptes
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `User` | `id`, `email` (unique), `passwordHash`, `name` (affiché, = « Prénom Nom »), `firstName`, `lastName`, `avatarUrl?`, `theme` (`light` · `dark` · `sepia` · `ocean` · `forest`), `role` (`USER` · `ADMIN`), `managerId?` (N+1, `SetNull`), timestamps | propriétaire des cartes et des projets, auteur des commentaires et dépôts ; `reports` = N-1 directs ; super administrateur codé en dur (e-mail) |
-| `Session` | `id`, `token` (unique, 256 bits), `userId`, `label?`, `expiresAt`, `createdAt` | jeton unique cookie **et** Bearer ; `label` = client (« Web », « iPhone ») |
+| `User` | `id`, `email` (unique), `passwordHash`, `name` (affiché, = « Prénom Nom »), `firstName`, `lastName`, `avatarUrl?`, `theme` (`light` · `dark` · `sepia` · `ocean` · `forest`), `role` (`USER` · `ADMIN`), `managerId?` (N+1, `SetNull`), `emailVerifiedAt?` (adresse validée, informatif), `emailNotifications` (copies e-mail, vrai par défaut), timestamps | propriétaire des cartes et des projets, auteur des commentaires et dépôts ; `reports` = N-1 directs ; super administrateur codé en dur (e-mail) |
+| `EmailToken` | `id`, `userId`, `kind` (`VERIFY_EMAIL` · `RESET_PASSWORD`), `tokenHash` (unique, SHA-256), `email` (adresse visée), `expiresAt` (7 j / 1 h), `usedAt?`, `createdAt` | lien envoyé par e-mail, **à usage unique** (consommation atomique) ; un nouveau lien invalide les précédents du même usage ; une validation n'est acceptée que si `email` est toujours l'adresse du compte |
+| `ApiKey` | `id`, `userId`, `name`, `prefix` (10 premiers caractères, affichage), `tokenHash` (unique, SHA-256), `lastUsedAt?`, `createdAt` | clé `sb_…` (256 bits) du connecteur MCP, montrée une seule fois ; **lecture seule**, ne vaut pas session (refusée par `/api/v1` hors `/mcp`) ; 10 par compte |
+| `Session` | `id`, `token` (unique : **empreinte SHA-256 hex** du jeton de 256 bits), `userId`, `label?`, `expiresAt`, `createdAt` | jeton unique cookie **et** Bearer, jamais stocké en clair (`hashSessionToken()`) ; `label` = client (« Web », « iPhone ») |
 
 ## Cartes mentales
 
@@ -92,6 +99,24 @@ Project ──< Document (deliverableId? → Deliverable, uploadedById? → User
 - Toute mutation d'un projet ou d'une carte passe par une transaction qui
   verrouille la ligne parente (`SELECT … FOR UPDATE`).
 
+## Notifications, e-mails et paramètres
+
+| Modèle | Champs | Notes |
+| --- | --- | --- |
+| `Notification` | … , `emailState?` (`PENDING` · `SENDING` · `SENT` · `FAILED`), `emailError?` | `emailState` null = pas de copie e-mail ; posé à `PENDING` par `notify()` si la plateforme, le type et le destinataire l'autorisent ; l'envoyeur (`mailer.ts`) le fait passer à `SENT` / `FAILED` |
+| `AppSettings` | `id` = `"global"`, `smtpHost`, `smtpPort`, `smtpSecure`, `smtpUser`, `smtpPasswordEnc` (AES-256-GCM, clé dérivée de `SESSION_SECRET`), `smtpFrom`, `emailEnabled`, `disabledTypes[]`, `emailDisabledTypes[]` (`NotificationType`), `updatedAt` | créée à la première lecture ; un type désactivé n'est plus créé du tout |
+
+Types de notification (`NotificationType`) : `ASSIGNED`, `TASK_UPDATED`,
+`REPLY`, `MENTION`, `MESSAGE`.
+
+## Messagerie
+
+| Modèle | Champs | Notes |
+| --- | --- | --- |
+| `Conversation` | `id`, `title` (vide = noms des participants), `createdById?`, `createdAt`, `lastMessageAt` | à deux et sans titre : une seule conversation par paire (reprise) |
+| `ConversationParticipant` | `conversationId` + `userId` (clé), `lastReadAt?`, `joinedAt` | **vu / non vu** : non lu = message d'un autre, non supprimé, postérieur à `lastReadAt` ; quitter = supprimer la ligne (la dernière personne supprime la conversation) |
+| `Message` | `id`, `conversationId`, `authorId?` (`SetNull`), `body` (HTML assaini), `replyToId?` (`SetNull`, même conversation), `createdAt`, `updatedAt`, `deletedAt?` | suppression par l'auteur = contenu effacé, place conservée (« Message supprimé ») ; `updatedAt` sert au rafraîchissement `since` |
+
 ## Synchronisation (applications hors ligne)
 
 | Modèle | Champs | Notes |
@@ -114,6 +139,9 @@ Version d'un champ = `max(seq)` de ses lignes `UPSERT` (ou de la création).
 | `20261012200606_organizer_threads_notifications` | `MindNode.status`, `Task.priority/complexity`, `TaskComment.parentId`, `WorkSession`, `TaskRank`, `Notification` |
 | `20261012201500_notification_task_updated` | renomme la valeur `COMMENT` → `TASK_UPDATED` de `NotificationType` (`ALTER TYPE … RENAME VALUE`) |
 | `20261013120000_node_positions` | `MindNode.x` / `y` (position manuelle) |
+| `20261015090000_notifications_email_messaging` | `EmailState`, valeur `MESSAGE` de `NotificationType`, `Notification.emailState/emailError`, `AppSettings`, `Conversation`, `ConversationParticipant`, `Message` |
+| `20261015110000_email_tokens_api_keys` | `User.emailVerifiedAt` / `emailNotifications`, `EmailToken` (`EmailTokenKind`), `ApiKey` |
+| `20261015100000_session_token_hash` | données : `Session.token` remplacé par son empreinte SHA-256 (les sessions existantes restent valides) |
 | `20261014220000_sync_log` | `SyncLog`, `AppliedOp`, fonction `sb_sync_log()` et déclencheurs sur les 14 tables synchronisées |
 | `20261014190000_task_closed_at` | `Task.closedAt` (reprise : `updatedAt` des tâches déjà clôturées) |
 | `20261014150000_users_profile_roles` | `User.firstName` (reprise : ancien `name`), `lastName`, `avatarUrl`, `theme`, `role` (`UserRole`), `managerId` |

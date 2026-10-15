@@ -62,7 +62,10 @@ inutile, le serveur tire GitHub).
 | `npm run prod:restore -- --file=db-….dump --yes` | restauration (destructive, sauvegarde préalable automatique) |
 | `npm run desktop:build` puis `npm run desktop:publish` | construit l'installateur Windows (`native/release/`) puis le dépose dans `data/downloads` du serveur (page `/app`) |
 
-Fermer les inscriptions une fois les comptes créés :
+Les nouvelles installations (`provision.sh`) démarrent inscriptions
+**fermées** (`ALLOW_REGISTRATION="false"`) : créer les comptes avec
+`scripts/create-user.ts` (via `prod:exec`). Fermer les inscriptions d'une
+installation existante :
 
 ```bash
 npm run prod:env -- --set ALLOW_REGISTRATION=false --restart
@@ -72,7 +75,9 @@ npm run prod:env -- --set ALLOW_REGISTRATION=false --restart
 
 - `db` : PostgreSQL 16, volume `postgres_data`, publié sur `127.0.0.1:55432`
   en production (`DB_PORT`) — jamais exposé publiquement.
-- `app` : image standalone Next.js, port `APP_PORT:3000`, volumes
+- `app` : image standalone Next.js, port `127.0.0.1:APP_PORT:3000` (boucle
+  locale uniquement : seul Caddy l'atteint, et le rate limiting se fie au
+  `X-Forwarded-For` qu'il pose), volumes
   `./data/uploads`, `./data/documents` et `./data/downloads` (installateurs
   de l'application desktop, non sauvegardés : republiables).
 - `tools` (profil `tools`) : étage `builder` de la même image, pour les
@@ -96,6 +101,24 @@ Préalables, une fois :
 
 Sur un Mac, alternative manuelle : `npm ci`, `npm run ios:sync`,
 `npm run ios:open`, puis Product → Archive dans Xcode.
+
+## E-mails (SMTP)
+
+Aucune variable d'environnement : le serveur SMTP se saisit dans
+**Administration → Notifications** (hôte, port, TLS direct ou STARTTLS,
+utilisateur, mot de passe, expéditeur), puis « Envoyer un e-mail de test » et
+l'interrupteur général. Le mot de passe est chiffré avec une clé dérivée de
+`SESSION_SECRET` : changer ce secret oblige à ressaisir le mot de passe SMTP.
+L'envoi sortant se fait depuis le conteneur `app` (port 587 ou 465 sortant
+ouvert chez l'hébergeur). Tant que l'envoi n'est pas activé, « Mot de passe
+oublié » n'apparaît pas et aucun e-mail de compte ne part.
+
+## Connecteur MCP (Claude Desktop)
+
+Rien à configurer côté serveur : chaque utilisateur crée sa clé dans
+Préférences → Connecteur Claude ; l'adresse est
+`https://secondbrain.danielbar-tcg.fr/api/v1/mcp`. Claude Desktop passe par
+`npx mcp-remote` (Node.js requis sur le poste).
 
 ## Sauvegardes
 

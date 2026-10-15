@@ -20,36 +20,45 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  passwordHash       String
   /// Nom affiché (« Prénom Nom »), recalculé depuis firstName / lastName.
-  name         String
-  firstName    String   @default("")
-  lastName     String   @default("")
+  name               String
+  firstName          String    @default("")
+  lastName           String    @default("")
   /// Photo de profil (URL /media/…) ; null = silhouette.
-  avatarUrl    String?
+  avatarUrl          String?
   /// Thème d'affichage : light · dark · sepia · ocean · forest.
-  theme        String   @default("light")
+  theme              String    @default("light")
   /// ADMIN : accès à l'administration (le super administrateur est codé en dur).
-  role         UserRole @default(USER)
+  role               UserRole  @default(USER)
   /// Manager (N+1) : voit en lecture les tâches de ses N-1.
-  managerId    String?
-  manager      User?    @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
-  reports      User[]   @relation("UserManager")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  managerId          String?
+  manager            User?     @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports            User[]    @relation("UserManager")
+  /// Adresse validée (lien reçu par e-mail) ; informatif, n'empêche pas la connexion.
+  emailVerifiedAt    DateTime?
+  /// Copies e-mail des notifications (préférence personnelle).
+  emailNotifications Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  sessions      Session[]
-  mindMaps      MindMap[]
-  projects      Project[]
-  memberships   ProjectMember[]
-  comments      TaskComment[]
-  documents     Document[]
-  workSessions  WorkSession[]
-  taskRanks     TaskRank[]
-  notifications Notification[]
-  ownedTasks    Task[]
+  sessions             Session[]
+  emailTokens          EmailToken[]
+  apiKeys              ApiKey[]
+  mindMaps             MindMap[]
+  projects             Project[]
+  memberships          ProjectMember[]
+  comments             TaskComment[]
+  documents            Document[]
+  workSessions         WorkSession[]
+  taskRanks            TaskRank[]
+  notifications        Notification[]
+  ownedTasks           Task[]
+  conversations        ConversationParticipant[]
+  messages             Message[]                 @relation("MessageAuthor")
+  conversationsCreated Conversation[]            @relation("ConversationCreator")
 
   @@index([managerId])
 }
@@ -58,6 +67,7 @@ model User {
 /// `Authorization: Bearer` (application mobile).
 model Session {
   id        String   @id @default(cuid())
+  /// Empreinte SHA-256 (hex) du jeton opaque ; le jeton en clair n'est jamais stocké
   token     String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -380,6 +390,54 @@ enum NotificationType {
   REPLY
   TASK_UPDATED
   ASSIGNED
+  /// Nouveau message dans une conversation (regroupé : une notification non lue par conversation).
+  MESSAGE
+}
+
+/// Envoi de la copie e-mail d'une notification (null : pas d'e-mail à envoyer).
+enum EmailState {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+/// Lien à usage unique envoyé par e-mail (validation d'adresse, mot de passe oublié).
+enum EmailTokenKind {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+model EmailToken {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      EmailTokenKind
+  /// Empreinte SHA-256 (hex) du jeton ; le jeton en clair n'existe que dans l'e-mail.
+  tokenHash String         @unique
+  /// Adresse concernée (validation : l'adresse à confirmer).
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime       @default(now())
+
+  @@index([userId, kind])
+}
+
+/// Clé d'accès personnelle (connecteur MCP pour Claude Desktop…) ; agit au nom de l'utilisateur.
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  /// Début de la clé, affiché pour la reconnaître (« sb_AbCd… »).
+  prefix     String
+  /// Empreinte SHA-256 (hex) de la clé ; la clé en clair n'est montrée qu'une fois.
+  tokenHash  String    @unique
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------------------
@@ -425,21 +483,92 @@ model AppliedOp {
 
 /// Notification in-app : destinataire, type, texte, lien ; `readAt` null = non lue.
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      NotificationType
-  title     String
-  body      String           @default("")
-  href      String
-  taskId    String?
-  task      Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  projectId String?
-  actorName String?
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  body       String           @default("")
+  href       String
+  taskId     String?
+  task       Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId  String?
+  actorName  String?
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+  /// Copie e-mail (docs/02-data-model.md, « Notifications par e-mail »).
+  emailState EmailState?
+  emailError String?
 
   @@index([userId, readAt, createdAt])
+  @@index([emailState, createdAt])
+}
+
+/// Paramètres globaux de la plateforme (une seule ligne, id = "global"),
+/// gérés dans Administration → Notifications.
+model AppSettings {
+  id                 String             @id @default("global")
+  smtpHost           String             @default("")
+  smtpPort           Int                @default(587)
+  /// true : TLS dès la connexion (port 465) ; false : STARTTLS si proposé.
+  smtpSecure         Boolean            @default(false)
+  smtpUser           String             @default("")
+  /// Mot de passe SMTP chiffré (AES-256-GCM, clé dérivée de SESSION_SECRET) ; jamais renvoyé au client.
+  smtpPasswordEnc    String             @default("")
+  smtpFrom           String             @default("")
+  /// Doubler les notifications d'un e-mail.
+  emailEnabled       Boolean            @default(false)
+  /// Types de notification désactivés pour tout le monde (ni cloche, ni e-mail).
+  disabledTypes      NotificationType[] @default([])
+  /// Types sans copie e-mail.
+  emailDisabledTypes NotificationType[] @default([])
+  updatedAt          DateTime           @updatedAt
+}
+
+/// Messagerie interne : fil de discussion entre deux utilisateurs ou plus.
+model Conversation {
+  id            String                    @id @default(cuid())
+  /// Titre facultatif (fils de groupe) ; vide = noms des participants.
+  title         String                    @default("")
+  createdById   String?
+  createdBy     User?                     @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime                  @default(now())
+  lastMessageAt DateTime                  @default(now())
+  participants  ConversationParticipant[]
+  messages      Message[]
+}
+
+/// Participant d'une conversation ; `lastReadAt` porte le « vu / non vu ».
+model ConversationParticipant {
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  joinedAt       DateTime     @default(now())
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+/// Message (HTML assaini). Suppression = effacement du contenu (`deletedAt`),
+/// la place reste dans le fil ; `replyToId` : réponse à un message précis.
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  authorId       String?
+  author         User?        @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body           String
+  replyToId      String?
+  replyTo        Message?     @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]    @relation("MessageReply")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, updatedAt])
 }
 
 /// Livrable attendu du projet, éventuellement rattaché à une étape.

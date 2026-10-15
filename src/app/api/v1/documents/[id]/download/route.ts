@@ -24,6 +24,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         "Content-Length": String(data.byteLength),
         "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(doc.fileName)}`,
         "X-Content-Type-Options": "nosniff",
+        // Contenu téléversé : aucun script, aucune requête. `sandbox` (origine
+        // opaque) sauf pour les PDF, que la visionneuse de Chrome refuse
+        // d'afficher dans un document sandboxé.
+        "Content-Security-Policy":
+          doc.mimeType === "application/pdf"
+            ? "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; object-src 'self'; frame-ancestors 'self'"
+            : "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'self'",
         "Cache-Control": "private, no-store",
       },
     });

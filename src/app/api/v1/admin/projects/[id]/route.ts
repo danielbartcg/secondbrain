@@ -7,5 +7,5 @@ type P = { id: string };
 /** GET /api/v1/admin/projects/:id — un projet quelconque, complet (lecture seule). */
 export const GET = withUser<P>(async (_req, { params, user }) => {
   requireAdmin(user);
-  return json({ project: await getProjectAdmin(params.id) });
+  return json({ project: await getProjectAdmin(user, params.id) });
 });

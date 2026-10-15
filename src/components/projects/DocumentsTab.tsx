@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { ChevronRight, Download, FileText, Folder, FolderOpen, FolderPlus, Home, Trash2, Upload } from "lucide-react";
 import { api } from "@/lib/client";
 import type { FolderDto, ProjectDto } from "@/lib/projects";
-import { Button, InlineEdit, QuickAdd, formatBytes, formatDate, selectClass } from "@/components/ui";
+import { Button, InlineEdit, QuickAdd, formatBytes, formatDate, selectClassXs } from "@/components/ui";
 import type { Resp, Run } from "./ProjectWorkspace";
 
 /**
@@ -144,7 +144,8 @@ export function DocumentsTab({ project, run, currentUserId }: { project: Project
         }}
         className={`rounded-2xl border-2 border-dashed p-3 text-center text-xs transition-colors ${dragging ? "border-brand-500 bg-brand-50 text-brand-700" : "border-line-strong text-muted"}`}
       >
-        Glissez des fichiers ici pour les déposer dans « {currentId ? folderPath(folders, currentId) : "Racine"} » (PDF, Office, images, zip… 25 Mo max)
+        <span className="sm:hidden">Touchez « Téléverser ici » pour ajouter des fichiers dans « {currentId ? folderPath(folders, currentId) : "Racine"} » (25 Mo max)</span>
+        <span className="hidden sm:inline">Glissez des fichiers ici pour les déposer dans « {currentId ? folderPath(folders, currentId) : "Racine"} » (PDF, Office, images, zip… 25 Mo max)</span>
       </div>
 
       {/* Sous-dossiers */}
@@ -152,15 +153,16 @@ export function DocumentsTab({ project, run, currentUserId }: { project: Project
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {subfolders.map((f) => (
             <li key={f.id} className="group flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2">
-              <button onClick={() => setCurrent(f.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                <Folder className="h-5 w-5 shrink-0 text-amber-500" />
-                <span className="min-w-0">
-                  <InlineEdit value={f.name} onSave={(name) => run(() => api.patch<Resp>(`/folders/${f.id}`, { name }))} className="-mx-1.5 block truncate text-sm font-medium" />
-                  <span className="block text-xs text-muted">
-                    {countIn(f.id)} document{countIn(f.id) > 1 ? "s" : ""}
-                  </span>
-                </span>
+              {/* Ouvrir (icône, compteur) et renommer (titre) sont des contrôles distincts. */}
+              <button type="button" onClick={() => setCurrent(f.id)} className="shrink-0 rounded-lg p-1.5 hover:bg-surface-2" title="Ouvrir le dossier" aria-label={`Ouvrir le dossier « ${f.name} »`}>
+                <Folder className="h-5 w-5 text-warn" />
               </button>
+              <div className="min-w-0 flex-1">
+                <InlineEdit value={f.name} onSave={(name) => run(() => api.patch<Resp>(`/folders/${f.id}`, { name }))} className="-mx-1.5 block truncate text-sm font-medium" />
+                <button type="button" onClick={() => setCurrent(f.id)} className="block text-left text-xs text-muted hover:text-ink hover:underline">
+                  {countIn(f.id)} document{countIn(f.id) > 1 ? "s" : ""} · ouvrir
+                </button>
+              </div>
               <select
                 value=""
                 onChange={(e) => {
@@ -168,8 +170,9 @@ export function DocumentsTab({ project, run, currentUserId }: { project: Project
                   if (target === "") return;
                   void run(() => api.patch<Resp>(`/folders/${f.id}`, { parentId: target === "__root__" ? null : target }));
                 }}
-                className={`${selectClass} max-w-36 text-xs`}
+                className={`${selectClassXs} max-w-36`}
                 title="Déplacer le dossier vers…"
+                aria-label={`Déplacer le dossier « ${f.name} » vers…`}
               >
                 <option value="">Déplacer vers…</option>
                 {f.parentId !== null && <option value="__root__">Racine</option>}
@@ -182,11 +185,13 @@ export function DocumentsTab({ project, run, currentUserId }: { project: Project
                   ))}
               </select>
               <button
+                type="button"
                 title="Supprimer le dossier (son contenu remonte dans le dossier parent)"
+                aria-label={`Supprimer le dossier « ${f.name} »`}
                 onClick={() => {
                   if (confirm(`Supprimer le dossier « ${f.name} » ? Ses documents et sous-dossiers remonteront dans le dossier parent.`)) void run(() => api.delete<Resp>(`/folders/${f.id}`));
                 }}
-                className="rounded-lg p-1.5 text-faint hover:bg-red-50 hover:text-danger"
+                className="rounded-lg p-2 text-faint hover:bg-red-50 hover:text-danger md:p-1.5"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -215,8 +220,9 @@ export function DocumentsTab({ project, run, currentUserId }: { project: Project
               <select
                 value={doc.folderId ?? "__root__"}
                 onChange={(e) => void run(() => api.patch<Resp>(`/documents/${doc.id}`, { folderId: e.target.value === "__root__" ? null : e.target.value }))}
-                className={`${selectClass} max-w-44 text-xs`}
+                className={`${selectClassXs} max-w-44`}
                 title="Dossier"
+                aria-label={`Dossier de « ${doc.name} »`}
               >
                 <option value="__root__">📁 Racine</option>
                 {allFolderOptions.map((o) => (
@@ -228,8 +234,9 @@ export function DocumentsTab({ project, run, currentUserId }: { project: Project
               <select
                 value={doc.deliverableId ?? ""}
                 onChange={(e) => void run(() => api.patch<Resp>(`/documents/${doc.id}`, { deliverableId: e.target.value || null }))}
-                className={`${selectClass} max-w-48 text-xs`}
+                className={`${selectClassXs} max-w-48`}
                 title="Livrable matérialisé par ce document"
+                aria-label={`Livrable matérialisé par « ${doc.name} »`}
               >
                 <option value="">— Pas un livrable —</option>
                 {project.deliverables.map((d) => (
@@ -238,16 +245,18 @@ export function DocumentsTab({ project, run, currentUserId }: { project: Project
                   </option>
                 ))}
               </select>
-              <a href={doc.url} title="Télécharger" className="rounded-lg p-1.5 text-muted hover:bg-surface-2">
+              <a href={doc.url} title="Télécharger" aria-label={`Télécharger « ${doc.name} »`} className="rounded-lg p-2 text-muted hover:bg-surface-2 md:p-1.5">
                 <Download className="h-4 w-4" />
               </a>
               {(doc.uploadedBy?.id === currentUserId || project.ownerId === currentUserId) && (
                 <button
+                  type="button"
                   title="Supprimer"
+                  aria-label={`Supprimer « ${doc.name} »`}
                   onClick={() => {
                     if (confirm(`Supprimer définitivement « ${doc.name} » ?`)) void run(() => api.delete<Resp>(`/documents/${doc.id}`));
                   }}
-                  className="rounded-lg p-1.5 text-faint hover:bg-red-50 hover:text-danger"
+                  className="rounded-lg p-2 text-faint hover:bg-red-50 hover:text-danger md:p-1.5"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

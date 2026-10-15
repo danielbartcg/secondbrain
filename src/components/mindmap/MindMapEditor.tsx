@@ -25,7 +25,7 @@ import { api } from "@/lib/client";
 import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
 import { layoutMindMap, subtreeIds, type Side } from "@/lib/mindmap-layout";
 import { RichTextEditor } from "@/components/RichTextEditor";
-import { Button, InlineEdit, NODE_STATUS_LABEL } from "@/components/ui";
+import { Button, InlineEdit, NODE_STATUS_LABEL, errorMessage, toast } from "@/components/ui";
 import { NodeTasksPanel } from "./NodeTasksPanel";
 import { useSearchParams } from "next/navigation";
 
@@ -49,7 +49,8 @@ import { useSearchParams } from "next/navigation";
  */
 
 const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
-const DEFAULT_EDGE = "#c8c5bc";
+/** Couleur de rendu des liens sans couleur (jeton du thème, jamais enregistrée). */
+const DEFAULT_EDGE = "var(--color-line-strong)";
 const NEW_TITLE = "Nouvelle idée";
 
 type MindData = {
@@ -93,8 +94,8 @@ const MindNodeView = memo(function MindNodeView({ id, data, selected }: NodeProp
 
   const watch = data.status === "WATCH";
   const closed = data.status === "CLOSED";
-  const border = watch ? "#f59e0b" : (data.color ?? (data.isRoot ? "var(--color-brand-600)" : "var(--color-line-strong)"));
-  const background = watch ? "#fffbeb" : data.isRoot && !data.color ? "var(--color-brand-50)" : undefined;
+  const border = watch ? "var(--color-warn)" : (data.color ?? (data.isRoot ? "var(--color-brand-600)" : "var(--color-line-strong)"));
+  const background = watch ? "var(--color-amber-50)" : data.isRoot && !data.color ? "var(--color-brand-50)" : undefined;
   return (
     <div
       className={`mind-node ${selected ? "is-selected" : ""} ${data.isRoot ? "is-root" : ""} ${watch ? "is-watch" : ""} ${closed ? "is-closed" : ""}`}
@@ -134,13 +135,13 @@ const MindNodeView = memo(function MindNodeView({ id, data, selected }: NodeProp
         />
       ) : (
         <div className="flex items-center gap-1.5">
-          {watch && <Eye className="h-3.5 w-3.5 shrink-0 text-amber-600" />}
+          {watch && <Eye className="h-3.5 w-3.5 shrink-0 text-warn" />}
           <span className="mind-title truncate" title={data.title}>
             {data.title}
           </span>
           {data.hasNotes && <span className="text-[10px] text-muted" title="Contient des notes">📝</span>}
           {data.openTaskCount > 0 && (
-            <span className="mind-tasks" title={`${data.openTaskCount} tâche(s) ouverte(s) rattachée(s)`}>
+            <span className="mind-tasks" title={data.openTaskCount > 1 ? `${data.openTaskCount} tâches ouvertes rattachées` : "1 tâche ouverte rattachée"}>
               <ListTodo className="h-3 w-3" /> {data.openTaskCount}
             </span>
           )}
@@ -148,7 +149,7 @@ const MindNodeView = memo(function MindNodeView({ id, data, selected }: NodeProp
             <button
               type="button"
               className="nodrag rounded-full bg-surface-3 px-1.5 text-[10px] text-muted hover:bg-surface-2"
-              title={`${data.closedHidden} nœud(s) fermé(s) masqué(s) — cliquer pour les afficher`}
+              title={`${data.closedHidden > 1 ? `${data.closedHidden} nœuds fermés masqués` : "1 nœud fermé masqué"} — cliquer pour les afficher`}
               onClick={(e) => {
                 e.stopPropagation();
                 data.onShowClosed();
@@ -267,6 +268,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
       setSaving((s) => s + 1);
       const task = queue.current.then(fn).catch(async (e) => {
         console.error(e);
+        toast(`Modification annulée : ${errorMessage(e)}`, "error");
         await reload().catch(() => {});
         return undefined;
       });
@@ -418,7 +420,14 @@ function Editor({ initial }: { initial: MindMapDto }) {
       const n = byId.get(id);
       if (!n || !n.parentId) return;
       const ids = subtreeIds(nodes, id);
-      if (ids.size > 1 && !confirm(`Supprimer « ${n.title} » et ses ${ids.size - 1} sous-nœud(s) ?`)) return;
+      if (ids.size > 1) {
+        const sub = ids.size - 1;
+        if (!confirm(`Supprimer « ${n.title} » et ${sub > 1 ? `ses ${sub} sous-nœuds` : "son sous-nœud"} ?`)) return;
+      } else {
+        const hasNotes = n.notes.replace(/<[^>]+>/g, "").trim().length > 0 || n.notes.includes("<img");
+        const what = [hasNotes && "des notes", n.taskCount > 0 && (n.taskCount > 1 ? `${n.taskCount} tâches rattachées` : "une tâche rattachée")].filter(Boolean).join(" et ");
+        if (what && !confirm(`Supprimer « ${n.title} » ? Ce nœud contient ${what}.`)) return;
+      }
       setNodes((ns) => ns.filter((x) => !ids.has(x.id)));
       setSelectedId(n.parentId);
       setEditingId(null);
@@ -663,12 +672,15 @@ function Editor({ initial }: { initial: MindMapDto }) {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col md:h-dvh">
       {/* En-tête */}
       <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
-        <Link href="/mindmaps" className="rounded-lg p-1.5 text-ink-2 hover:bg-surface-2" title="Retour aux cartes">
+        <Link href="/mindmaps" className="shrink-0 rounded-lg p-1.5 text-ink-2 hover:bg-surface-2" title="Retour aux cartes" aria-label="Retour aux cartes">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <InlineEdit value={map.title} onSave={renameMap} as="h1" className="min-w-0 flex-1 truncate text-base font-semibold sm:text-lg" />
         <span className="hidden text-xs text-faint lg:block">Tab : enfant · Entrée : frère · Suppr · F2 : renommer · Espace : replier</span>
-        <span className={`text-xs ${saving ? "text-warn" : "text-faint"}`}>{saving ? "Enregistrement…" : "Enregistré"}</span>
+        <span className={`shrink-0 text-xs ${saving ? "text-warn" : "text-faint"}`} role="status" title={saving ? "Enregistrement…" : "Enregistré"}>
+          <span aria-hidden className={`inline-block h-2 w-2 rounded-full sm:hidden ${saving ? "bg-warn" : "bg-ok"}`} />
+          <span className="sr-only sm:not-sr-only">{saving ? "Enregistrement…" : "Enregistré"}</span>
+        </span>
         <Button variant="ghost" size="sm" onClick={() => expandAll(false)} title="Tout déplier">
           <ChevronsUpDown className="h-4 w-4" />
         </Button>
@@ -690,7 +702,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
           size="sm"
           onClick={resetLayout}
           disabled={manualCount === 0}
-          title={manualCount ? `Affichage optimisé : replacer automatiquement les ${manualCount} nœud(s) déplacé(s)` : "Affichage optimisé (aucun nœud déplacé)"}
+          title={manualCount ? `Affichage optimisé : replacer automatiquement ${manualCount > 1 ? `les ${manualCount} nœuds déplacés` : "le nœud déplacé"}` : "Affichage optimisé (aucun nœud déplacé)"}
         >
           <LayoutTemplate className="h-4 w-4" />
           <span className="hidden lg:inline">Affichage optimisé</span>
@@ -727,7 +739,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
             proOptions={{ hideAttribution: true }}
             fitView
           >
-            <Background gap={24} color="#dddbd4" />
+            <Background gap={24} color="var(--color-line-strong)" />
             <Controls showInteractive={false} position="bottom-right" />
           </ReactFlow>
 
@@ -796,10 +808,10 @@ function Editor({ initial }: { initial: MindMapDto }) {
 
         {/* Panneau de détails : colonne à droite (≥ md), tiroir bas (mobile) */}
         {showPanel && selected && (
-          <aside className="fixed inset-x-0 bottom-0 z-30 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-line bg-surface shadow-2xl md:static md:z-auto md:max-h-none md:w-[26rem] md:rounded-none md:border-l md:border-t-0 md:shadow-none">
+          <aside role="dialog" aria-label={selected.parentId ? "Détails du nœud" : "Détails de l'idée centrale"} className="fixed inset-x-0 bottom-0 z-30 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-line bg-surface shadow-2xl md:static md:z-auto md:max-h-none md:w-[26rem] md:rounded-none md:border-l md:border-t-0 md:shadow-none">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
               <span className="text-xs font-medium uppercase tracking-wide text-muted">{selected.parentId ? "Nœud" : "Idée centrale"}</span>
-              <button onClick={() => setPanelOpen(false)} className="ml-auto rounded-lg p-1.5 text-ink-2 hover:bg-surface-2" title="Fermer">
+              <button type="button" onClick={() => setPanelOpen(false)} className="ml-auto rounded-lg p-2 text-ink-2 hover:bg-surface-2 md:p-1.5" title="Fermer" aria-label="Fermer le panneau">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -814,7 +826,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
                     if (t) rename(selected.id, t);
                   }}
                   onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                  className="w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                  className="w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
                 />
               </label>
 
@@ -822,17 +834,23 @@ function Editor({ initial }: { initial: MindMapDto }) {
                 <span className="mb-1.5 block text-xs font-medium text-muted">Couleur</span>
                 <div className="flex flex-wrap gap-2">
                   <button
+                    type="button"
                     onClick={() => setColor(selected.id, null)}
-                    title="Par défaut"
+                    title="Couleur par défaut"
+                    aria-label="Couleur par défaut"
+                    aria-pressed={!selected.color}
                     className={`h-7 w-7 rounded-full border-2 border-dashed border-line-strong ${!selected.color ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
                   />
                   {COLORS.map((c) => (
                     <button
                       key={c}
+                      type="button"
                       onClick={() => setColor(selected.id, c)}
                       style={{ backgroundColor: c }}
                       className={`h-7 w-7 rounded-full ${selected.color === c ? "ring-2 ring-brand-500 ring-offset-2" : ""}`}
-                      title={c}
+                      title={`Couleur ${c}`}
+                      aria-label={`Couleur ${c}`}
+                      aria-pressed={selected.color === c}
                     />
                   ))}
                 </div>

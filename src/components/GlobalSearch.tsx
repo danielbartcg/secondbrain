@@ -23,6 +23,7 @@ export function GlobalSearch({ autoFocus = false, className = "" }: { autoFocus?
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [active, setActive] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +35,7 @@ export function GlobalSearch({ autoFocus = false, className = "" }: { autoFocus?
     if (query.length < 2) {
       setHits([]);
       setLoading(false);
+      setFailed(false);
       return;
     }
     setLoading(true);
@@ -43,10 +45,14 @@ export function GlobalSearch({ autoFocus = false, className = "" }: { autoFocus?
         const { results } = await api.get<{ results: SearchHit[] }>(`/search?q=${encodeURIComponent(query)}`);
         if (id === seq.current) {
           setHits(results);
+          setFailed(false);
           setActive(0);
         }
       } catch {
-        if (id === seq.current) setHits([]);
+        if (id === seq.current) {
+          setHits([]);
+          setFailed(true);
+        }
       } finally {
         if (id === seq.current) setLoading(false);
       }
@@ -109,7 +115,7 @@ export function GlobalSearch({ autoFocus = false, className = "" }: { autoFocus?
           aria-expanded={showPanel}
           role="combobox"
           aria-controls="global-search-results"
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-faint sm:text-base"
+          className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-faint"
         />
         {q && (
           <button
@@ -118,7 +124,7 @@ export function GlobalSearch({ autoFocus = false, className = "" }: { autoFocus?
               setQ("");
               inputRef.current?.focus();
             }}
-            className="rounded-full p-1 text-muted hover:bg-surface-2"
+            className="rounded-full p-1.5 text-muted hover:bg-surface-2"
             aria-label="Effacer"
           >
             <X className="h-4 w-4" />
@@ -129,7 +135,9 @@ export function GlobalSearch({ autoFocus = false, className = "" }: { autoFocus?
       {showPanel && (
         <div id="global-search-results" role="listbox" className="absolute inset-x-0 top-full z-40 mt-1.5 max-h-[60dvh] overflow-y-auto rounded-2xl border border-line bg-surface shadow-2xl">
           {ordered.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-muted">{loading ? "Recherche…" : `Aucun résultat pour « ${q.trim()} »`}</p>
+            <p className={`px-4 py-6 text-center text-sm ${failed && !loading ? "text-danger" : "text-muted"}`}>
+              {loading ? "Recherche…" : failed ? "Recherche indisponible pour le moment. Réessayez dans un instant." : `Aucun résultat pour « ${q.trim()} »`}
+            </p>
           ) : (
             KIND_ORDER.map((kind) => {
               const group = hits.filter((h) => h.kind === kind);

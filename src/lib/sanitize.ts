@@ -5,8 +5,8 @@ import sanitizeHtml from "sanitize-html";
  * Appliqué à l'enregistrement ET au rendu : jamais l'un sans l'autre.
  *
  * Les images ne peuvent pointer que vers nos médias (/media/…) ou une URL
- * http(s) : pas de data: ni de blob: (une URL blob n'a de sens que dans
- * l'onglet qui l'a créée ; elle ne doit jamais être persistée).
+ * https (pas http : contenu mixte, pistage en clair) ; pas de data: ni de
+ * blob: (une URL blob n'a de sens que dans l'onglet qui l'a créée ; elle ne doit jamais être persistée).
  */
 const OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
@@ -21,7 +21,7 @@ const OPTIONS: sanitizeHtml.IOptions = {
     img: ["src", "alt", "title", "width", "height"],
   },
   allowedSchemes: ["http", "https", "mailto"],
-  allowedSchemesByTag: { img: ["http", "https"] },
+  allowedSchemesByTag: { img: ["https"] },
   allowProtocolRelative: false,
   transformTags: {
     a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer nofollow", target: "_blank" }),
@@ -34,9 +34,23 @@ const OPTIONS: sanitizeHtml.IOptions = {
 function isAllowedImageSrc(src: string | undefined): boolean {
   if (!src) return false;
   if (src.startsWith("/media/")) return true;
-  return /^https?:\/\//i.test(src);
+  return /^https:\/\//i.test(src);
 }
 
 export function sanitizeNotes(html: string): string {
   return sanitizeHtml(html ?? "", OPTIONS);
+}
+
+/** Texte brut d'un HTML (extraits : notifications, aperçus de messages, e-mails). */
+export function htmlToText(html: string, max = 200): string {
+  const text = sanitizeHtml((html ?? "").replace(/<\/(p|div|li|h[1-6]|blockquote|pre)>|<br\s*\/?>/gi, "$& "), { allowedTags: [], allowedAttributes: {} })
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > max ? text.slice(0, max - 1).trimEnd() + "…" : text;
 }

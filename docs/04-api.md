@@ -16,9 +16,15 @@ Contrat consommé par le client web et, demain, par l'application mobile.
   - `401 UNAUTHENTICATED`, `401 INVALID_CREDENTIALS`
   - `403 FORBIDDEN` (réservé au propriétaire), `403 CSRF`, `403 REGISTRATION_CLOSED`
   - `404 NOT_FOUND`, `409 EMAIL_TAKEN`, `413 TOO_LARGE`, `415 UNSUPPORTED_TYPE`,
-    `429 RATE_LIMITED`, `500 INTERNAL`
+    `415 UNSUPPORTED_MEDIA_TYPE`, `429 RATE_LIMITED`, `500 INTERNAL`
 - Anti-CSRF : une requête mutante authentifiée **par cookie** doit porter un
-  en-tête `Origin` égal à l'hôte. Les clients Bearer ne sont pas concernés.
+  en-tête `Origin` égal à l'hôte (sans `Origin`, `Sec-Fetch-Site: cross-site`
+  est refusé) et, si elle a un corps JSON, `Content-Type: application/json`
+  (`415 UNSUPPORTED_MEDIA_TYPE` sinon). Les clients Bearer ne sont pas concernés.
+- Quotas (`429 RATE_LIMITED`) : `POST /uploads` 120, `POST /projects/:id/documents`
+  60, `POST /sync/push` 300 par utilisateur et 15 min ; `POST /auth/login`
+  10 / 15 min par IP et par compte.
+- Identifiants (`…Id`) : 64 caractères maximum.
 - Dates : ISO 8601 en sortie ; en entrée, ISO ou `AAAA-MM-JJ` ; `null` efface.
 - Couleurs : `#rrggbb` ou `null`.
 - **Accès aux projets** : propriétaire ou membre rattaché à un compte. Les
@@ -28,19 +34,28 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password (≥ 8), firstName?, lastName?, name?, client? }` (au moins un des trois noms ; `name` seul = prénom) | `201 { user, token, expiresAt }` |
+| POST | `/auth/register` | `{ email, password (8 à 72 caractères), firstName?, lastName?, name?, client? }` (au moins un des trois noms ; `name` seul = prénom) | `201 { user, token, expiresAt }` ; `409 EMAIL_TAKEN` (aussi pour l'e-mail du super administrateur, créé seulement par script) |
 | POST | `/auth/login` | `{ email, password, client? }` | `{ user, token, expiresAt }` |
 | POST | `/auth/logout` | — | `{ ok: true }` |
 | GET | `/auth/me` | — | `{ user: { id, email, name, firstName, lastName, avatarUrl, theme, role, isAdmin, createdAt } }` |
 | GET | `/me` | — | `{ profile: Profile }` |
-| PATCH | `/me` | `{ firstName?, lastName?, avatarUrl? (/media/… ou null), theme? }` | `{ profile }` ; le nom affiché est recopié dans mes fiches membres |
-| POST | `/me/password` | `{ currentPassword, newPassword (≥ 8, ≠ actuel), confirmPassword? }` | `{ ok: true }` ; `400 INVALID_CREDENTIALS` si l'actuel est faux ; `429` après 10 essais / 15 min ; ferme les **autres** sessions |
+| PATCH | `/me` | `{ firstName?, lastName?, avatarUrl? (/media/… ou null), theme?, emailNotifications? }` | `{ profile }` ; le nom affiché est recopié dans mes fiches membres |
+| POST | `/me/password` | `{ currentPassword, newPassword (8 à 72 caractères, ≠ actuel), confirmPassword? }` | `{ ok: true }` ; `400 INVALID_CREDENTIALS` si l'actuel est faux ; `429` après 10 essais / 15 min ; ferme les **autres** sessions |
+| GET | `/auth/options` | — | `{ registration, passwordReset }` (public) : `passwordReset` = envoi d'e-mails configuré et activé |
+| POST | `/auth/forgot-password` | `{ email }` | `{ ok: true }` **même si le compte n'existe pas** ; `503 MAIL_DISABLED` si l'envoi n'est pas configuré ; 3 / h / adresse |
+| POST | `/auth/reset-password` | `{ token, password, confirmPassword? }` | `{ ok: true }` ; ferme toutes les sessions ; `400 INVALID_TOKEN` (expiré, déjà utilisé) |
+| POST | `/auth/verify-email` | `{ token }` | `{ email }` ; `400 INVALID_TOKEN` |
+| POST | `/me/email` | `{ email, currentPassword }` | `{ email, verificationSent }` ; adresse non validée ensuite ; `400 BAD_PASSWORD`, `409 EMAIL_TAKEN` |
+| POST | `/me/email/verification` | — | `{ ok, to }` (renvoi du lien) ; `409 ALREADY_VERIFIED`, `503 MAIL_DISABLED` |
+| GET | `/me/api-keys` | — | `{ apiKeys: { id, name, prefix, createdAt, lastUsedAt }[] }` |
+| POST | `/me/api-keys` | `{ name }` | `201 { key, apiKey }` — `key` (`sb_…`) n'est renvoyée **qu'ici** ; 10 clés max |
+| DELETE | `/me/api-keys/:id` | — | `{ ok: true }` (révocation immédiate) |
 | GET | `/me/team` | — | `{ members: { id, name, email, avatarUrl }[], tasks: OverviewTask[] }` (mes N-1 directs) |
 
 ```ts
 type Profile = { id; email; name /* « Prénom Nom » */; firstName; lastName; avatarUrl: string | null;
                  theme: "light"|"dark"|"sepia"|"ocean"|"forest"; role: "USER"|"ADMIN"; isAdmin; isSuperAdmin;
-                 managerId: string | null; reportCount; createdAt };
+                 managerId: string | null; reportCount; emailVerified: boolean; emailNotifications: boolean; createdAt };
 type OverviewTask = Task & { projectName; projectColor; stageName; ownerName; assigneeName; supervisorName;
                              contributorNames: string[]; peopleUserIds: string[] };
 ```
@@ -53,7 +68,10 @@ les projets et tâches des autres.
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
-| GET | `/admin/users` | — | `{ users: { id, email, name, avatarUrl, role, isAdmin, isSuperAdmin, managerId, reportIds, projectCount, createdAt }[] }` |
+| GET | `/admin/users` | — | `{ users: { id, email, name, avatarUrl, role, isAdmin, isSuperAdmin, managerId, reportIds, projectCount, emailVerified, createdAt }[] }` |
+| GET | `/admin/notifications` | — | `{ settings: NotificationSettings }` |
+| PATCH | `/admin/notifications` | `{ smtpHost?, smtpPort?, smtpSecure?, smtpUser?, smtpPassword? (absent = inchangé, "" = effacé), smtpFrom?, emailEnabled?, types?: { type, enabled, email }[] }` | `{ settings }` ; `400` si activation sans serveur ni expéditeur |
+| POST | `/admin/notifications/test` | — | `{ ok, to }` : e-mail de test à l'administrateur ; `502 SMTP_ERROR` avec le message du serveur ; 10 / 15 min |
 | PATCH | `/admin/users/:id` | `{ role?: "USER"\|"ADMIN", managerId?: string \| null }` | `{ users }` ; `400` : super administrateur, son propre rôle, boucle hiérarchique, soi-même comme manager |
 | GET | `/admin/projects` | — | `{ projects: (ProjectSummary & { ownerName; ownerEmail; taskCount })[] }` |
 | GET | `/admin/projects/:id` | — | `{ project: Project & { ownerName } }` |
@@ -331,10 +349,49 @@ type OrganizerTask = Task & { projectId; projectName; projectColor; stageName; a
 | GET | `/me/tasks` | — | `{ tasks: OrganizerTask[] }` triées par rang, puis échéance, puis priorité |
 | PUT | `/me/tasks/order` | `{ taskIds: string[] }` (ordre voulu ; ids inaccessibles ignorés) | `{ ok: true }` |
 
+```ts
+type NotificationSettings = { smtpHost; smtpPort; smtpSecure; smtpUser; smtpPasswordSet: boolean /* jamais le mot de passe */; smtpFrom;
+  emailEnabled; types: { type; enabled; email }[]; stats: { sent; failed; pending; lastError: string | null } /* 7 jours */ };
+```
+
+## Messagerie
+
+```ts
+type Participant = { id; name; avatarUrl; lastReadAt: string | null };
+type Message = { id; authorId; authorName; authorAvatarUrl; body /* HTML assaini, "" si supprimé */; deleted; createdAt;
+                 replyTo: { id; authorName; excerpt; deleted } | null };
+type ConversationSummary = { id; title; participants: Participant[]; lastMessageAt; unreadCount;
+                             lastMessage: { authorName; excerpt; deleted; createdAt; mine } | null };
+```
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/messages/conversations` | — | `{ conversations: ConversationSummary[] }` (200 max, plus récentes d'abord) |
+| POST | `/messages/conversations` | `{ participantIds (1 à 50), title?, body? }` | `201 { conversationId, created: true }` ; à deux sans titre, conversation existante reprise : `200 { …, created: false }` |
+| GET | `/messages/conversations/:id[?before=<messageId>\|?since=<ISO>]` | — | `{ conversation: { id, title, participants, messages, hasMore, serverTime } }` ; 50 derniers messages, `before` = page précédente, `since` = créés **ou supprimés** depuis ; 404 si non participant |
+| DELETE | `/messages/conversations/:id` | — | `{ ok: true }` : quitter |
+| POST | `/messages/conversations/:id/messages` | `{ body (HTML), replyToId? }` | `201 { message }` ; écrire vaut lecture ; notifie (`MESSAGE`) les autres ; 300 / 15 min |
+| DELETE | `/messages/conversations/:id/messages/:messageId` | — | `{ message }` (auteur seulement, `403` sinon) |
+| POST | `/messages/conversations/:id/read` | `{ read: boolean }` | `{ lastReadAt }` ; lu = notifications MESSAGE de la conversation lues ; non lu = depuis le dernier message reçu |
+| GET | `/messages/unread` | — | `{ count }` |
+| GET | `/messages/contacts` | — | `{ contacts: { id, name, email, avatarUrl }[] }` |
+
+## Connecteur MCP
+
+`POST /api/v1/mcp` — JSON-RPC 2.0 (MCP « Streamable HTTP » sans état,
+réponses `application/json`, lots acceptés, notifications → `202`).
+`Authorization: Bearer sb_…` (clé d'accès, pas un jeton de session) ;
+`401` sinon ; `403` si `Origin` étranger ; `GET` → `405`. Méthodes :
+`initialize`, `ping`, `tools/list`, `tools/call` (`resources/list` et
+`prompts/list` vides). Outils en lecture seule (voir docs/01) ; une erreur
+métier revient en résultat d'outil `isError: true`. Paramètre
+`admin_access: true` (administrateurs) sur `list_projects`, `get_project`,
+`list_tasks`, `get_task`.
+
 ## Notifications
 
 ```ts
-type Notification = { id; type: "ASSIGNED"|"REPLY"|"TASK_UPDATED"|"MENTION"; title; body; href;
+type Notification = { id; type: "ASSIGNED"|"REPLY"|"TASK_UPDATED"|"MENTION"|"MESSAGE"; title; body; href;
                       taskId; projectId; actorName; read: boolean; createdAt };
 ```
 
@@ -347,7 +404,10 @@ type Notification = { id; type: "ASSIGNED"|"REPLY"|"TASK_UPDATED"|"MENTION"; tit
 
 Émission : `ASSIGNED` (tâche créée / ré-affectée à un membre à compte),
 `TASK_UPDATED` (tâche affectée modifiée ou commentée ; une seule non lue par
-tâche, rafraîchie), `REPLY` (réponse à mon commentaire), `MENTION`. L'auteur
+tâche, rafraîchie), `REPLY` (réponse à mon commentaire), `MENTION`,
+`MESSAGE` (une seule non lue par conversation). Types désactivés dans
+Administration → Notifications : jamais créés. Copie e-mail selon la
+plateforme, le type et la préférence du destinataire (docs/01). L'auteur
 de l'action n'est jamais notifié. `href` pointe vers la fiche tâche,
 éventuellement `#comment-<id>`.
 

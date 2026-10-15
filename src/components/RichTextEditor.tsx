@@ -9,6 +9,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { uploadImage } from "@/lib/client";
+import { EmojiButton } from "@/components/EmojiPicker";
 
 /**
  * Éditeur WYSIWYG des notes (repris du template boutique).
@@ -21,6 +22,10 @@ import { uploadImage } from "@/lib/client";
  * `onChange` n'est appelé qu'avec du HTML sans URL blob : tant qu'un upload
  * est en cours, la sauvegarde est différée (une URL blob persistée serait
  * cassée partout ailleurs).
+ *
+ * Emoji : bouton de la barre d'outils (sélecteur emoji-mart).
+ * `variant="compact"` (messagerie) : barre réduite ; `onSubmit` est appelé par
+ * Ctrl/⌘ + Entrée.
  */
 
 /** Remplace (ou retire) le nœud image dont le src correspond à `blobUrl`. */
@@ -60,16 +65,25 @@ export function RichTextEditor({
   minHeight = 240,
   /** Change quand on passe à un autre document : recharge le contenu. */
   documentKey,
+  variant = "full",
+  onSubmit,
+  autoFocus = false,
 }: {
   initialHtml: string;
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
   documentKey?: string;
+  variant?: "full" | "compact";
+  onSubmit?: () => void;
+  autoFocus?: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onSubmitRef = useRef(onSubmit);
+  onSubmitRef.current = onSubmit;
+  const compact = variant === "compact";
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -82,12 +96,22 @@ export function RichTextEditor({
       TaskItem.configure({ nested: true }),
     ],
     content: initialHtml,
+    autofocus: autoFocus ? "end" : false,
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
       if (!hasPendingUploads(html)) onChangeRef.current(html);
     },
     editorProps: {
-      attributes: { class: "prose prose-sm sm:prose max-w-none" },
+      // 16 px minimum sur mobile : évite le zoom automatique d'iOS à la saisie.
+      attributes: { class: "prose max-w-none", "aria-label": placeholder },
+      handleKeyDown: (_view, event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && onSubmitRef.current) {
+          event.preventDefault();
+          onSubmitRef.current();
+          return true;
+        }
+        return false;
+      },
       handlePaste: (_view, event) => {
         const files = event.clipboardData?.files;
         if (files && files.length > 0 && editor) {
@@ -116,12 +140,49 @@ export function RichTextEditor({
     if (!editor || lastKey.current === documentKey) return;
     lastKey.current = documentKey;
     editor.commands.setContent(initialHtml, false);
-  }, [documentKey, initialHtml, editor]);
+    if (autoFocus) editor.commands.focus("end");
+  }, [documentKey, initialHtml, editor, autoFocus]);
+
+  const emoji = editor ? (
+    <EmojiButton
+      onSelect={(e) => editor.chain().focus().insertContent(e).run()}
+      className="rounded bg-surface px-2.5 py-1 text-ink-2 ring-1 ring-line hover:bg-surface-3"
+    />
+  ) : null;
+
+  if (compact) {
+    return (
+      <div className="editor-compact rounded-lg border border-line-strong bg-surface focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+        <div style={{ ["--editor-min-height" as string]: `${minHeight}px` }} className="max-h-60 overflow-y-auto px-1">
+          <EditorContent editor={editor} />
+        </div>
+        {editor && (
+          <div className="flex flex-wrap items-center gap-1 border-t border-line p-1">
+            <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive("bold")} label="G" title="Gras" className="font-bold" />
+            <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive("italic")} label="I" title="Italique" className="italic" />
+            <ToolbarButton onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive("bulletList")} label="• Liste" title="Liste à puces" />
+            {emoji}
+            <ToolbarButton onClick={() => fileInputRef.current?.click()} active={false} label="🖼" title="Insérer une image (ou collez-la directement dans le texte)" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && editor) insertImageFiles(editor, e.target.files);
+                e.target.value = "";
+              }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div>
+    <div className="rounded-lg focus-within:ring-2 focus-within:ring-brand-100">
       {editor && (
-        <div className="flex flex-wrap gap-1 rounded-t-lg border border-line-strong bg-surface-2 p-1.5">
+        <div className="flex flex-wrap gap-1 rounded-t-lg border border-line-strong bg-surface-2 p-1.5" role="toolbar" aria-label="Mise en forme">
           <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive("bold")} label="G" title="Gras" className="font-bold" />
           <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive("italic")} label="I" title="Italique" className="italic" />
           <ToolbarButton onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive("strike")} label="S" title="Barré" className="line-through" />
@@ -143,6 +204,7 @@ export function RichTextEditor({
             label="Lien"
             title="Insérer un lien"
           />
+          {emoji}
           <ToolbarButton onClick={() => fileInputRef.current?.click()} active={false} label="🖼 Image" title="Insérer une image (ou collez-la directement dans le texte)" />
           <input
             ref={fileInputRef}
@@ -181,6 +243,8 @@ function ToolbarButton({
       type="button"
       onClick={onClick}
       title={title}
+      aria-label={title}
+      aria-pressed={active}
       className={`rounded px-2.5 py-1 text-xs font-medium sm:text-sm ${
         active ? "bg-brand-600 text-on-brand" : "bg-surface text-ink-2 ring-1 ring-line hover:bg-surface-3"
       } ${className}`}

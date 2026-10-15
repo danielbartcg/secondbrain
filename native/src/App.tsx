@@ -6,6 +6,9 @@ import { HomeDashboard } from "@/components/dashboard/HomeDashboard";
 import { MindMapList } from "@/components/mindmap/MindMapList";
 import { MindMapEditor } from "@/components/mindmap/MindMapEditor";
 import { ProjectList } from "@/components/projects/ProjectList";
+import { MessagesApp } from "@/components/messages/MessagesApp";
+import { AdminNotifications } from "@/components/admin/AdminNotifications";
+import type { NotificationSettingsDto } from "@/lib/settings";
 import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
 import { OrphanTasks } from "@/components/projects/OrphanTasks";
 import { TaskSheet } from "@/components/projects/TaskSheet";
@@ -130,7 +133,7 @@ function Screen({ path, runtime }: { path: string; runtime: Runtime }) {
         load={() => Promise.all([api.get<{ projects: ProjectSummary[] }>("/projects"), api.get<{ tasks: TaskDto[] }>("/tasks")])}
         render={([p, t]) => (
           <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-            <ProjectList initial={p.projects} orphanCount={t.tasks.filter((x) => x.status !== "CLOSED").length} />
+            <ProjectList initial={p.projects} currentUserId={userId} orphanCount={t.tasks.filter((x) => x.status !== "CLOSED").length} />
           </div>
         )}
       />
@@ -148,6 +151,11 @@ function Screen({ path, runtime }: { path: string; runtime: Runtime }) {
   if (path === "/organize") return <Loaded load={() => api.get<OrganizerDto>("/me/tasks")} render={(d) => <TaskOrganizer initial={d} />} />;
   if (path === "/notes") return <Loaded load={() => api.get<{ children: TreeItem[] }>("/notes/tree?parent=root")} render={(d) => <NotesWorkspace roots={d.children} />} />;
   if (path === "/notifications") return <NotificationsPage />;
+  // Messagerie : en ligne uniquement (relayée au serveur).
+  if (path === "/messages" || (r = m(/^\/messages\/([^/]+)$/))) {
+    const u = runtime.store.meta.user!;
+    return <MessagesApp key={path} me={{ id: u.id, name: u.name, avatarUrl: u.avatarUrl ?? null }} conversationId={r?.[1]} />;
+  }
   if (path === "/conflicts") return <Conflicts store={runtime.store} />;
   if (path === "/preferences") return <Loaded load={() => api.get<{ profile: ProfileDto }>("/me")} render={(d) => <PreferencesPage initial={d.profile} />} />;
   if (path === "/team") return <Loaded load={() => api.get<{ members: Parameters<typeof TeamOverview>[0]["members"]; tasks: OverviewTask[] }>("/me/team")} render={(d) => <TeamOverview members={d.members} tasks={d.tasks} />} />;
@@ -179,7 +187,8 @@ function AdminScreen({ path, userId }: { path: string; userId: string }) {
   else if ((r = /^\/admin\/projects\/([^/]+)$/.exec(path))) {
     const id = r[1];
     body = <Loaded load={() => api.get<{ project: ProjectDto & { ownerName: string } }>(`/admin/projects/${id}`)} render={(d) => <AdminProjectView project={d.project} />} />;
-  } else if (path === "/admin/tasks") body = <Loaded load={() => api.get<{ tasks: OverviewTask[] }>("/admin/tasks")} render={(d) => <TaskOverviewTable tasks={d.tasks} />} />;
+  } else if (path === "/admin/notifications") body = <Loaded load={() => api.get<{ settings: NotificationSettingsDto }>("/admin/notifications")} render={(d) => <AdminNotifications initial={d.settings} adminEmail="" />} />;
+  else if (path === "/admin/tasks") body = <Loaded load={() => api.get<{ tasks: OverviewTask[] }>("/admin/tasks")} render={(d) => <TaskOverviewTable tasks={d.tasks} />} />;
   else body = <Message title="Page introuvable" />;
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">

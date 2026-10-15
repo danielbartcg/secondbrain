@@ -14,6 +14,7 @@ import {
   type TaskRow,
 } from "@/lib/shared/project-model";
 import { NO_PROJECT_LABEL, dayString } from "@/lib/shared/task-model";
+import { sanitizeNotes } from "@/lib/sanitize";
 import type { MindMapDto, MindMapSummary, MindNodeDto } from "@/lib/mindmaps";
 import type { NodeTaskDto, NodeTasksResult, OrganizerDto, OrganizerTask, TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
 import type { DashboardDto, DashboardTask, Deadline } from "@/lib/dashboard";
@@ -179,7 +180,7 @@ export class LocalModel {
       comments,
       workSessions: this.sessions(taskId),
       nodes,
-      notes: t.notes ?? "",
+      notes: sanitizeNotes(t.notes ?? ""),
     };
   }
 
@@ -319,7 +320,7 @@ export class LocalModel {
       id: n.id,
       parentId: n.parentId ?? null,
       title: n.title,
-      notes: n.notes ?? "",
+      notes: sanitizeNotes(n.notes ?? ""),
       color: n.color ?? null,
       collapsed: !!n.collapsed,
       status: n.status ?? "OPEN",
@@ -458,7 +459,7 @@ export class LocalModel {
         const m = this.store.get("MindMap", id);
         if (!m) return null;
         const root = this.store.where("MindNode", (n) => n.mapId === id && !n.parentId)[0];
-        return { ...base, title: m.title, breadcrumb: [crumbMaps], href: `/mindmaps/${id}`, notes: root?.notes ?? "", updatedAt: root?.updatedAt ?? m.updatedAt };
+        return { ...base, title: m.title, breadcrumb: [crumbMaps], href: `/mindmaps/${id}`, notes: sanitizeNotes(root?.notes ?? ""), updatedAt: root?.updatedAt ?? m.updatedAt };
       }
       case "node": {
         const n = this.store.get("MindNode", id);
@@ -472,22 +473,22 @@ export class LocalModel {
           path.unshift(p.parentId ? { ref: `node:${p.id}`, title: p.title } : { ref: `mindmap:${n.mapId}`, title: map?.title ?? "" });
           cur = p.parentId ?? null;
         }
-        return { ...base, title: n.title, breadcrumb: [crumbMaps, ...path], href: `/mindmaps/${n.mapId}?node=${n.id}`, notes: n.notes ?? "", updatedAt: n.updatedAt };
+        return { ...base, title: n.title, breadcrumb: [crumbMaps, ...path], href: `/mindmaps/${n.mapId}?node=${n.id}`, notes: sanitizeNotes(n.notes ?? ""), updatedAt: n.updatedAt };
       }
       case "project": {
         const p = this.store.get("Project", id);
-        return p ? { ...base, title: p.name, breadcrumb: [crumbProjects], href: `/projects/${id}`, notes: p.notes ?? "", updatedAt: p.updatedAt } : null;
+        return p ? { ...base, title: p.name, breadcrumb: [crumbProjects], href: `/projects/${id}`, notes: sanitizeNotes(p.notes ?? ""), updatedAt: p.updatedAt } : null;
       }
       case "stage": {
         const s = this.store.get("Stage", id);
         const p = s ? this.store.get("Project", s.projectId) : null;
-        return s && p ? { ...base, title: s.name, breadcrumb: [crumbProjects, { ref: `project:${p.id}`, title: p.name }], href: `/projects/${p.id}#plan`, notes: s.notes ?? "", updatedAt: s.updatedAt } : null;
+        return s && p ? { ...base, title: s.name, breadcrumb: [crumbProjects, { ref: `project:${p.id}`, title: p.name }], href: `/projects/${p.id}#plan`, notes: sanitizeNotes(s.notes ?? ""), updatedAt: s.updatedAt } : null;
       }
       case "activity": {
         const a = this.store.get("Activity", id);
         const s = a ? this.store.get("Stage", a.stageId) : null;
         const p = s ? this.store.get("Project", s.projectId) : null;
-        return a && s && p ? { ...base, title: a.name, breadcrumb: [crumbProjects, { ref: `project:${p.id}`, title: p.name }, { ref: `stage:${s.id}`, title: s.name }], href: `/projects/${p.id}#plan`, notes: a.notes ?? "", updatedAt: a.updatedAt } : null;
+        return a && s && p ? { ...base, title: a.name, breadcrumb: [crumbProjects, { ref: `project:${p.id}`, title: p.name }, { ref: `stage:${s.id}`, title: s.name }], href: `/projects/${p.id}#plan`, notes: sanitizeNotes(a.notes ?? ""), updatedAt: a.updatedAt } : null;
       }
       case "task": {
         const t = this.store.get("Task", id);
@@ -498,7 +499,7 @@ export class LocalModel {
         const breadcrumb = [crumbProjects, p ? { ref: `project:${p.id}`, title: p.name } : { ref: "section:orphans", title: NO_PROJECT_LABEL }];
         if (s) breadcrumb.push({ ref: `stage:${s.id}`, title: s.name });
         if (a) breadcrumb.push({ ref: `activity:${a.id}`, title: a.name });
-        return { ...base, title: t.name, breadcrumb, href: `/tasks/${id}`, notes: t.notes ?? "", updatedAt: t.updatedAt };
+        return { ...base, title: t.name, breadcrumb, href: `/tasks/${id}`, notes: sanitizeNotes(t.notes ?? ""), updatedAt: t.updatedAt };
       }
     }
     return null;

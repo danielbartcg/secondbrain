@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, FolderKanban, Inbox, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto, ProjectSummary } from "@/lib/projects";
-import { Button, EmptyState, PageHeader, ProgressBar, formatDate } from "@/components/ui";
+import { Button, EmptyState, PageHeader, ProgressBar, errorMessage, formatDate } from "@/components/ui";
 
 export const STATUS_LABEL: Record<ProjectSummary["status"], string> = {
   ACTIVE: "Actif",
@@ -24,25 +24,46 @@ const STATUS_CLASS: Record<ProjectSummary["status"], string> = {
 
 type Filter = "ALL" | ProjectSummary["status"];
 
-export function ProjectList({ initial, orphanCount = 0 }: { initial: ProjectSummary[]; orphanCount?: number }) {
+/**
+ * `currentUserId` (facultatif) : seule la personne propriétaire voit
+ * l'action « Supprimer » ; sans identifiant, l'action reste affichée et le
+ * serveur tranche.
+ */
+export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initial: ProjectSummary[]; orphanCount?: number; currentUserId?: string }) {
   const router = useRouter();
   const [projects, setProjects] = useState(initial);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     const n = name.trim();
-    if (!n) return;
-    const { project } = await api.post<{ project: ProjectDto }>("/projects", { name: n });
-    router.push(`/projects/${project.id}`);
+    if (!n || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { project } = await api.post<{ project: ProjectDto }>("/projects", { name: n });
+      router.push(`/projects/${project.id}`);
+    } catch (err) {
+      setError(errorMessage(err, "Création impossible."));
+      setBusy(false);
+    }
   }
 
   async function remove(p: ProjectSummary) {
     if (!confirm(`Supprimer le projet « ${p.name} » (étapes, activités et tâches comprises) ?`)) return;
+    const previous = projects;
+    setError(null);
     setProjects((ps) => ps.filter((x) => x.id !== p.id));
-    await api.delete(`/projects/${p.id}`);
+    try {
+      await api.delete(`/projects/${p.id}`);
+    } catch (err) {
+      setProjects(previous);
+      setError(errorMessage(err, "Suppression impossible."));
+    }
   }
 
   const visible = projects.filter((p) => (filter === "ALL" ? p.status !== "ARCHIVED" : p.status === filter));
@@ -66,11 +87,12 @@ export function ProjectList({ initial, orphanCount = 0 }: { initial: ProjectSumm
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nom du projet"
-            className="flex-1 rounded-lg border border-line-strong px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            aria-label="Nom du projet"
+            className="flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
           />
           <div className="flex gap-2">
-            <Button type="submit" disabled={!name.trim()}>
-              Créer
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy ? "Création…" : "Créer"}
             </Button>
             <Button variant="ghost" onClick={() => setCreating(false)}>
               Annuler
@@ -78,13 +100,20 @@ export function ProjectList({ initial, orphanCount = 0 }: { initial: ProjectSumm
           </div>
         </form>
       )}
+      {error && (
+        <p role="alert" className="mb-4 text-sm text-danger">
+          {error}
+        </p>
+      )}
 
       <div className="scrollbar-none mb-4 flex gap-1 overflow-x-auto">
         {(["ALL", "ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"] as Filter[]).map((f) => (
           <button
             key={f}
+            type="button"
+            aria-pressed={filter === f}
             onClick={() => setFilter(f)}
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${filter === f ? "bg-ink text-surface" : "bg-surface-2 text-ink-2 hover:bg-surface-3"}`}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${filter === f ? "bg-ink text-surface" : "bg-surface-2 text-ink-2 hover:bg-surface-3"}`}
           >
             {f === "ALL" ? "Tous" : STATUS_LABEL[f]}
           </button>
@@ -137,13 +166,17 @@ export function ProjectList({ initial, orphanCount = 0 }: { initial: ProjectSumm
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => remove(p)}
-                  title="Supprimer"
-                  className="rounded-lg p-1.5 text-faint opacity-0 transition-opacity hover:bg-red-50 hover:text-danger group-hover:opacity-100 focus:opacity-100 max-md:opacity-100"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {(!currentUserId || p.ownerId === currentUserId) && (
+                  <button
+                    type="button"
+                    onClick={() => remove(p)}
+                    title="Supprimer"
+                    aria-label={`Supprimer le projet « ${p.name} »`}
+                    className="rounded-lg p-2 text-faint opacity-0 transition-opacity hover:bg-red-50 hover:text-danger group-hover:opacity-100 focus:opacity-100 max-md:opacity-100 md:p-1.5"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               {p.description && <p className="mt-3 line-clamp-2 text-sm text-ink-2">{p.description}</p>}
               <div className="mt-3 flex items-center gap-3">

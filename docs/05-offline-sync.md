@@ -102,10 +102,21 @@ Page **Conflits** : votre valeur et la valeur retenue, « Copier ma valeur ».
 
 - `main.cjs` : protocole `app://local/` (interface depuis `renderer/`, repli
   `index.html`), relais `/media/…` avec **cache disque** (images visibles hors
-  ligne) et `/api/v1/documents/…` avec le jeton ; requêtes serveur par IPC
-  (`sb:fetch`, `sb:upload`) ; liens externes dans le navigateur ; instance
-  unique ; menu français ; mode `--smoke-test` (profil jetable).
+  ligne) et `/api/v1/documents/<id>/download` avec le jeton (chemin brut,
+  non décodé ; tout autre `/api/…` : 404) ; requêtes serveur par IPC
+  (`sb:fetch`, `sb:upload`) **limitées à l'origine de la session** (plus
+  `POST /api/v1/auth/login` vers le serveur annoncé par `sb:setServer` pendant
+  une connexion), méthodes GET/POST/PATCH/PUT/DELETE, en-têtes filtrés : le
+  jeton `Authorization: Bearer` est ajouté par le processus principal, jamais
+  repris de l'interface ; `session.json` chiffre le jeton avec `safeStorage`
+  quand le système le permet ; liens externes dans le navigateur ; instance
+  unique ; menu français (outils de développement seulement hors paquet ou
+  avec `SB_DEV_URL`) ; mode `--smoke-test` (profil jetable).
 - `preload.cjs` : `window.secondBrain` (contexte isolé, bac à sable).
+- Connexion : HTTPS obligatoire (sauf `localhost` / `127.0.0.1`). Le HTML
+  des notes est assaini (`sanitizeNotes`) au rendu par `native/src/local/model.ts`.
+  CSP en balise `<meta>` injectée au build (`native/vite.config.mts`,
+  `'self'` = `app://local` / `capacitor://localhost`).
 - Empaquetage `electron-builder` (`native/electron-builder.yml`) : NSIS
   Windows x64, sans aucune dépendance npm embarquée (≈ 110 Mo, essentiellement
   le moteur Electron). Non signé : avertissement SmartScreen à la première

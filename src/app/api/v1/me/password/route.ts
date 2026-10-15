@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { ApiError, json, parseBody, withUser } from "@/lib/api";
-import { getSessionToken, hashPassword, verifyPassword } from "@/lib/auth";
+import { getSessionToken, hashPassword, hashSessionToken, verifyPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { changePasswordSchema } from "@/lib/schemas";
@@ -20,7 +20,7 @@ export const POST = withUser(async (req: NextRequest, { user }) => {
   const token = await getSessionToken();
   await prisma.$transaction([
     prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(input.newPassword) } }),
-    prisma.session.deleteMany({ where: { userId: user.id, ...(token ? { NOT: { token } } : {}) } }),
+    prisma.session.deleteMany({ where: { userId: user.id, ...(token ? { NOT: { token: hashSessionToken(token) } } : {}) } }),
   ]);
   return json({ ok: true });
 });

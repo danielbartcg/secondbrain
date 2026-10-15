@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld("secondBrain", {
   fetch: (req) => ipcRenderer.invoke("sb:fetch", req),
   upload: (req) => ipcRenderer.invoke("sb:upload", req),
   setSession: (s) => ipcRenderer.invoke("sb:setSession", s),
+  setServer: (url) => ipcRenderer.invoke("sb:setServer", url),
   openExternal: (url) => ipcRenderer.invoke("sb:openExternal", url),
 });

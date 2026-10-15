@@ -41,8 +41,10 @@ services:
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
     ports:
       # Plusieurs applications cohabitent sur le serveur : chacune son port,
-      # le reverse proxy (Caddy) route par nom de domaine.
-      - "${APP_PORT:-3001}:3000"
+      # le reverse proxy (Caddy, sur l'hôte) route par nom de domaine. Publié sur
+      # la boucle locale uniquement : seul Caddy atteint l'application (et donc
+      # seul Caddy pose X-Forwarded-For, sur lequel repose le rate limiting).
+      - "127.0.0.1:${APP_PORT:-3001}:3000"
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/documents:/app/data/documents

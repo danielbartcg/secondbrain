@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, GripVertical, Minus } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, GripVertical, Minus } from "lucide-react";
 import type { OrganizerTask } from "@/lib/tasks";
-import { Badge, PRIORITIES, PRIORITY_LABEL, PriorityFlag, TASK_STATUS_LABEL, TASK_STATUS_TONE, formatDate, todayYmd, selectClass, type Priority } from "@/components/ui";
+import { Badge, PRIORITIES, PRIORITY_LABEL, PriorityFlag, TASK_STATUS_LABEL, TASK_STATUS_TONE, formatDate, todayYmd, selectClassXs, type Priority } from "@/components/ui";
 import type { OrganizerActions } from "./TaskOrganizer";
 
 /**
  * Vue « Synthèse » : tableau de mes tâches ouvertes (projet, étape, priorité,
  * échéance, planifiée oui/non). Les lignes se réordonnent par glisser-déposer :
- * l'ordre relatif est personnel et mémorisé.
+ * l'ordre relatif est personnel et mémorisé. Sur mobile (pas de glisser-déposer
+ * tactile), des boutons monter / descendre font la même chose.
  */
 export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; actions: OrganizerActions }) {
   const [dragId, setDragId] = useState<string | null>(null);
@@ -29,12 +30,21 @@ export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; acti
     void actions.reorder(ids);
   };
 
+  /** Monter (-1) ou descendre (+1) une ligne : même enregistrement que le glisser-déposer. */
+  const shift = (index: number, delta: -1 | 1) => {
+    const to = index + delta;
+    if (to < 0 || to >= tasks.length) return;
+    const ids = tasks.map((t) => t.id);
+    [ids[index], ids[to]] = [ids[to], ids[index]];
+    void actions.reorder(ids);
+  };
+
   return (
     <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
       <table className="w-full min-w-[720px] text-sm">
         <thead className="bg-surface-2 text-left text-xs uppercase tracking-wide text-muted">
           <tr>
-            <th className="w-10 px-2 py-2">#</th>
+            <th className="w-10 whitespace-nowrap px-2 py-2">#</th>
             <th className="px-2 py-2">Tâche</th>
             <th className="px-2 py-2">Projet</th>
             <th className="px-2 py-2">Étape</th>
@@ -73,8 +83,16 @@ export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; acti
               >
                 <td className="px-2 py-2">
                   <span className="flex cursor-grab items-center gap-1 text-muted active:cursor-grabbing" title="Glisser pour réordonner">
-                    <GripVertical className="h-4 w-4" />
+                    <GripVertical className="hidden h-4 w-4 md:block" />
                     <span className="text-xs tabular-nums">{i + 1}</span>
+                    <span className="flex md:hidden">
+                      <button type="button" onClick={() => shift(i, -1)} disabled={i === 0} className="rounded p-1.5 hover:bg-surface-3 disabled:opacity-30" aria-label={`Monter « ${t.name} »`}>
+                        <ArrowUp className="h-4 w-4" />
+                      </button>
+                      <button type="button" onClick={() => shift(i, 1)} disabled={i === tasks.length - 1} className="rounded p-1.5 hover:bg-surface-3 disabled:opacity-30" aria-label={`Descendre « ${t.name} »`}>
+                        <ArrowDown className="h-4 w-4" />
+                      </button>
+                    </span>
                   </span>
                 </td>
                 <td className="max-w-[22rem] px-2 py-2">
@@ -93,7 +111,7 @@ export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; acti
                   {t.activityName && <span className="text-muted"> › {t.activityName}</span>}
                 </td>
                 <td className="px-2 py-2">
-                  <select value={t.priority} onChange={(e) => void actions.patchTask(t.id, { priority: e.target.value as Priority })} className={`${selectClass} py-1 text-xs`} title="Changer la priorité">
+                  <select value={t.priority} onChange={(e) => void actions.patchTask(t.id, { priority: e.target.value as Priority })} className={`${selectClassXs} py-1`} title="Changer la priorité" aria-label={`Priorité de « ${t.name} »`}>
                     {PRIORITIES.map((p) => (
                       <option key={p} value={p}>
                         {PRIORITY_LABEL[p]}
@@ -128,7 +146,10 @@ export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; acti
           )}
         </tbody>
       </table>
-      <p className="px-3 py-2 text-[11px] text-muted">Glissez les lignes pour fixer votre ordre relatif ; la priorité se change directement dans la colonne.</p>
+      <p className="px-3 py-2 text-[11px] text-muted">
+        <span className="hidden md:inline">Glissez les lignes</span>
+        <span className="md:hidden">Utilisez les flèches</span> pour fixer votre ordre relatif ; la priorité se change directement dans la colonne.
+      </p>
     </div>
   );
 }

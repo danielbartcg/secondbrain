@@ -1,5 +1,6 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, User } from "@prisma/client";
+import { requireAdmin } from "@/lib/users";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
@@ -120,7 +121,8 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
       project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" }, include: MEMBER_INCLUDE } } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true, avatarUrl: true } } } },
       workSessions: { orderBy: { date: "asc" }, include: SESSION_INCLUDE },
-      nodes: { select: { nodeId: true, node: { select: { id: true, title: true, mapId: true, map: { select: { title: true } } } } } },
+      // Cartes de l'utilisateur seulement (les cartes sont personnelles).
+      nodes: { where: { node: { map: { ownerId: userId } } }, select: { nodeId: true, node: { select: { id: true, title: true, mapId: true, map: { select: { title: true } } } } } },
     },
   });
   if (!t) throw notFound("Tâche");
@@ -332,9 +334,10 @@ export type NodeTasksResult = {
   openTaskCount: number;
 };
 
-async function nodeTasksResult(nodeId: string): Promise<NodeTasksResult> {
+/** Tâches du nœud **accessibles** à l'utilisateur (une tâche d'un projet quitté n'apparaît plus). */
+async function nodeTasksResult(userId: string, nodeId: string): Promise<NodeTasksResult> {
   const rows = await prisma.task.findMany({
-    where: { nodes: { some: { nodeId } } },
+    where: { AND: [{ nodes: { some: { nodeId } } }, taskAccessWhere(userId)] },
     orderBy: [{ status: "asc" }, { createdAt: "asc" }],
     include: { ...TASK_BASE_INCLUDE, project: { select: { name: true, color: true } } },
   });
@@ -344,7 +347,7 @@ async function nodeTasksResult(nodeId: string): Promise<NodeTasksResult> {
 
 export async function listNodeTasks(userId: string, nodeId: string): Promise<NodeTasksResult> {
   await checkNode(prisma, userId, nodeId);
-  return nodeTasksResult(nodeId);
+  return nodeTasksResult(userId, nodeId);
 }
 
 /** Rattache une tâche existante (accessible) à un nœud (propre à l'utilisateur). Idempotent. */
@@ -353,13 +356,13 @@ export async function linkNodeTask(userId: string, nodeId: string, taskId: strin
   await accessibleTask(userId, taskId);
   await prisma.mindNodeTask.upsert({ where: { nodeId_taskId: { nodeId, taskId } }, create: { nodeId, taskId }, update: {} });
   await prisma.mindNode.update({ where: { id: nodeId }, data: { updatedAt: new Date() } });
-  return nodeTasksResult(nodeId);
+  return nodeTasksResult(userId, nodeId);
 }
 
 export async function unlinkNodeTask(userId: string, nodeId: string, taskId: string): Promise<NodeTasksResult> {
   await checkNode(prisma, userId, nodeId);
   await prisma.mindNodeTask.deleteMany({ where: { nodeId, taskId } });
-  return nodeTasksResult(nodeId);
+  return nodeTasksResult(userId, nodeId);
 }
 
 // --- Consultation : équipe (manager) et administration ------------------------------
@@ -419,8 +422,9 @@ export async function listTeamTasks(userId: string): Promise<{ members: Array<{ 
   return { members, tasks: rows.map(toOverview) };
 }
 
-/** Toutes les tâches (administration ; le rôle est vérifié par l'appelant). */
-export async function listAllTasksAdmin(): Promise<OverviewTask[]> {
+/** Toutes les tâches (administration ; lecture seule, rôle vérifié ici). */
+export async function listAllTasksAdmin(admin: Pick<User, "email" | "role">): Promise<OverviewTask[]> {
+  requireAdmin(admin);
   const rows = await prisma.task.findMany({ orderBy: [{ updatedAt: "desc" }], take: 5000, include: OVERVIEW_INCLUDE });
   return rows.map(toOverview);
 }

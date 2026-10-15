@@ -7,7 +7,7 @@ import { api } from "@/lib/client";
 import type { NodeTasksResult } from "@/lib/tasks";
 import type { TaskMutation } from "@/lib/projects";
 import type { SearchHit } from "@/lib/search";
-import { Button, PriorityFlag, TASK_STATUS_LABEL, inputClass } from "@/components/ui";
+import { Button, PriorityFlag, TASK_STATUS_LABEL, errorMessage, inputClass, toast } from "@/components/ui";
 
 /**
  * Tâches d'un nœud de carte mentale (panneau latéral) : liste des tâches
@@ -75,6 +75,8 @@ export function NodeTasksPanel({
       await api.post<TaskMutation>("/tasks", { name: n, nodeId });
       apply(await api.get<NodeTasksResult>(base));
       setName("");
+    } catch (e) {
+      toast(errorMessage(e, "Création impossible."), "error");
     } finally {
       setBusy(false);
     }
@@ -85,17 +87,27 @@ export function NodeTasksPanel({
       apply(await api.post<NodeTasksResult>(base, { taskId }));
       setQuery("");
       setMode("none");
+    } catch (e) {
+      toast(errorMessage(e, "Rattachement impossible."), "error");
     } finally {
       setBusy(false);
     }
   }
   async function unlink(taskId: string) {
-    apply(await api.delete<NodeTasksResult>(`${base}/${taskId}`));
+    try {
+      apply(await api.delete<NodeTasksResult>(`${base}/${taskId}`));
+    } catch (e) {
+      toast(errorMessage(e, "Détachement impossible."), "error");
+    }
   }
   async function cycleStatus(taskId: string, status: string) {
     const next = { TODO: "IN_PROGRESS", IN_PROGRESS: "DONE", DONE: "TODO", CLOSED: "TODO" }[status];
-    await api.patch<TaskMutation>(`/tasks/${taskId}`, { status: next });
-    apply(await api.get<NodeTasksResult>(base));
+    try {
+      await api.patch<TaskMutation>(`/tasks/${taskId}`, { status: next });
+      apply(await api.get<NodeTasksResult>(base));
+    } catch (e) {
+      toast(errorMessage(e, "Changement de statut impossible."), "error");
+    }
   }
 
   return (
@@ -123,7 +135,7 @@ export function NodeTasksPanel({
           }}
           className="mb-2 flex gap-1.5"
         >
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la tâche (sans projet, rattachée au nœud)" className={`${inputClass} min-w-0 flex-1 py-1.5`} />
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la tâche (sans projet, rattachée au nœud)" aria-label="Nom de la nouvelle tâche" className={`${inputClass} min-w-0 flex-1 py-1.5`} />
           <Button type="submit" size="sm" disabled={busy || !name.trim()}>
             Créer
           </Button>
@@ -131,7 +143,7 @@ export function NodeTasksPanel({
       )}
       {mode === "link" && (
         <div className="relative mb-2">
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher une tâche existante…" className={`${inputClass} w-full py-1.5`} />
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher une tâche existante…" aria-label="Rechercher une tâche existante" className={`${inputClass} w-full py-1.5`} />
           {hits.length > 0 && (
             <ul className="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-surface shadow-lg">
               {hits.map((h) => (
@@ -163,7 +175,8 @@ export function NodeTasksPanel({
                   type="button"
                   onClick={() => cycleStatus(t.id, t.status)}
                   title={`Statut : ${TASK_STATUS_LABEL[t.status]} (cliquer pour changer)`}
-                  className={`shrink-0 ${closed ? "text-violet-600" : done ? "text-ok" : t.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
+                  aria-label={`Statut : ${TASK_STATUS_LABEL[t.status]} — changer`}
+                  className={`-m-1 shrink-0 rounded p-1 ${closed ? "text-violet-700" : done ? "text-ok" : t.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
                 >
                   {closed ? <Lock className="h-4 w-4" /> : done ? <Check className="h-4 w-4" /> : t.status === "IN_PROGRESS" ? <CircleDot className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
                 </button>
@@ -176,10 +189,10 @@ export function NodeTasksPanel({
                     <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: t.projectColor ?? "#94a3b8" }} /> {t.projectName}
                   </span>
                 </span>
-                <Link href={`/tasks/${t.id}`} className="rounded p-1 text-muted hover:bg-surface-2" title="Ouvrir la fiche">
+                <Link href={`/tasks/${t.id}`} className="rounded p-2 text-muted hover:bg-surface-2 md:p-1" title="Ouvrir la fiche" aria-label="Ouvrir la fiche tâche">
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
-                <button type="button" onClick={() => unlink(t.id)} className="rounded p-1 text-faint hover:bg-red-50 hover:text-danger" title="Détacher du nœud (la tâche est conservée)">
+                <button type="button" onClick={() => unlink(t.id)} className="rounded p-2 text-faint hover:bg-red-50 hover:text-danger md:p-1" title="Détacher du nœud (la tâche est conservée)" aria-label={`Détacher « ${t.name} » du nœud`}>
                   <Unlink className="h-3.5 w-3.5" />
                 </button>
               </li>

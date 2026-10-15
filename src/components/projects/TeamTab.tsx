@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Crown, Search, Trash2, UserPlus } from "lucide-react";
-import { api } from "@/lib/client";
+import { ApiClientError, api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
-import { Avatar, Button, InlineEdit, MEMBER_PALETTE, inputClass } from "@/components/ui";
+import { Avatar, Button, InlineEdit, MEMBER_PALETTE, errorMessage, inputClass, isFinished } from "@/components/ui";
 import type { Resp, Run } from "./ProjectWorkspace";
 
 /**
@@ -18,16 +18,25 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
   const [email, setEmail] = useState("");
   const [found, setFound] = useState<{ id: string; name: string; email: string } | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
-  const allTasks = project.stages.flatMap((s) => [...s.tasks, ...s.activities.flatMap((a) => a.tasks)]);
+  // Tâches des étapes, des activités et du projet sans étape.
+  const allTasks = [...project.tasks, ...project.stages.flatMap((s) => [...s.tasks, ...s.activities.flatMap((a) => a.tasks)])];
   const tasksOf = (memberId: string) => allTasks.filter((t) => t.assigneeId === memberId);
 
   async function lookup() {
-    if (!email.trim()) return;
+    if (!email.trim() || busy) return;
     setBusy(true);
+    setLookupError(null);
     try {
       const { user } = await api.get<{ user: { id: string; name: string; email: string } | null }>(`/users/lookup?email=${encodeURIComponent(email.trim())}`);
       setFound(user);
+    } catch (e) {
+      setFound(undefined);
+      setLookupError(
+        e instanceof ApiClientError && e.status === 429 ? "Trop de recherches d'affilée : patientez un instant puis réessayez." : errorMessage(e, "Recherche impossible."),
+      );
     } finally {
       setBusy(false);
     }
@@ -35,17 +44,28 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    if (mode === "email") {
-      if (!found) return;
-      await run(() => api.post<Resp>(`/projects/${project.id}/members`, { userId: found.id, role: role.trim() || null }));
-      setEmail("");
-      setFound(undefined);
-    } else {
-      if (!name.trim()) return;
-      await run(() => api.post<Resp>(`/projects/${project.id}/members`, { name: name.trim(), role: role.trim() || null }));
-      setName("");
+    if (adding) return;
+    if (mode === "email" && !found) {
+      // Entrée dans le champ e-mail : lancer la recherche plutôt qu'ajouter.
+      if (email.includes("@")) void lookup();
+      return;
     }
-    setRole("");
+    setAdding(true);
+    try {
+      if (mode === "email") {
+        if (!found) return;
+        await run(() => api.post<Resp>(`/projects/${project.id}/members`, { userId: found.id, role: role.trim() || null }));
+        setEmail("");
+        setFound(undefined);
+      } else {
+        if (!name.trim()) return;
+        await run(() => api.post<Resp>(`/projects/${project.id}/members`, { name: name.trim(), role: role.trim() || null }));
+        setName("");
+      }
+      setRole("");
+    } finally {
+      setAdding(false);
+    }
   }
 
   const patch = (id: string, data: Record<string, unknown>) => run(() => api.patch<Resp>(`/members/${id}`, data));
@@ -57,7 +77,7 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
         <ul className="mt-3 divide-y divide-line">
           {project.members.map((m) => {
             const tasks = tasksOf(m.id);
-            const open = tasks.filter((t) => t.status !== "DONE").length;
+            const open = tasks.filter((t) => !isFinished(t.status)).length;
             const owner = m.userId === project.ownerId;
             return (
               <li key={m.id} className="flex flex-wrap items-center gap-3 py-3">
@@ -70,7 +90,7 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
                       <span className="font-medium">{m.name}</span>
                     )}
                     {owner && (
-                      <span title="Propriétaire du projet" className="text-amber-500">
+                      <span title="Propriétaire du projet" aria-label="Propriétaire du projet" className="text-warn">
                         <Crown className="h-4 w-4" />
                       </span>
                     )}
@@ -95,25 +115,34 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
                   </div>
                 </div>
                 {isOwner && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center" role="group" aria-label={`Couleur de ${m.name}`}>
                     {MEMBER_PALETTE.map((c) => (
                       <button
                         key={c}
-                        title="Couleur"
+                        type="button"
+                        title={`Couleur ${c}`}
+                        aria-label={`Couleur ${c}`}
+                        aria-pressed={m.color === c}
                         onClick={() => patch(m.id, { color: c })}
-                        style={{ backgroundColor: c }}
-                        className={`h-3.5 w-3.5 rounded-full ${m.color === c ? "ring-2 ring-brand-500 ring-offset-1" : "opacity-50 hover:opacity-100"}`}
-                      />
+                        className="group/sw rounded-full p-2 md:p-1"
+                      >
+                        <span
+                          style={{ backgroundColor: c }}
+                          className={`block h-4 w-4 rounded-full md:h-3.5 md:w-3.5 ${m.color === c ? "ring-2 ring-brand-500 ring-offset-1" : "opacity-50 group-hover/sw:opacity-100"}`}
+                        />
+                      </button>
                     ))}
                   </div>
                 )}
                 {isOwner && !owner && (
                   <button
+                    type="button"
                     title="Retirer de l'équipe"
+                    aria-label={`Retirer ${m.name} de l'équipe`}
                     onClick={() => {
                       if (confirm(`Retirer ${m.name} de l'équipe ? Ses tâches et livrables seront désaffectés.`)) void run(() => api.delete<Resp>(`/members/${m.id}`));
                     }}
-                    className="rounded-lg p-1.5 text-faint hover:bg-red-50 hover:text-danger"
+                    className="rounded-lg p-2 text-faint hover:bg-red-50 hover:text-danger md:p-1.5"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -130,16 +159,16 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
             <UserPlus className="h-5 w-5 text-brand-600" /> Ajouter un membre
           </h2>
           <div className="mt-3 flex gap-1 rounded-lg bg-surface-2 p-1 text-xs font-medium">
-            <button onClick={() => setMode("name")} className={`flex-1 rounded-md px-2 py-1.5 ${mode === "name" ? "bg-surface shadow-sm" : "text-muted"}`}>
+            <button type="button" aria-pressed={mode === "name"} onClick={() => setMode("name")} className={`flex-1 rounded-md px-2 py-1.5 ${mode === "name" ? "bg-surface shadow-sm" : "text-muted"}`}>
               Nom libre
             </button>
-            <button onClick={() => setMode("email")} className={`flex-1 rounded-md px-2 py-1.5 ${mode === "email" ? "bg-surface shadow-sm" : "text-muted"}`}>
+            <button type="button" aria-pressed={mode === "email"} onClick={() => setMode("email")} className={`flex-1 rounded-md px-2 py-1.5 ${mode === "email" ? "bg-surface shadow-sm" : "text-muted"}`}>
               Compte de l&apos;application
             </button>
           </div>
           <form onSubmit={add} className="mt-3 space-y-2">
             {mode === "name" ? (
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la personne" className={`w-full ${inputClass}`} />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la personne" aria-label="Nom de la personne" className={`w-full ${inputClass}`} />
             ) : (
               <>
                 <div className="flex gap-2">
@@ -149,14 +178,28 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
                     onChange={(e) => {
                       setEmail(e.target.value);
                       setFound(undefined);
+                      setLookupError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      // Entrée : rechercher le compte (l'ajout se fait une fois trouvé).
+                      if (e.key === "Enter" && !found) {
+                        e.preventDefault();
+                        if (email.includes("@")) void lookup();
+                      }
                     }}
                     placeholder="E-mail du compte"
+                    aria-label="E-mail du compte"
                     className={`min-w-0 flex-1 ${inputClass}`}
                   />
-                  <Button type="button" variant="outline" onClick={lookup} disabled={busy || !email.includes("@")} title="Rechercher">
+                  <Button type="button" variant="outline" onClick={lookup} disabled={busy || !email.includes("@")} title="Rechercher" aria-label="Rechercher le compte">
                     <Search className="h-4 w-4" />
                   </Button>
                 </div>
+                {lookupError && (
+                  <p role="alert" className="text-xs text-danger">
+                    {lookupError}
+                  </p>
+                )}
                 {found === null && <p className="text-xs text-danger">Aucun compte avec cet e-mail. Ajoutez la personne en « nom libre » ou invitez-la à s&apos;inscrire.</p>}
                 {found && (
                   <p className="flex items-center gap-2 text-xs text-ok">
@@ -165,8 +208,8 @@ export function TeamTab({ project, run, isOwner, currentUserId }: { project: Pro
                 )}
               </>
             )}
-            <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Rôle (facultatif) : Chef de projet, Dév…" className={`w-full ${inputClass}`} />
-            <Button type="submit" className="w-full" disabled={mode === "email" ? !found : !name.trim()}>
+            <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Rôle (facultatif) : Chef de projet, Dév…" aria-label="Rôle (facultatif)" className={`w-full ${inputClass}`} />
+            <Button type="submit" className="w-full" disabled={adding || (mode === "email" ? !found : !name.trim())}>
               <UserPlus className="h-4 w-4" /> Ajouter
             </Button>
           </form>

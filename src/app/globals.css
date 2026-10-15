@@ -231,7 +231,7 @@ body {
 }
 /* Statut « fermé » : hachuré, estompé, barré. */
 .mind-node.is-closed {
-  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(23, 23, 26, 0.09) 6px 9px);
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--color-ink) 9%, transparent) 6px 9px);
   border-style: dashed;
   color: var(--color-muted);
 }
@@ -256,4 +256,38 @@ body {
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* Éditeur compact (messagerie) : le cadre est porté par le conteneur. */
+.editor-compact .ProseMirror {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.5rem 0.75rem;
+}
+.editor-compact .ProseMirror p {
+  margin: 0.25em 0;
+}
+/* Messages : contenu riche compact. */
+.message-body > :first-child {
+  margin-top: 0;
+}
+.message-body > :last-child {
+  margin-bottom: 0;
+}
+.message-body img {
+  max-height: 320px;
+  border-radius: 0.5rem;
+}
+/* Mise en évidence du message cité quand on clique sur une réponse. */
+@keyframes message-flash {
+  from {
+    box-shadow: 0 0 0 3px var(--color-brand-500);
+  }
+  to {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.message-flash {
+  animation: message-flash 1.6s ease-out;
 }

@@ -35,7 +35,18 @@ README.
 - **Notifications** : toute action qui concerne quelqu'un d'autre (affectation,
   modification d'une tâche affectée, réponse, mention) appelle `notify()`
   (`src/lib/notifications.ts`) **dans la transaction** ; jamais l'auteur de
-  l'action. Nouveau type ⇒ enum Prisma + icône dans `NotificationsBell` + docs.
+  l'action. Nouveau type ⇒ enum Prisma + icône dans `NotificationsBell` +
+  libellé dans `src/lib/shared/notification-types.ts` + `NOTIFICATION_TYPES`
+  (`settings.ts`) + schéma zod de l'administration + docs. Les e-mails partent
+  **hors transaction** (file `emailState`, `mailer.ts`) : ne jamais appeler
+  SMTP dans une transaction ; tout texte inséré dans un e-mail passe par
+  `escapeHtml()`.
+- **Connecteur MCP** (`src/lib/mcp.ts`) : outils en lecture seule, toujours
+  via les fonctions métier avec `userId` ; l'accès aux données des autres
+  exige `admin_access: true` **et** `isAdmin`. Les clés `sb_…` ne valent pas
+  session.
+- **Messagerie** (`src/lib/messages.ts`) : tout accès passe par
+  `requireParticipant` ; HTML assaini à l'écriture et au rendu.
 
 ## Graphiques : amCharts 4, toujours
 
@@ -87,6 +98,8 @@ logo amCharts reste affiché (licence gratuite).
   comportement dans toute évolution.
 - Mutations concurrentes : toujours dans `mutateProject` / `mutateMap`
   (verrou de ligne), sinon interblocage PostgreSQL.
+- Emoji : `EmojiButton` (`src/components/EmojiPicker.tsx`) dans tout nouvel
+  éditeur ou zone de saisie riche.
 - Vérifier `npm run typecheck` puis `npm run build` avant de conclure ; tester
   dans le navigateur (dev server) les parcours touchés.
 

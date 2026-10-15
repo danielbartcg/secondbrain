@@ -3,6 +3,7 @@ import type { NodeStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, notFound } from "@/lib/api";
 import { sanitizeNotes } from "@/lib/sanitize";
+import { taskAccessWhere } from "@/lib/projects";
 import type { CreateNodeInput, MoveNodeInput, UpdateNodeInput } from "@/lib/schemas";
 
 /**
@@ -68,8 +69,14 @@ type NodeRow = {
   tasks?: Array<{ task: { status: string } }>;
 };
 
-/** Inclusion des statuts des tâches rattachées (pour les compteurs du nœud). */
-const NODE_INCLUDE = { tasks: { select: { task: { select: { status: true } } } } } satisfies Prisma.MindNodeInclude;
+/**
+ * Inclusion des statuts des tâches rattachées (pour les compteurs du nœud) :
+ * seulement celles auxquelles l'utilisateur a accès (pas de fuite de tâches
+ * d'un projet qu'il a quitté).
+ */
+function nodeInclude(userId: string) {
+  return { tasks: { where: { task: taskAccessWhere(userId) }, select: { task: { select: { status: true } } } } } satisfies Prisma.MindNodeInclude;
+}
 
 function toNodeDto(n: NodeRow): MindNodeDto {
   return {
@@ -137,12 +144,12 @@ export async function getMindMap(userId: string, mapId: string): Promise<MindMap
   const nodes = await prisma.mindNode.findMany({
     where: { mapId },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    include: NODE_INCLUDE,
+    include: nodeInclude(userId),
   });
   let root = nodes.find((n) => n.parentId === null);
   if (!root) {
     // Carte sans racine (ne devrait pas arriver) : on la répare.
-    root = await prisma.mindNode.create({ data: { mapId, title: map.title, order: 0 }, include: NODE_INCLUDE });
+    root = await prisma.mindNode.create({ data: { mapId, title: map.title, order: 0 }, include: nodeInclude(userId) });
     nodes.unshift(root);
   }
   return {
@@ -197,7 +204,7 @@ export async function createNode(userId: string, mapId: string, input: CreateNod
     });
     await resequence(tx, mapId, parent.id, created.id, input.index);
     if (parent.collapsed) await tx.mindNode.update({ where: { id: parent.id }, data: { collapsed: false } });
-    return tx.mindNode.findUniqueOrThrow({ where: { id: created.id }, include: NODE_INCLUDE });
+    return tx.mindNode.findUniqueOrThrow({ where: { id: created.id }, include: nodeInclude(userId) });
   });
   return toNodeDto(node);
 }
@@ -219,7 +226,7 @@ export async function updateNode(
     if (input.status !== undefined) data.status = input.status;
     if (input.x !== undefined) data.x = input.x;
     if (input.y !== undefined) data.y = input.y;
-    const row = await tx.mindNode.update({ where: { id: nodeId }, data, include: NODE_INCLUDE });
+    const row = await tx.mindNode.update({ where: { id: nodeId }, data, include: nodeInclude(userId) });
     if (node.parentId === null && input.title) {
       await tx.mindMap.update({ where: { id: mapId }, data: { title: input.title } });
     }
@@ -272,7 +279,7 @@ export async function moveNode(
     await resequence(tx, mapId, target.id, nodeId, input.index);
     if (oldParentId !== target.id) await resequence(tx, mapId, oldParentId);
     if (target.collapsed) await tx.mindNode.update({ where: { id: target.id }, data: { collapsed: false } });
-    return tx.mindNode.findUniqueOrThrow({ where: { id: nodeId }, include: NODE_INCLUDE });
+    return tx.mindNode.findUniqueOrThrow({ where: { id: nodeId }, include: nodeInclude(userId) });
   });
   return toNodeDto(moved);
 }

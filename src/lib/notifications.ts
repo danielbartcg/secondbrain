@@ -2,6 +2,7 @@ import "server-only";
 import type { NotificationType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "@/lib/api";
+import { notificationPolicy } from "@/lib/settings";
 
 /**
  * Notifications in-app (cloche). Chaque notification est destinée à un
@@ -11,8 +12,14 @@ import { notFound } from "@/lib/api";
  *   - REPLY        : quelqu'un a répondu à votre commentaire ;
  *   - TASK_UPDATED : une tâche qui vous est assignée a été modifiée
  *                    (regroupée : une seule notification non lue par tâche) ;
- *   - MENTION      : vous avez été mentionné dans un commentaire.
+ *   - MENTION      : vous avez été mentionné dans un commentaire ;
+ *   - MESSAGE      : nouveau message dans une conversation (regroupée :
+ *                    une seule notification non lue par conversation).
  * L'auteur de l'action n'est jamais notifié de sa propre action.
+ *
+ * Administration → Notifications : un type désactivé n'est plus créé ; si les
+ * e-mails sont activés, la notification est marquée `emailState = PENDING` et
+ * l'envoyeur de src/lib/mailer.ts en expédie une copie après la transaction.
  */
 
 export type NotificationDto = {
@@ -77,6 +84,8 @@ export async function notify(db: Db, items: NotifyInput[]): Promise<void> {
     const key = `${item.userId}:${item.type}:${item.taskId ?? item.href}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    const policy = await notificationPolicy(item.type);
+    if (!policy.enabled) continue;
     const data = {
       userId: item.userId,
       type: item.type,
@@ -87,10 +96,17 @@ export async function notify(db: Db, items: NotifyInput[]): Promise<void> {
       projectId: item.projectId ?? null,
       actorName: item.actorName ?? null,
     };
-    if (item.type === "TASK_UPDATED" && item.taskId) {
-      // Regroupement : une mise à jour successive rafraîchit la notification non lue existante.
+    const groupWhere =
+      item.type === "TASK_UPDATED" && item.taskId
+        ? { taskId: item.taskId }
+        : item.type === "MESSAGE"
+          ? { href: item.href }
+          : null;
+    if (groupWhere) {
+      // Regroupement : un nouvel événement rafraîchit la notification non lue existante
+      // (sans nouvel e-mail : le destinataire n'a pas encore lu le précédent).
       const existing = await db.notification.findFirst({
-        where: { userId: item.userId, type: "TASK_UPDATED", taskId: item.taskId, readAt: null },
+        where: { userId: item.userId, type: item.type, readAt: null, ...groupWhere },
         select: { id: true },
       });
       if (existing) {
@@ -98,7 +114,9 @@ export async function notify(db: Db, items: NotifyInput[]): Promise<void> {
         continue;
       }
     }
-    await db.notification.create({ data });
+    // Copie e-mail : réglage global (Administration) et préférence du destinataire.
+    const wantsEmail = policy.email && (await db.user.findUnique({ where: { id: item.userId }, select: { emailNotifications: true } }))?.emailNotifications === true;
+    await db.notification.create({ data: { ...data, emailState: wantsEmail ? "PENDING" : null } });
   }
 }
 

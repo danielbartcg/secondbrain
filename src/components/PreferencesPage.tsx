@@ -6,10 +6,13 @@ import { Camera, Check, KeyRound, Loader2, Monitor, Palette, Trash2, UserRound }
 import { ApiClientError, api, uploadImage } from "@/lib/client";
 import type { ProfileDto, Theme } from "@/lib/users";
 import { Avatar, Button, PageHeader, inputClass } from "@/components/ui";
+import { ConnectorSection, EmailSection } from "@/components/preferences/AccountSections";
 
 /**
  * Préférences personnelles : prénom et nom (nom affiché partout à la place de
- * l'e-mail), photo de profil (sinon silhouette), thème d'affichage.
+ * l'e-mail), photo de profil (sinon silhouette), adresse e-mail (validation,
+ * changement, notifications par e-mail), mot de passe, application desktop,
+ * connecteur Claude (clés MCP), thème d'affichage.
  */
 
 const THEME_OPTIONS: Array<{ key: Theme; label: string; swatch: [string, string, string] }> = [
@@ -29,6 +32,7 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
   const [savedName, setSavedName] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [themeError, setThemeError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function save(data: Record<string, unknown>) {
@@ -69,14 +73,27 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
     }
   }
 
+  async function removePhoto() {
+    if (!window.confirm("Retirer votre photo de profil ?")) return;
+    try {
+      await save({ avatarUrl: null });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Suppression de la photo impossible.");
+    }
+  }
+
   async function chooseTheme(theme: Theme) {
-    // Application immédiate, puis enregistrement.
+    // Application immédiate, puis enregistrement ; retour au thème précédent en cas d'échec.
+    const previous = profile.theme;
+    setThemeError(null);
     document.documentElement.dataset.theme = theme;
     setProfile((p) => ({ ...p, theme }));
     try {
       await save({ theme });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+      document.documentElement.dataset.theme = previous;
+      setProfile((p) => ({ ...p, theme: previous }));
+      setThemeError(err instanceof Error ? err.message : "Enregistrement du thème impossible.");
     }
   }
 
@@ -85,7 +102,11 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
       <PageHeader title="Préférences" subtitle="Votre identité dans l'application et l'apparence de l'interface." />
-      {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">{error}</p>}
+      {error && (
+        <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">
+          {error}
+        </p>
+      )}
 
       {/* Identité */}
       <section className="rounded-2xl border border-line bg-surface p-5">
@@ -101,7 +122,7 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
                 {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />} {profile.avatarUrl ? "Changer" : "Ajouter une photo"}
               </Button>
               {profile.avatarUrl && (
-                <Button size="sm" variant="danger" onClick={() => void save({ avatarUrl: null })} title="Retirer la photo">
+                <Button size="sm" variant="danger" onClick={() => void removePhoto()} title="Retirer la photo" aria-label="Retirer la photo">
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               )}
@@ -142,11 +163,17 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
         </div>
       </section>
 
-      {/* Application desktop */}
-      <DesktopSection />
+      {/* Adresse e-mail et notifications par e-mail */}
+      <EmailSection profile={profile} onProfile={setProfile} />
 
       {/* Mot de passe */}
       <PasswordSection />
+
+      {/* Application desktop */}
+      <DesktopSection />
+
+      {/* Connecteur Claude (MCP) */}
+      <ConnectorSection />
 
       {/* Thème */}
       <section className="mt-6 rounded-2xl border border-line bg-surface p-5">
@@ -154,6 +181,11 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
           <Palette className="h-5 w-5 text-brand-600" /> Thème
         </h2>
         <p className="mt-1 text-sm text-muted">Appliqué immédiatement et mémorisé sur votre compte (tous vos appareils).</p>
+        {themeError && (
+          <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">
+            {themeError}
+          </p>
+        )}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
           {THEME_OPTIONS.map((t) => {
             const active = profile.theme === t.key;
@@ -226,11 +258,11 @@ function PasswordSection() {
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Nouveau mot de passe (8 caractères min.)</span>
-            <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className={`${inputClass} w-full ${tooShort || same ? "border-red-300" : ""}`} />
+            <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className={`${inputClass} w-full ${tooShort || same ? "border-danger" : ""}`} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Confirmation</span>
-            <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={`${inputClass} w-full ${mismatch ? "border-red-300" : ""}`} />
+            <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={`${inputClass} w-full ${mismatch ? "border-danger" : ""}`} />
           </label>
         </div>
         {(tooShort || mismatch || same) && (

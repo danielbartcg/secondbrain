@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, ExternalLink, Lock } from "lucide-react";
+import { CalendarDays, ExternalLink, Lock, MoreHorizontal } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 import { Avatar, PRIORITY_CHIP, PriorityFlag, TASK_STATUSES, TASK_STATUS_COLOR, TASK_STATUS_LABEL, formatDate, todayYmd } from "@/components/ui";
 
@@ -36,6 +36,25 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
   const [showClosed, setShowClosed] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const today = todayYmd();
+
+  // Menu « Déplacer » : fermeture au clic extérieur et sur Échap.
+  useEffect(() => {
+    if (!menuFor) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest("[data-kanban-menu]")) setMenuFor(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuFor(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuFor]);
 
   const columns = useMemo(() => {
     const m = new Map<TaskStatus, KanbanTask[]>(TASK_STATUSES.map((s) => [s, []]));
@@ -72,7 +91,7 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
               }}
               onDragLeave={() => over === status && setOver(null)}
               onDrop={(e) => drop(e, status)}
-              className={`flex min-h-[16rem] flex-col rounded-2xl border bg-surface-2/60 transition-colors ${over === status ? "border-brand-400 bg-brand-50 ring-2 ring-inset ring-brand-300" : "border-line"}`}
+              className={`flex min-h-[16rem] flex-col rounded-2xl border bg-surface-2/60 transition-colors ${over === status ? "border-brand-500 bg-brand-50 ring-2 ring-inset ring-brand-100" : "border-line"}`}
             >
               <header className="flex items-center gap-2 px-3 py-2.5">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: TASK_STATUS_COLOR[status] }} />
@@ -111,7 +130,7 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
                           <Link draggable={false} href={`/tasks/${t.id}`} className={`min-w-0 flex-1 text-sm font-medium leading-snug hover:underline ${t.status === "DONE" || closedCol ? "text-muted line-through" : ""}`}>
                             {t.name}
                           </Link>
-                          <Link draggable={false} href={`/tasks/${t.id}`} className="rounded p-0.5 text-faint hover:bg-surface-2 hover:text-ink" title="Ouvrir la fiche tâche">
+                          <Link draggable={false} href={`/tasks/${t.id}`} className="-m-1 rounded p-1.5 text-faint hover:bg-surface-2 hover:text-ink" title="Ouvrir la fiche tâche" aria-label="Ouvrir la fiche tâche">
                             <ExternalLink className="h-3.5 w-3.5" />
                           </Link>
                         </div>
@@ -132,26 +151,30 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
                             {t.assignee && <Avatar id={t.assignee.id} name={t.assignee.name} color={t.assignee.color} src={t.assignee.avatarUrl} size={20} />}
                             <button
                               type="button"
+                              data-kanban-menu
                               onClick={() => setMenuFor(menuFor === t.id ? null : t.id)}
-                              className="rounded px-1 text-faint hover:bg-surface-2 hover:text-ink"
+                              className="flex h-8 w-8 items-center justify-center rounded text-faint hover:bg-surface-2 hover:text-ink"
                               title="Déplacer vers…"
-                              aria-label="Déplacer vers un autre statut"
+                              aria-label="Déplacer"
+                              aria-haspopup="menu"
+                              aria-expanded={menuFor === t.id}
                             >
-                              …
+                              <MoreHorizontal className="h-4 w-4" />
                             </button>
                           </span>
                         </div>
                         {menuFor === t.id && (
-                          <div className="absolute right-2 top-full z-10 mt-1 w-40 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
+                          <div data-kanban-menu role="menu" className="absolute right-2 top-full z-10 mt-1 w-40 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
                             {TASK_STATUSES.filter((s) => s !== t.status).map((s) => (
                               <button
                                 key={s}
                                 type="button"
+                                role="menuitem"
                                 onClick={() => {
                                   setMenuFor(null);
                                   void onMove(t.id, s);
                                 }}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-surface-2"
+                                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs hover:bg-surface-2 md:py-1.5"
                               >
                                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TASK_STATUS_COLOR[s] }} /> {TASK_STATUS_LABEL[s]}
                               </button>

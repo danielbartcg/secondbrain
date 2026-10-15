@@ -163,7 +163,9 @@ DATA_DIR="/app/data"
 APP_PORT="$APP_PORT"
 # Base non exposée sur l'hôte en production.
 DB_PORT="127.0.0.1:55432"
-ALLOW_REGISTRATION="true"
+# Inscriptions fermées par défaut : comptes créés par scripts/create-user.ts
+# (ouvrir avec npm run prod:env -- --set ALLOW_REGISTRATION=true --restart).
+ALLOW_REGISTRATION="false"
 ENVFILE
   chown "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR/.env"
   chmod 600 "$APP_DIR/.env"

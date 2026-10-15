@@ -1,5 +1,5 @@
 import path from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -13,6 +13,31 @@ import tailwindcss from "@tailwindcss/vite";
  * En développement (`npm run native:dev`), /__remote/* et /media/* sont
  * relayés vers le serveur (SB_SERVER, défaut http://localhost:3000).
  */
+/**
+ * Content-Security-Policy de l'application empaquetée (app://local dans
+ * Electron, capacitor://localhost sur iPhone : tous deux « 'self' »).
+ * Injectée au build seulement : le serveur de développement (HMR) a besoin de
+ * scripts en ligne et d'une WebSocket.
+ */
+const NATIVE_CSP = [
+  "default-src 'self'",
+  "img-src 'self' https: http://localhost:* data: blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
+  "script-src 'self'",
+  "connect-src 'self' https: http://localhost:*",
+  "object-src 'none'",
+  "base-uri 'self'",
+].join("; ");
+
+function cspPlugin(): Plugin {
+  return {
+    name: "secondbrain-csp",
+    apply: "build",
+    transformIndexHtml: () => [{ tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: NATIVE_CSP }, injectTo: "head-prepend" }],
+  };
+}
+
 const root = path.resolve(__dirname, "..");
 const server = process.env.SB_SERVER ?? "http://localhost:3000";
 
@@ -20,7 +45,7 @@ export default defineConfig({
   root: __dirname,
   // Chemins absolus : l'interface est servie à la racine (app://local/ dans Electron), même sur une URL profonde.
   base: "/",
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), cspPlugin()],
   resolve: {
     alias: [
       { find: /^next\/link$/, replacement: path.resolve(__dirname, "src/shims/next-link.tsx") },

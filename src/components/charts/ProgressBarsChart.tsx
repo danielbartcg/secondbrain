@@ -15,7 +15,8 @@ export function ProgressBarsChart({ rows, height }: { rows: ProgressRow[]; heigh
       build={(am4core, am4charts, container) => {
         const chart = am4core.create(container, am4charts.XYChart);
         applyBaseTheme(am4core, chart);
-        chart.data = rows.map((r) => ({ ...r, rest: 100 - r.percent }));
+        // `[` ouvre une balise de style amCharts : on le double dans le texte utilisateur.
+        chart.data = rows.map((r) => ({ ...r, name: r.name.replace(/\[/g, "[[").replace(/\]/g, "]]"), detail: r.detail?.replace(/\[/g, "[[").replace(/\]/g, "]]"), rest: 100 - r.percent }));
         chart.paddingRight = 24;
         chart.paddingLeft = 0;
 

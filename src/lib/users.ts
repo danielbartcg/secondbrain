@@ -51,6 +51,10 @@ export type ProfileDto = {
   managerId: string | null;
   /** Nombre de N-1 directs (le menu « Mon équipe » n'apparaît que s'il y en a). */
   reportCount: number;
+  /** Adresse validée par le lien reçu par e-mail. */
+  emailVerified: boolean;
+  /** Copies e-mail des notifications. */
+  emailNotifications: boolean;
   createdAt: string;
 };
 
@@ -69,6 +73,8 @@ export async function getProfile(user: User): Promise<ProfileDto> {
     isSuperAdmin: isSuperAdmin(user),
     managerId: user.managerId,
     reportCount,
+    emailVerified: user.emailVerifiedAt !== null,
+    emailNotifications: user.emailNotifications,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -76,7 +82,7 @@ export async function getProfile(user: User): Promise<ProfileDto> {
 /** Met à jour son profil ; le nom affiché est recopié dans ses fiches membres. */
 export async function updateProfile(
   user: User,
-  input: { firstName?: string; lastName?: string; avatarUrl?: string | null; theme?: Theme },
+  input: { firstName?: string; lastName?: string; avatarUrl?: string | null; theme?: Theme; emailNotifications?: boolean },
 ): Promise<ProfileDto> {
   const firstName = input.firstName ?? user.firstName;
   const lastName = input.lastName ?? user.lastName;
@@ -87,7 +93,7 @@ export async function updateProfile(
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.user.update({
       where: { id: user.id },
-      data: { firstName, lastName, name, avatarUrl: input.avatarUrl, theme: input.theme },
+      data: { firstName, lastName, name, avatarUrl: input.avatarUrl, theme: input.theme, emailNotifications: input.emailNotifications },
     });
     if (name !== user.name) await tx.projectMember.updateMany({ where: { userId: user.id }, data: { name } });
     return u;
@@ -108,10 +114,13 @@ export type AdminUserDto = {
   managerId: string | null;
   reportIds: string[];
   projectCount: number;
+  /** Adresse e-mail validée (lien reçu par e-mail) ; informatif. */
+  emailVerified: boolean;
   createdAt: string;
 };
 
-export async function listUsersAdmin(): Promise<AdminUserDto[]> {
+export async function listUsersAdmin(admin: Pick<User, "email" | "role">): Promise<AdminUserDto[]> {
+  requireAdmin(admin);
   const users = await prisma.user.findMany({
     orderBy: [{ name: "asc" }],
     select: {
@@ -122,6 +131,7 @@ export async function listUsersAdmin(): Promise<AdminUserDto[]> {
       role: true,
       managerId: true,
       createdAt: true,
+      emailVerifiedAt: true,
       reports: { select: { id: true } },
       _count: { select: { projects: true, memberships: true } },
     },
@@ -137,6 +147,7 @@ export async function listUsersAdmin(): Promise<AdminUserDto[]> {
     managerId: u.managerId,
     reportIds: u.reports.map((r) => r.id),
     projectCount: u._count.memberships,
+    emailVerified: u.emailVerifiedAt !== null,
     createdAt: u.createdAt.toISOString(),
   }));
 }
@@ -161,7 +172,7 @@ export async function updateUserAdmin(admin: User, targetId: string, input: { ro
     }
   }
   await prisma.user.update({ where: { id: targetId }, data: { role: input.role, managerId: input.managerId } });
-  return listUsersAdmin();
+  return listUsersAdmin(admin);
 }
 
 /** Identifiants des N-1 directs. */

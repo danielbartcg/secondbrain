@@ -108,6 +108,15 @@ export async function deleteDocumentFile(storagePath: string): Promise<void> {
   await fs.rm(target, { force: true });
 }
 
+/** Supprime le répertoire documents/<projectId> (après suppression du projet ; au mieux). */
+export async function deleteProjectDocumentsDir(projectId: string): Promise<void> {
+  const safeProject = projectId.replace(/[^A-Za-z0-9_-]/g, "");
+  if (!safeProject) return;
+  const target = resolveDocumentPath(safeProject);
+  if (!target) return;
+  await fs.rm(target, { recursive: true, force: true });
+}
+
 /** Résout un chemin public /media/<rel> vers le disque, ou null s'il sort du répertoire. */
 export function resolveMediaPath(segments: string[]): string | null {
   return resolveWithin(uploadsDir(), segments);

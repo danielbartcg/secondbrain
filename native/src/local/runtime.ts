@@ -40,6 +40,18 @@ export async function createRuntime(opts: { factory?: IDBFactory; dbName?: strin
 
   async function signIn(serverUrl: string, email: string, password: string) {
     const url = serverUrl.trim().replace(/\/+$/, "");
+    // HTTPS obligatoire (le mot de passe et le jeton transitent), sauf serveur local de développement.
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error("Adresse du serveur invalide.");
+    }
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+    if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && local)) {
+      throw new Error("Le serveur doit être en HTTPS (https://…), sauf en local (localhost).");
+    }
+    if (typeof window !== "undefined" && window.secondBrain?.setServer) await window.secondBrain.setServer(url);
     setRemoteSession({ serverUrl: url, token: null });
     let r;
     try {
@@ -50,8 +62,17 @@ export async function createRuntime(opts: { factory?: IDBFactory; dbName?: strin
     if (r.status !== 200 || !r.data.token) throw new Error(r.data.error?.message ?? `Connexion refusée (${r.status}).`);
     const token = r.data.token;
     setRemoteSession({ serverUrl: url, token });
+    // La coque Electron n'accepte que l'origine de sa session et ajoute elle-même le jeton : on la lui transmet avant /me.
+    if (typeof window !== "undefined" && window.secondBrain) await window.secondBrain.setSession({ serverUrl: url, token });
     const me = await remote<{ profile: Profile }>("GET", "/me");
-    if (me.status !== 200) throw new Error("Profil introuvable.");
+    if (me.status !== 200) {
+      // Échec : la coque retrouve la session précédente.
+      if (typeof window !== "undefined" && window.secondBrain) {
+        await window.secondBrain.setSession(store.meta.token ? { serverUrl: store.meta.serverUrl, token: store.meta.token } : null);
+      }
+      setRemoteSession({ serverUrl: store.meta.serverUrl, token: store.meta.token });
+      throw new Error("Profil introuvable.");
+    }
     // Nouveau compte ou autre serveur : on repart d'une base vide.
     if (store.meta.user?.id !== me.data.profile.id || store.meta.serverUrl !== url) await store.wipe();
     store.setMeta("serverUrl", url);

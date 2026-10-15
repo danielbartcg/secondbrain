@@ -12,6 +12,6 @@ import { ApiError } from "@/lib/api";
 export const GET = withUser(async (req: NextRequest, { user }) => {
   if (!rateLimit(`lookup:${user.id}`, 60, 15 * 60 * 1000)) throw new ApiError(429, "RATE_LIMITED", "Trop de recherches, réessayez plus tard.");
   const email = req.nextUrl.searchParams.get("email")?.trim();
-  if (!email || !email.includes("@")) throw badRequest("Paramètre email requis.");
+  if (!email || !email.includes("@") || email.length > 254) throw badRequest("Paramètre email requis.");
   return json({ user: await lookupUserByEmail(email) });
 });

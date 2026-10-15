@@ -52,7 +52,7 @@ export function MatrixView({ tasks, actions }: { tasks: OrganizerTask[]; actions
         </div>
         {PRIORITIES.map((p) => (
           <div key={p} className="grid grid-cols-[7rem_repeat(3,1fr)] border-b border-line last:border-b-0">
-            <div className="flex items-center gap-2 p-2 text-sm font-medium" style={{ color: PRIORITY_COLOR[p] }}>
+            <div className="flex items-center gap-2 p-2 text-sm font-medium" style={{ color: p === "LOW" ? "var(--color-muted)" : PRIORITY_COLOR[p] }}>
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PRIORITY_COLOR[p] }} />
               {PRIORITY_LABEL[p]}
             </div>
@@ -68,7 +68,7 @@ export function MatrixView({ tasks, actions }: { tasks: OrganizerTask[]; actions
                   }}
                   onDragLeave={() => over === key && setOver(null)}
                   onDrop={(e) => drop(e, p, c)}
-                  className={`min-h-24 space-y-1 border-l border-line p-1.5 transition-colors ${over === key ? "bg-brand-50 ring-2 ring-inset ring-brand-400" : ""}`}
+                  className={`min-h-24 space-y-1 border-l border-line p-1.5 transition-colors ${over === key ? "bg-brand-50 ring-2 ring-inset ring-brand-500" : ""}`}
                 >
                   {list.map((t) => {
                     const late = t.dueDate ? t.dueDate.slice(0, 10) < today : false;

@@ -7,6 +7,7 @@ import type { MindMapSummary } from "@/lib/mindmaps";
 import { StatusDonut } from "@/components/charts/StatusDonut";
 import { ProgressBarsChart } from "@/components/charts/ProgressBarsChart";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { DesktopAppPromo } from "@/components/DesktopAppPromo";
 import {
   Badge,
   DELIVERABLE_STATUS_COLOR,
@@ -38,6 +39,9 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
 
       {/* Recherche globale avec auto-complétion */}
       <GlobalSearch className="mt-5" />
+
+      {/* Invitation « Télécharger l'app » (site, Windows, masquable) */}
+      <DesktopAppPromo className="mt-4" />
 
       {/* Indicateurs */}
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -85,7 +89,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
               ))}
             </ul>
           )}
-          {openMine.length > 12 && <p className="mt-2 text-xs text-muted">… et {openMine.length - 12} autre(s).</p>}
+          {openMine.length > 12 && <p className="mt-2 text-xs text-muted">… et {openMine.length - 12} autre{openMine.length - 12 > 1 ? "s" : ""}.</p>}
         </section>
 
         {/* Mes tâches par statut */}

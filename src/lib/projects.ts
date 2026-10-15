@@ -1,9 +1,11 @@
 import "server-only";
-import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPriority, TaskStatus } from "@prisma/client";
+import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPriority, TaskStatus, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { badRequest, forbidden, notFound } from "@/lib/api";
+import { ApiError, badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { sanitizeNotes } from "@/lib/sanitize";
+import { deleteProjectDocumentsDir } from "@/lib/uploads";
+import { requireAdmin } from "@/lib/users";
 import {
   DOCUMENT_INCLUDE,
   MEMBER_INCLUDE,
@@ -234,8 +236,9 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
 
 export type AdminProjectSummary = ProjectSummary & { ownerName: string; ownerEmail: string; taskCount: number };
 
-/** Tous les projets (administration). Le contrôle du rôle est fait par l'appelant. */
-export async function listAllProjectsAdmin(): Promise<AdminProjectSummary[]> {
+/** Tous les projets (administration ; lecture seule, rôle vérifié ici). */
+export async function listAllProjectsAdmin(admin: Pick<User, "email" | "role">): Promise<AdminProjectSummary[]> {
+  requireAdmin(admin);
   const rows = await prisma.project.findMany({ orderBy: { updatedAt: "desc" }, include: { ...PROJECT_INCLUDE, owner: { select: { name: true, email: true } } } });
   return rows.map((p) => {
     const { stages: _s, tasks: _t, members: _m, deliverables: _d, documents: _doc, folders: _f, notes: _n, ...summary } = toProjectDto(p);
@@ -251,7 +254,8 @@ export async function listAllProjectsAdmin(): Promise<AdminProjectSummary[]> {
 }
 
 /** Un projet quelconque (administration, lecture seule). */
-export async function getProjectAdmin(projectId: string): Promise<ProjectDto & { ownerName: string }> {
+export async function getProjectAdmin(admin: Pick<User, "email" | "role">, projectId: string): Promise<ProjectDto & { ownerName: string }> {
+  requireAdmin(admin);
   const p = await prisma.project.findUnique({ where: { id: projectId }, include: { ...PROJECT_INCLUDE, owner: { select: { name: true } } } });
   if (!p) throw notFound("Projet");
   return { ...toProjectDto(p), ownerName: p.owner.name };
@@ -302,6 +306,8 @@ export async function updateProject(userId: string, projectId: string, input: Up
 export async function deleteProject(userId: string, projectId: string): Promise<void> {
   await requireProjectOwner(userId, projectId);
   await prisma.project.delete({ where: { id: projectId } });
+  // Fichiers des documents : hors transaction, au mieux (la base fait foi).
+  await deleteProjectDocumentsDir(projectId).catch((e) => console.error("[projects] suppression des documents", e));
 }
 
 // --- Équipe ------------------------------------------------------------------
@@ -572,6 +578,13 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
   } else if (input.projectId !== undefined) {
     att = await resolveAttachment(userId, { projectId: input.projectId });
     if (att.projectId === t.projectId) att = { projectId: t.projectId, stageId: t.stageId, activityId: t.activityId };
+  }
+  // Sortir une tâche de son projet (« sans projet ») : réservé à son créateur ou au propriétaire du projet.
+  if (t.projectId && att.projectId === null && t.ownerId !== userId) {
+    const project = await prisma.project.findUnique({ where: { id: t.projectId }, select: { ownerId: true } });
+    if (project?.ownerId !== userId) {
+      throw new ApiError(403, "FORBIDDEN", "Seul le créateur de la tâche ou le propriétaire du projet peut la détacher du projet.");
+    }
   }
   const moved = att.projectId !== t.projectId || att.stageId !== t.stageId || att.activityId !== t.activityId;
   const projectChanged = att.projectId !== t.projectId;

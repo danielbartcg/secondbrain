@@ -550,8 +550,16 @@ async function runOpInner(userId: string, op: SyncOpInput): Promise<OpResult> {
   return conflicts.length ? { opId: op.opId, status: "conflict", conflicts } : { opId: op.opId, status: "applied" };
 }
 
+const APPLIED_OP_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** Rejoue des opérations dans l'ordre ; chaque opération n'est appliquée qu'une fois (idempotence). */
 export async function push(userId: string, ops: SyncOpInput[]): Promise<{ protocol: number; results: OpResult[] }> {
+  // Purge opportuniste (≈ 1 appel sur 100) des journaux d'idempotence de plus de 30 jours.
+  if (Math.random() < 0.01) {
+    void prisma.appliedOp
+      .deleteMany({ where: { createdAt: { lt: new Date(Date.now() - APPLIED_OP_RETENTION_MS) } } })
+      .catch((e) => console.error("[sync] purge AppliedOp", e));
+  }
   const results: OpResult[] = [];
   for (const op of ops) {
     const done = await prisma.appliedOp.findUnique({ where: { userId_opId: { userId, opId: op.opId } } });

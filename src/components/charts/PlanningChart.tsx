@@ -17,6 +17,9 @@ export type PlanningRow = {
 const DAY = 24 * 60 * 60 * 1000;
 
 /** Planning (Gantt) des étapes et livrables — amCharts 4 XYChart avec DateAxis. */
+/** Texte utilisateur : `[` ouvre une balise de style amCharts ; on le double. */
+const escapeAm = (s: string) => s.replace(/\[/g, "[[").replace(/\]/g, "]]");
+
 export function PlanningChart({ rows, height }: { rows: PlanningRow[]; height?: number }) {
   const data = rows
     .filter((r) => r.start || r.end)
@@ -27,14 +30,14 @@ export function PlanningChart({ rows, height }: { rows: PlanningRow[]; height?: 
       const pct = Math.max(0, Math.min(100, r.percent ?? 0));
       const doneEnd = new Date(start.getTime() + ((end.getTime() - start.getTime()) * pct) / 100);
       return {
-        name: `${r.kind === "deliverable" ? "📦 " : ""}${r.name}`,
+        name: `${r.kind === "deliverable" ? "📦 " : ""}${escapeAm(r.name)}`,
         start,
         end,
         doneStart: start,
         doneEnd,
         color: r.color,
         percent: pct,
-        detail: r.detail ?? "",
+        detail: escapeAm(r.detail ?? ""),
         opacity: r.kind === "deliverable" ? 0.55 : 0.35,
       };
     });

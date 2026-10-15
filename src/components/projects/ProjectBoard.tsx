@@ -86,7 +86,7 @@ function StageCard({ stage, index, count, project, run }: { stage: StageDto; ind
   return (
     <section className="rounded-2xl border border-line bg-surface">
       <header className="flex items-start gap-2 p-3 sm:p-4">
-        <button onClick={() => setOpen((v) => !v)} className="mt-0.5 rounded p-0.5 text-muted hover:bg-surface-2" title={open ? "Replier" : "Déplier"}>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="mt-0.5 rounded p-1.5 text-muted hover:bg-surface-2 md:p-0.5" title={open ? "Replier" : "Déplier"} aria-label={`${open ? "Replier" : "Déplier"} l'étape « ${stage.name} »`} aria-expanded={open}>
           {open ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
         </button>
         <div className="min-w-0 flex-1">
@@ -181,7 +181,7 @@ function ActivityBlock({ activity, index, count, project, run }: { activity: Act
   return (
     <div className="mt-3 rounded-xl border border-line bg-surface-2/60 p-3">
       <div className="flex items-start gap-2">
-        <button onClick={() => setOpen((v) => !v)} className="mt-0.5 rounded p-0.5 text-muted hover:bg-surface-3">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="mt-0.5 rounded p-1.5 text-muted hover:bg-surface-3 md:p-0.5" title={open ? "Replier" : "Déplier"} aria-label={`${open ? "Replier" : "Déplier"} l'activité « ${activity.name} »`} aria-expanded={open}>
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
         <div className="min-w-0 flex-1">
@@ -280,9 +280,11 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
     <li className="px-2 py-2 sm:px-3">
       <div className="flex items-center gap-2">
         <button
+          type="button"
           onClick={() => patch({ status: NEXT_STATUS[task.status] })}
           title={`Statut : ${TASK_STATUS_LABEL[task.status]} (cliquer pour changer)`}
-          className={`shrink-0 rounded-full ${closed ? "text-violet-600" : done ? "text-ok" : task.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
+          aria-label={`Statut : ${TASK_STATUS_LABEL[task.status]} — changer`}
+          className={`-m-1 shrink-0 rounded-full p-1 ${closed ? "text-violet-700" : done ? "text-ok" : task.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
         >
           {closed ? <Lock className="h-5 w-5" /> : done ? <Check className="h-5 w-5" /> : task.status === "IN_PROGRESS" ? <CircleDot className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
         </button>
@@ -295,7 +297,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
           </Link>
         )}
         <div className="hidden items-center gap-2 sm:flex">
-          <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-28 accent-brand-600" title="Avancement" />
+          <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-28 accent-brand-600" title="Avancement" aria-label={`Avancement de « ${task.name} »`} />
           <span className="w-9 text-right text-xs tabular-nums text-ink-2">{progress}%</span>
         </div>
         {task.dueDate && (
@@ -306,17 +308,17 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
         ) : (
           <span className="hidden h-6 w-6 shrink-0 rounded-full border border-dashed border-line-strong sm:inline-block" title="Non affectée" />
         )}
-        <Link href={sheetHref} className="rounded p-1 text-muted hover:bg-surface-2" title="Ouvrir la fiche tâche">
+        <Link href={sheetHref} className="rounded p-2 text-muted hover:bg-surface-2 md:p-1" title="Ouvrir la fiche tâche" aria-label="Ouvrir la fiche tâche">
           <ExternalLink className="h-4 w-4" />
         </Link>
-        <button onClick={() => setOpen((v) => !v)} className="rounded p-1 text-muted hover:bg-surface-2" title="Détails rapides">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="rounded p-2 text-muted hover:bg-surface-2 md:p-1" title="Détails rapides" aria-label="Détails rapides" aria-expanded={open}>
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
       </div>
 
       {/* Avancement visible sur mobile */}
       <div className="mt-1.5 flex items-center gap-2 pl-7 sm:hidden">
-        <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="flex-1 accent-brand-600" />
+        <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="flex-1 accent-brand-600" aria-label={`Avancement de « ${task.name} »`} />
         <span className="w-9 text-right text-xs tabular-nums text-ink-2">{progress}%</span>
       </div>
 
@@ -333,7 +335,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-muted">
               Responsable
-              <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink">
+              <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-base text-ink sm:text-xs">
                 <option value="">— Personne —</option>
                 {project.members.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -344,7 +346,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
             </label>
             <label className="flex items-center gap-2 text-xs text-muted">
               Priorité
-              <select value={task.priority} onChange={(e) => patch({ priority: e.target.value })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink">
+              <select value={task.priority} onChange={(e) => patch({ priority: e.target.value })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-base text-ink sm:text-xs">
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
                     {PRIORITY_LABEL[p]}
@@ -354,7 +356,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
             </label>
             <label className="flex items-center gap-2 text-xs text-muted">
               Complexité
-              <select value={task.complexity} onChange={(e) => patch({ complexity: e.target.value })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink">
+              <select value={task.complexity} onChange={(e) => patch({ complexity: e.target.value })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-base text-ink sm:text-xs">
                 {COMPLEXITIES.map((c) => (
                   <option key={c} value={c}>
                     {COMPLEXITY_LABEL[c]}
@@ -401,7 +403,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
 /** Lien vers les notes de l'objet dans « Prise de notes » (coloré si des notes existent). */
 function NotesLink({ noteRef, has }: { noteRef: string; has: boolean }) {
   return (
-    <Link href={`/notes?ref=${encodeURIComponent(noteRef)}`} title={has ? "Voir les notes" : "Prendre des notes"} className={`rounded p-1 hover:bg-surface-2 ${has ? "text-brand-600" : "text-faint"}`}>
+    <Link href={`/notes?ref=${encodeURIComponent(noteRef)}`} title={has ? "Voir les notes" : "Prendre des notes"} aria-label={has ? "Voir les notes" : "Prendre des notes"} className={`rounded p-2 hover:bg-surface-2 md:p-1 ${has ? "text-brand-600" : "text-faint"}`}>
       <NotebookPen className="h-3.5 w-3.5" />
     </Link>
   );
@@ -412,9 +414,10 @@ function IconBtn({ title, onClick, disabled, danger, children }: { title: string
     <button
       type="button"
       title={title}
+      aria-label={title}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-lg p-1.5 disabled:opacity-30 ${danger ? "text-faint hover:bg-red-50 hover:text-danger" : "text-muted hover:bg-surface-2"}`}
+      className={`rounded-lg p-2 disabled:opacity-30 md:p-1.5 ${danger ? "text-faint hover:bg-red-50 hover:text-danger" : "text-muted hover:bg-surface-2"}`}
     >
       {children}
     </button>

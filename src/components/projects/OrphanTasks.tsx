@@ -6,7 +6,7 @@ import { ArrowLeft, Check, Circle, CircleDot, ExternalLink, Inbox, Lock, Trash2 
 import type { TaskStatus } from "@prisma/client";
 import { api } from "@/lib/client";
 import type { TaskDto, TaskMutation } from "@/lib/projects";
-import { Badge, PRIORITY_LABEL, PRIORITY_TONE, PriorityFlag, QuickAdd, TASK_STATUS_LABEL, formatDate, isFinished } from "@/components/ui";
+import { Badge, PRIORITY_LABEL, PRIORITY_TONE, PriorityFlag, QuickAdd, TASK_STATUS_LABEL, errorMessage, formatDate, isFinished, toast } from "@/components/ui";
 
 /**
  * Projet virtuel « Sans projet » : mes tâches orphelines (ni projet, ni
@@ -29,14 +29,19 @@ export function OrphanTasks({ initial }: { initial: TaskDto[] }) {
       if (task) setTasks((ts) => ts.map((t) => (t.id === id ? task : t)));
       else await reload();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erreur");
-      await reload();
+      toast(errorMessage(e, "Modification impossible."), "error");
+      await reload().catch(() => {});
     }
   };
   const remove = async (t: TaskDto) => {
     if (!confirm(`Supprimer la tâche « ${t.name} » ?`)) return;
     setTasks((ts) => ts.filter((x) => x.id !== t.id));
-    await api.delete(`/tasks/${t.id}`).catch(reload);
+    try {
+      await api.delete(`/tasks/${t.id}`);
+    } catch (e) {
+      toast(errorMessage(e, "Suppression impossible."), "error");
+      await reload().catch(() => {});
+    }
   };
 
   const visible = tasks.filter((t) => showClosed || t.status !== "CLOSED");
@@ -57,7 +62,7 @@ export function OrphanTasks({ initial }: { initial: TaskDto[] }) {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-semibold tracking-tight">Sans projet</h1>
             <p className="mt-1 text-sm text-muted">
-              Vos tâches qui ne sont rattachées à aucun projet. Elles remontent dans vos tableaux de bord et dans « Organiser mes tâches » ; depuis leur fiche, vous pouvez les rattacher à un projet, une étape ou une activité.
+              Vos tâches qui ne sont rattachées à aucun projet. Elles remontent dans vos tableaux de bord et dans « Mes tâches » ; depuis leur fiche, vous pouvez les rattacher à un projet, une étape ou une activité.
             </p>
           </div>
         </div>
@@ -91,9 +96,11 @@ export function OrphanTasks({ initial }: { initial: TaskDto[] }) {
             return (
               <li key={t.id} className="flex items-center gap-2 px-3 py-2">
                 <button
+                  type="button"
                   onClick={() => patch(t.id, { status: NEXT_STATUS[t.status] })}
                   title={`Statut : ${TASK_STATUS_LABEL[t.status]} (cliquer pour changer)`}
-                  className={`shrink-0 rounded-full ${closed ? "text-violet-600" : done ? "text-ok" : t.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
+                  aria-label={`Statut : ${TASK_STATUS_LABEL[t.status]} — changer`}
+                  className={`-m-1 shrink-0 rounded-full p-1 ${closed ? "text-violet-700" : done ? "text-ok" : t.status === "IN_PROGRESS" ? "text-brand-600" : "text-faint"}`}
                 >
                   {closed ? <Lock className="h-5 w-5" /> : done ? <Check className="h-5 w-5" /> : t.status === "IN_PROGRESS" ? <CircleDot className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
                 </button>
@@ -106,10 +113,10 @@ export function OrphanTasks({ initial }: { initial: TaskDto[] }) {
                 </Badge>
                 {t.dueDate && <span className={`hidden shrink-0 text-xs md:inline ${late ? "text-danger" : "text-muted"}`}>{formatDate(t.dueDate)}</span>}
                 <span className="hidden w-10 text-right text-xs tabular-nums text-ink-2 sm:inline">{t.progress}%</span>
-                <Link href={`/tasks/${t.id}`} className="rounded p-1 text-muted hover:bg-surface-2" title="Ouvrir la fiche tâche">
+                <Link href={`/tasks/${t.id}`} className="rounded p-2 text-muted hover:bg-surface-2 md:p-1" title="Ouvrir la fiche tâche" aria-label="Ouvrir la fiche tâche">
                   <ExternalLink className="h-4 w-4" />
                 </Link>
-                <button onClick={() => remove(t)} className="rounded p-1 text-faint hover:bg-red-50 hover:text-danger" title="Supprimer">
+                <button type="button" onClick={() => remove(t)} className="rounded p-2 text-faint hover:bg-red-50 hover:text-danger md:p-1" title="Supprimer" aria-label={`Supprimer la tâche « ${t.name} »`}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </li>

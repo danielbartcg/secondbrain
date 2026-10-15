@@ -25,10 +25,13 @@ import {
   TASK_STATUS_TONE,
   formatDate,
   isFinished,
+  errorMessage,
   selectClass,
   toInputDate,
+  toast,
   todayYmd,
 } from "@/components/ui";
+import { EmojiButton } from "@/components/EmojiPicker";
 
 /**
  * Fiche tâche : champs mis en forme (statut, avancement, priorité, complexité,
@@ -44,6 +47,8 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
   const router = useRouter();
   const [task, setTask] = useState(initial);
   const [saving, setSaving] = useState(0);
+  /** « Enregistré » ne s'affiche qu'après une première sauvegarde. */
+  const [saved, setSaved] = useState(false);
   const [progress, setProgress] = useState(initial.progress);
   const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,10 +67,11 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
         await reload();
       } catch (e) {
         console.error(e);
-        alert(e instanceof Error ? e.message : "Erreur");
+        toast(errorMessage(e, "Enregistrement impossible."), "error");
         await reload().catch(() => {});
       } finally {
         setSaving((s) => s - 1);
+        setSaved(true);
       }
     },
     [reload, task.id],
@@ -105,7 +111,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
             <span>{task.activity.name}</span>
           </>
         )}
-        <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`}>{saving ? "Enregistrement…" : "Enregistré"}</span>
+        <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`} role="status">{saving ? "Enregistrement…" : saved ? "Enregistré" : ""}</span>
       </div>
 
       {!task.canEdit && (
@@ -143,6 +149,8 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
               {(["TODO", "IN_PROGRESS", "DONE"] as const).map((s) => (
                 <button
                   key={s}
+                  type="button"
+                  aria-pressed={task.status === s}
                   onClick={() => patch({ status: s })}
                   className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ${
                     task.status === s ? "bg-brand-600 text-on-brand ring-brand-600" : "bg-surface text-ink-2 ring-line hover:bg-surface-2"
@@ -155,10 +163,11 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
               {/* Clôture : action manuelle, proposée une fois la tâche terminée. */}
               {(task.status === "DONE" || task.status === "CLOSED") && (
                 <button
+                  type="button"
                   onClick={() => patch({ status: task.status === "CLOSED" ? "DONE" : "CLOSED" })}
                   title={task.status === "CLOSED" ? "Rouvrir (revient à Terminée)" : "Clôturer : la tâche sort du flux courant"}
                   className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ${
-                    task.status === "CLOSED" ? "bg-violet-600 text-white ring-violet-600" : "bg-surface text-violet-700 ring-violet-200 hover:bg-violet-50"
+                    task.status === "CLOSED" ? "bg-violet-700 text-surface ring-violet-700" : "bg-surface text-violet-700 ring-violet-200 hover:bg-violet-50"
                   }`}
                 >
                   <Lock className="h-3.5 w-3.5" /> {task.status === "CLOSED" ? "Clôturée" : "Clôturer"}
@@ -169,7 +178,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
           </div>
           <div className="mt-2 flex items-center gap-3">
             <ProgressBar percent={progress} color={color} className="h-2.5" />
-            <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-36 accent-brand-600" title="Avancement" />
+            <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-36 accent-brand-600" title="Avancement" aria-label="Avancement" />
           </div>
 
           {/* Rattachement : projet › étape › activité, tous facultatifs */}
@@ -230,7 +239,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
                   </select>
                 </div>
               </SubField>
-              <SubField icon={<Users className="h-3.5 w-3.5" />} label="Contributeurs">
+              <SubField icon={<Users className="h-3.5 w-3.5" />} label="Contributeurs" asLabel={false}>
                 <MemberMultiSelect members={members} value={task.contributorIds} disabled={!task.project} onChange={(contributorIds) => patch({ contributorIds })} />
               </SubField>
             </div>
@@ -243,7 +252,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
                 <input type="date" value={toInputDate(task.startDate)} onChange={(e) => patch({ startDate: e.target.value || null })} className={`${selectClass} w-full`} />
               </SubField>
               <SubField icon={<CalendarDays className="h-3.5 w-3.5" />} label="Échéance">
-                <input type="date" value={toInputDate(task.dueDate)} onChange={(e) => patch({ dueDate: e.target.value || null })} className={`${selectClass} w-full ${late ? "border-red-300 text-danger" : ""}`} />
+                <input type="date" value={toInputDate(task.dueDate)} onChange={(e) => patch({ dueDate: e.target.value || null })} className={`${selectClass} w-full ${late ? "border-danger text-danger" : ""}`} />
               </SubField>
               <SubField icon={<Lock className="h-3.5 w-3.5" />} label="Date de clôture">
                 <input
@@ -287,8 +296,12 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
               variant="danger"
               onClick={async () => {
                 if (!confirm(`Supprimer la tâche « ${task.name} » ?`)) return;
-                await api.delete(`/tasks/${task.id}`);
-                router.push(backHref);
+                try {
+                  await api.delete(`/tasks/${task.id}`);
+                  router.push(backHref);
+                } catch (e) {
+                  toast(errorMessage(e, "Suppression impossible."), "error");
+                }
               }}
             >
               <Trash2 className="h-4 w-4" /> Supprimer la tâche
@@ -307,11 +320,30 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
 /** Sélection multiple de membres (cases à cocher), pour les contributeurs. */
 function MemberMultiSelect({ members, value, disabled, onChange }: { members: MemberDto[]; value: string[]; disabled?: boolean; onChange: (ids: string[]) => void }) {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const selected = members.filter((m) => value.includes(m.id));
+  // Fermeture au clic extérieur et sur Échap.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (rootRef.current && e.target instanceof Node && !rootRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   if (disabled) return <p className="text-xs text-muted">Rattachez la tâche à un projet pour choisir des contributeurs.</p>;
   return (
-    <div className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} className={`${selectClass} flex w-full items-center gap-1 text-left`} aria-expanded={open}>
+    <div ref={rootRef} className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)} className={`${selectClass} flex w-full items-center gap-1 text-left`} aria-expanded={open} aria-label="Contributeurs">
         {selected.length === 0 ? (
           <span className="text-muted">— Personne —</span>
         ) : (
@@ -364,15 +396,20 @@ function Block({ icon, title, hint, children }: { icon: React.ReactNode; title: 
   );
 }
 
-/** Champ d'un bloc : petit libellé au-dessus de la valeur. */
-function SubField({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+/**
+ * Champ d'un bloc : petit libellé au-dessus de la valeur. Par défaut un vrai
+ * `<label>` (le contrôle qu'il contient est nommé) ; `asLabel={false}` quand
+ * le contenu n'est pas un contrôle unique (il porte alors son propre nom).
+ */
+function SubField({ icon, label, children, asLabel = true }: { icon: React.ReactNode; label: string; children: React.ReactNode; asLabel?: boolean }) {
+  const Tag = asLabel ? "label" : "div";
   return (
-    <div className="min-w-0">
+    <Tag className="block min-w-0">
       <span className="mb-1 flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted">
         {icon} {label}
       </span>
       {children}
-    </div>
+    </Tag>
   );
 }
 
@@ -456,8 +493,12 @@ function AttachmentBlock({ task, patch }: { task: TaskDetailDto; patch: (data: R
 function NodeLinks({ task, onChange }: { task: TaskDetailDto; onChange: (nodes: TaskDetailDto["nodes"]) => void }) {
   if (task.nodes.length === 0) return null;
   async function unlink(n: TaskDetailDto["nodes"][number]) {
-    await api.delete<NodeTasksResult>(`/mindmaps/${n.mapId}/nodes/${n.id}/tasks/${task.id}`);
-    onChange(task.nodes.filter((x) => x.id !== n.id));
+    try {
+      await api.delete<NodeTasksResult>(`/mindmaps/${n.mapId}/nodes/${n.id}/tasks/${task.id}`);
+      onChange(task.nodes.filter((x) => x.id !== n.id));
+    } catch (e) {
+      toast(errorMessage(e, "Détachement impossible."), "error");
+    }
   }
   return (
     <div className="mt-4 rounded-xl border border-line bg-surface-2/60 p-3">
@@ -470,7 +511,7 @@ function NodeLinks({ task, onChange }: { task: TaskDetailDto; onChange: (nodes: 
             <Link href={`/mindmaps/${n.mapId}?node=${n.id}`} className="hover:underline">
               <span className="font-medium">{n.title}</span> <span className="text-muted">· {n.mapTitle}</span>
             </Link>
-            <button type="button" onClick={() => unlink(n)} className="rounded p-0.5 text-faint hover:bg-red-50 hover:text-danger" title="Détacher de ce nœud">
+            <button type="button" onClick={() => unlink(n)} className="-my-1 rounded p-1.5 text-faint hover:bg-red-50 hover:text-danger md:my-0 md:p-0.5" title="Détacher de ce nœud" aria-label={`Détacher du nœud « ${n.title} »`}>
               <Unlink className="h-3 w-3" />
             </button>
           </li>
@@ -493,13 +534,19 @@ function WorkSessions({ task, onChange }: { task: TaskDetailDto; onChange: (sess
     try {
       const { sessions } = await api.post<{ sessions: WorkSessionDto[] }>(`/tasks/${task.id}/sessions`, { date });
       onChange(sessions);
+    } catch (e) {
+      toast(errorMessage(e, "Planification impossible."), "error");
     } finally {
       setBusy(false);
     }
   }
   async function remove(s: WorkSessionDto) {
-    const { sessions } = await api.delete<{ sessions: WorkSessionDto[] }>(`/sessions/${s.id}`);
-    onChange(sessions);
+    try {
+      const { sessions } = await api.delete<{ sessions: WorkSessionDto[] }>(`/sessions/${s.id}`);
+      onChange(sessions);
+    } catch (e) {
+      toast(errorMessage(e, "Retrait impossible."), "error");
+    }
   }
 
   return (
@@ -514,7 +561,13 @@ function WorkSessions({ task, onChange }: { task: TaskDetailDto; onChange: (sess
           </Badge>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${selectClass} py-1 text-xs`} />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            aria-label="Jour de la session"
+            className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-xs"
+          />
           <Button size="sm" variant="outline" onClick={add} disabled={busy || !date}>
             <Plus className="h-3.5 w-3.5" /> Planifier
           </Button>
@@ -524,7 +577,7 @@ function WorkSessions({ task, onChange }: { task: TaskDetailDto; onChange: (sess
         <p className="mt-2 text-xs text-muted">
           Aucune session planifiée. Choisissez un jour ci-dessus, ou glissez la tâche sur le calendrier dans{" "}
           <Link href="/organize#calendar" className="text-brand-700 hover:underline">
-            Organiser mes tâches
+            Mes tâches
           </Link>
           .
         </p>
@@ -533,7 +586,7 @@ function WorkSessions({ task, onChange }: { task: TaskDetailDto; onChange: (sess
           {task.workSessions.map((s) => (
             <li
               key={s.id}
-              className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${s.late ? "border-red-400 bg-red-50 text-red-800" : "border-line bg-surface text-ink-2"}`}
+              className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${s.late ? "border-danger bg-red-50 text-red-800" : "border-line bg-surface text-ink-2"}`}
               title={s.late ? "Cette session est après l'échéance de la tâche" : undefined}
             >
               {s.late && <AlertTriangle className="h-3.5 w-3.5" />}
@@ -541,7 +594,7 @@ function WorkSessions({ task, onChange }: { task: TaskDetailDto; onChange: (sess
               <span className="font-medium">{new Date(`${s.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}</span>
               {!s.mine && <span className="text-muted">· {s.userName}</span>}
               {s.mine && (
-                <button type="button" onClick={() => remove(s)} className="rounded p-0.5 opacity-50 hover:bg-surface-3 hover:opacity-100" title="Retirer">
+                <button type="button" onClick={() => remove(s)} className="-my-1 rounded p-1.5 opacity-50 hover:bg-surface-3 hover:opacity-100 md:my-0 md:p-0.5" title="Retirer" aria-label="Retirer cette session">
                   <X className="h-3 w-3" />
                 </button>
               )}
@@ -652,6 +705,20 @@ function CommentComposer({
     });
   }
 
+  /** Emoji inséré à la position du curseur. */
+  function insertEmoji(emoji: string) {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? body.length;
+    const end = el?.selectionEnd ?? body.length;
+    setBody(body.slice(0, start) + emoji + body.slice(end));
+    requestAnimationFrame(() => {
+      if (el) {
+        el.focus();
+        el.setSelectionRange(start + emoji.length, start + emoji.length);
+      }
+    });
+  }
+
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
     const text = body.trim();
@@ -662,7 +729,7 @@ function CommentComposer({
       onPosted(updated);
       setBody("");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erreur");
+      toast(errorMessage(err, "Envoi impossible."), "error");
     } finally {
       setBusy(false);
     }
@@ -709,7 +776,7 @@ function CommentComposer({
           }
         }}
         onClick={(e) => detectMention(body, (e.target as HTMLTextAreaElement).selectionStart ?? body.length)}
-        className="w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+        className="w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-3 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
       />
       {mention && candidates.length > 0 && (
         <ul className="absolute bottom-full left-0 z-10 mb-1 w-72 overflow-hidden rounded-xl border border-line bg-surface shadow-lg">
@@ -729,7 +796,10 @@ function CommentComposer({
           ))}
         </ul>
       )}
-      <div className="mt-2 flex justify-end gap-2">
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <div className="mr-auto">
+          <EmojiButton onSelect={insertEmoji} />
+        </div>
         {onCancel && (
           <Button type="button" variant="ghost" size={parentId ? "sm" : "md"} onClick={onCancel}>
             Annuler
@@ -767,8 +837,12 @@ function CommentNode({
   async function remove() {
     const extra = count > 0 ? ` et ses ${count} réponse${count > 1 ? "s" : ""}` : "";
     if (!confirm(`Supprimer ce commentaire${extra} ?`)) return;
-    const { task: updated } = await api.delete<TaskResp>(`/comments/${node.id}`);
-    onChange(updated);
+    try {
+      const { task: updated } = await api.delete<TaskResp>(`/comments/${node.id}`);
+      onChange(updated);
+    } catch (e) {
+      toast(errorMessage(e, "Suppression impossible."), "error");
+    }
   }
 
   return (
@@ -776,13 +850,13 @@ function CommentNode({
       <div className="flex gap-2 sm:gap-3">
         <Avatar id={node.authorId} name={node.authorName} src={node.authorAvatarUrl} size={depth === 0 ? 32 : 26} />
         <div className="min-w-0 flex-1">
-          <div className={`rounded-2xl rounded-tl-sm px-4 py-3 ${highlightId === node.id ? "bg-amber-50 ring-2 ring-amber-300" : "bg-surface-2"}`}>
+          <div className={`rounded-2xl rounded-tl-sm px-4 py-3 ${highlightId === node.id ? "bg-amber-50 ring-2 ring-amber-200" : "bg-surface-2"}`}>
             <div className="flex items-center gap-2 text-xs text-muted">
               <span className="font-medium text-ink">{node.authorName}</span>
               <span>·</span>
               <span>{new Date(node.createdAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</span>
               {(node.authorId === currentUserId || isOwner) && (
-                <button onClick={remove} className="ml-auto rounded p-1 text-faint hover:bg-surface-3 hover:text-danger" title="Supprimer">
+                <button type="button" onClick={remove} className="-my-1 ml-auto rounded p-1.5 text-faint hover:bg-surface-3 hover:text-danger md:my-0 md:p-1" title="Supprimer" aria-label="Supprimer ce commentaire">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               )}

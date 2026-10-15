@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
+import { MessagesSquare, Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
 import { Avatar } from "@/components/ui";
 import { api } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { useUnreadMessages } from "@/lib/messages-store";
 
 const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -14,7 +15,17 @@ const NAV = [
   { href: "/projects", label: "Projets", icon: FolderKanban },
   { href: "/organize", label: "Mes tâches", icon: CalendarCheck2 },
   { href: "/notes", label: "Prise de notes", icon: NotebookPen },
+  { href: "/messages", label: "Messages", icon: MessagesSquare },
 ];
+
+function UnreadBadge({ count, className = "" }: { count: number; className?: string }) {
+  if (count <= 0) return null;
+  return (
+    <span className={`min-w-5 rounded-full bg-brand-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-on-brand ${className}`} aria-label={`${count} message${count > 1 ? "s" : ""} non lu${count > 1 ? "s" : ""}`}>
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 export type ShellUser = { id: string; name: string; email: string; avatarUrl: string | null; isAdmin: boolean; reportCount: number };
 
@@ -31,6 +42,17 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const unreadMessages = useUnreadMessages();
+
+  // Tiroir mobile : Échap le ferme.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   async function logout() {
     await api.post("/auth/logout").catch(() => {});
@@ -53,12 +75,14 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
             key={href}
             href={href}
             onClick={() => setOpen(false)}
+            aria-current={active ? "page" : undefined}
             className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               active ? "bg-brand-50 text-brand-700" : "text-ink-2 hover:bg-surface-2"
             }`}
           >
             <Icon className="h-4.5 w-4.5" />
-            {label}
+            <span className="flex-1">{label}</span>
+            {href === "/messages" && <UnreadBadge count={unreadMessages} />}
           </Link>
         );
       })}
@@ -75,6 +99,7 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
         </span>
       </Link>
       <button
+        type="button"
         onClick={logout}
         className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-2 hover:bg-surface-2"
       >
@@ -86,7 +111,7 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
   return (
     <div className="flex min-h-dvh">
       {/* Barre latérale (≥ md) */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface p-4 md:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface p-4 md:sticky md:top-0 md:flex md:h-dvh md:overflow-y-auto">
         <div className="mb-6 flex items-center gap-2 px-2">
           <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-base text-on-brand">🧠</span>
@@ -107,20 +132,24 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
             Second Brain
           </Link>
           <div className="flex items-center gap-1">
+            <Link href="/messages" aria-label="Messages" className="relative rounded-lg p-2 text-ink-2 hover:bg-surface-2">
+              <MessagesSquare className="h-5 w-5" />
+              <UnreadBadge count={unreadMessages} className="absolute -right-0.5 -top-0.5" />
+            </Link>
             <NotificationsBell align="right" />
-            <button onClick={() => setOpen(true)} aria-label="Menu" className="rounded-lg p-2 hover:bg-surface-2">
+            <button type="button" onClick={() => setOpen(true)} aria-label="Menu" aria-expanded={open} aria-controls="app-drawer" className="rounded-lg p-2 hover:bg-surface-2">
               <Menu className="h-5 w-5" />
             </button>
           </div>
         </header>
 
         {open && (
-          <div className="fixed inset-0 z-40 md:hidden">
+          <div id="app-drawer" className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
             <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-            <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface p-4 shadow-xl">
+            <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-surface p-4 shadow-xl">
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-lg font-semibold">Menu</span>
-                <button onClick={() => setOpen(false)} aria-label="Fermer" className="rounded-lg p-2 hover:bg-surface-2">
+                <button type="button" onClick={() => setOpen(false)} aria-label="Fermer le menu" className="rounded-lg p-2 hover:bg-surface-2">
                   <X className="h-5 w-5" />
                 </button>
               </div>

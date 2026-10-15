@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FolderKanban, ListTodo, Users } from "lucide-react";
+import { Bell, FolderKanban, ListTodo, Users } from "lucide-react";
 
 const TABS = [
   { href: "/admin/users", label: "Utilisateurs", icon: Users },
   { href: "/admin/projects", label: "Tous les projets", icon: FolderKanban },
   { href: "/admin/tasks", label: "Toutes les tâches", icon: ListTodo },
+  { href: "/admin/notifications", label: "Notifications", icon: Bell },
 ];
 
 export function AdminNav() {
@@ -20,6 +21,7 @@ export function AdminNav() {
           <Link
             key={href}
             href={href}
+            aria-current={active ? "page" : undefined}
             className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${active ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-ink"}`}
           >
             <Icon className="h-4 w-4" /> {label}

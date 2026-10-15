@@ -10,6 +10,8 @@ interface SecondBrainBridge {
   upload(req: { url: string; headers: Record<string, string>; field: string; filename: string; type: string; data: ArrayBuffer }): Promise<{ status: number; body: string }>;
   /** Transmet le serveur et le jeton au processus principal (médias et téléchargements de documents). */
   setSession(s: { serverUrl: string; token: string } | null): Promise<void>;
+  /** Annonce le serveur d'une connexion en cours (seul POST /api/v1/auth/login y est permis avant la session). Absent des anciennes coques. */
+  setServer?(url: string): Promise<void>;
   openExternal(url: string): Promise<void>;
 }
 

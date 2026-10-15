@@ -63,7 +63,11 @@ async function assertSameOrigin(req: NextRequest): Promise<void> {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return;
   if (!(await isCookieAuthenticated())) return;
   const origin = req.headers.get("origin");
-  if (!origin) return;
+  if (!origin) {
+    // Sans Origin : les navigateurs récents envoient Sec-Fetch-Site.
+    if (req.headers.get("sec-fetch-site") === "cross-site") throw new ApiError(403, "CSRF", "Origine non autorisée.");
+    return;
+  }
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   let originHost: string;
   try {
@@ -108,6 +112,11 @@ export function withPublic<P = Record<string, never>>(handler: PublicHandler<P>)
 
 /** Lit et valide le corps JSON. */
 export async function parseBody<T>(req: NextRequest, schema: ZodType<T, ZodTypeDef, unknown>): Promise<T> {
+  // Anti-CSRF (complément d'Origin) : un formulaire HTML d'un autre site ne peut
+  // pas envoyer `application/json` sans requête préliminaire CORS.
+  if (!(req.headers.get("content-type") ?? "").toLowerCase().includes("application/json") && (await isCookieAuthenticated())) {
+    throw new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "Corps JSON attendu (Content-Type: application/json).");
+  }
   let raw: unknown;
   try {
     raw = await req.json();
@@ -117,6 +126,13 @@ export async function parseBody<T>(req: NextRequest, schema: ZodType<T, ZodTypeD
   return schema.parse(raw);
 }
 
+/**
+ * Adresse du client pour le rate limiting. L'application n'est joignable que
+ * via Caddy (port publié sur 127.0.0.1) : Caddy pose X-Forwarded-For avec
+ * l'adresse du pair TCP, ajoutée **à droite**. Seule la valeur la plus à
+ * droite est fiable (celles de gauche peuvent être forgées par le client).
+ */
 export function clientKey(req: NextRequest): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "local";
+  const hops = req.headers.get("x-forwarded-for")?.split(",").map((h) => h.trim()).filter(Boolean);
+  return hops?.[hops.length - 1] || req.headers.get("x-real-ip")?.trim() || "local";
 }

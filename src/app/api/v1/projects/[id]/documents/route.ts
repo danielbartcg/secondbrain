@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { badRequest, json, withUser } from "@/lib/api";
+import { ApiError, badRequest, json, withUser } from "@/lib/api";
+import { RATE_LIMITED_MESSAGE, rateLimit } from "@/lib/rate-limit";
 import { listDocuments, uploadDocument } from "@/lib/documents";
 
 type P = { id: string };
@@ -12,6 +13,7 @@ export const GET = withUser<P>(async (_req, { params, user }) => json({ document
  * `file` (obligatoire), `name?`, `deliverableId?`, `folderId?`. Renvoie le projet à jour.
  */
 export const POST = withUser<P>(async (req: NextRequest, { params, user }) => {
+  if (!rateLimit(`document-upload:${user.id}`, 60, 15 * 60 * 1000)) throw new ApiError(429, "RATE_LIMITED", RATE_LIMITED_MESSAGE);
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) throw badRequest("Champ `file` manquant.");

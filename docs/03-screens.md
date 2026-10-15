@@ -23,6 +23,14 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | `/admin/tasks` | `admin/tasks/page.tsx` → `listAllTasksAdmin` | `admin/TaskOverviewTable` | toutes les tâches (recherche, filtre de statut) |
 | `/notes` | `notes/page.tsx` → `children("root")` | `notes/NotesWorkspace` | **Prise de notes** : arborescence paresseuse + document riche par objet ; lien profond `?ref=kind:id` |
 
+Pages système : `src/app/not-found.tsx` (« Page introuvable », lien vers le
+tableau de bord), `src/app/(app)/error.tsx` (« Une erreur est survenue » +
+« Réessayer », coque conservée), `src/app/(app)/loading.tsx` (indicateur de
+chargement). `/login` et `/register` sont des composants client : leur titre
+d'onglet vient de `layout.tsx` dans chaque dossier. Le `theme-color` du
+navigateur mobile suit le thème de l'utilisateur (`generateViewport` du
+layout racine).
+
 ## Coque (`AppShell`)
 
 Menu complet : Tableau de bord, Cartes mentales, Projets, Mes tâches, Prise de
@@ -189,6 +197,49 @@ Mêmes écrans que le site (routeur `native/src/App.tsx`), plus :
 - « Disponible uniquement en ligne » pour les écrans relayés au serveur ;
 - « Mise à jour nécessaire » (bloquant) quand le serveur répond 426.
 
+## Messagerie (`/messages`, `/messages/:id` — `messages/MessagesApp`)
+
+Plein cadre : liste des conversations (recherche, aperçu du dernier message,
+pastille du nombre de non lus, avatar ou double avatar de groupe) et fil, en
+deux colonnes sur grand écran, l'un **ou** l'autre sur mobile (retour ←).
+Fil : séparateurs de jour, « Nouveaux messages », bulles (les miennes à
+droite), messages regroupés par auteur sur 5 min, citation de la réponse
+(cliquable : défilement + surbrillance), actions Répondre / Supprimer (survol
+à la souris, toujours visibles au toucher), coches ✓ envoyé / ✓✓ vu et « Vu »,
+« Vu par … » ou « Non vu » sous mon dernier message, « Messages précédents ».
+Menu « … » : Marquer comme non lu, Quitter la conversation. Saisie :
+`RichTextEditor` compact (gras, italique, liste, **emoji**, image), Ctrl +
+Entrée pour envoyer, bandeau « Réponse à … » annulable. « Nouveau » : boîte
+de dialogue (contacts à cocher, ajout par e-mail exact, titre si groupe,
+premier message). Menu : entrée **Messages** avec badge de non lus ; sur
+mobile, icône Messages à côté de la cloche.
+
+## Emoji (`EmojiPicker.tsx`)
+
+`EmojiButton` : sélecteur emoji-mart (données et libellés français
+embarqués, emoji natifs, chargé à la première ouverture, compatible CSP et
+hors ligne) ; ancré sous le bouton sur grand écran, en bas de l'écran sur
+mobile ; Échap / clic extérieur ferment. Présent dans **tous** les éditeurs :
+barre d'outils de `RichTextEditor` (notes, cartes, messagerie) et zone de
+commentaire des tâches (insertion au curseur).
+
+## Écrans de compte publics (`(auth)`, `AuthFrame`)
+
+- `/login` : lien « Mot de passe oublié ? » **uniquement si l'envoi d'e-mails
+  est configuré** (`GET /auth/options`) ; « Créer un compte » masqué si les
+  inscriptions sont fermées ; lien discret « Télécharger l'app pour Windows »
+  sous le formulaire.
+- `/forgot-password` (adresse ; réponse identique que le compte existe ou
+  non), `/reset-password?token=` (nouveau mot de passe + confirmation),
+  `/verify-email?token=` (validation automatique, puis « Ouvrir Second Brain »).
+
+## Télécharger l'app (`DesktopAppPromo`)
+
+Carte d'invitation sur le tableau de bord (sous la recherche) : affichée
+seulement sur le site, sous Windows, masquable définitivement (✕, mémorisé
+dans le navigateur). Également : lien sous le formulaire de connexion,
+section « Application desktop » des Préférences. Jamais dans le menu latéral.
+
 ## Préférences (`PreferencesPage`)
 
 - **Identité** : photo (ajouter / changer / retirer ; sinon silhouette),
@@ -198,6 +249,14 @@ Mêmes écrans que le site (routeur `native/src/App.tsx`), plus :
   sessions (autres appareils) sont déconnectées.
 - **Thème** : 5 vignettes (Clair, Sombre, Sépia, Océan, Forêt), appliqué
   immédiatement et mémorisé sur le compte.
+
+Sections ajoutées (`preferences/AccountSections.tsx`) : **Adresse e-mail**
+(adresse, pastille Validée / Non validée, « Envoyer le lien de validation »
+si l'envoi est configuré, « Changer d'adresse » avec mot de passe actuel,
+interrupteur « Recevoir les notifications par e-mail ») et **Connecteur
+Claude (MCP)** (création de clés nommées, clé affichée une seule fois avec la
+configuration Claude Desktop et la commande Claude Code à copier, liste avec
+dernière utilisation, révocation).
 
 ## Administration (`/admin`, `admin/*`)
 
@@ -218,12 +277,28 @@ Puces des N-1 (photo, nom, nombre de tâches ouvertes ; clic = filtre) et
 
 ## Composants partagés (`src/components/ui.tsx`)
 
-`PageHeader`, `Button`, `ProgressBar`, `InlineEdit` (clic pour éditer),
-`QuickAdd`, `EmptyState`, `Avatar` (photo `src` sinon silhouette sur couleur stable par id),
+`PageHeader`, `Button`, `ProgressBar`, `InlineEdit` (clic, ou Entrée / Espace
+au clavier, pour éditer ; `role="button"`), `QuickAdd` (en cas d'erreur, la
+saisie est conservée et un toast s'affiche), `EmptyState`, `Avatar` (photo `src`
+sinon silhouette sur couleur stable par id),
 `Badge`, `PriorityFlag`, constantes de libellés/couleurs (`TASK_STATUS_*`,
 `DELIVERABLE_STATUS_*`, `PRIORITY_*` dont `PRIORITY_CHIP`, `COMPLEXITY_*`,
 `NODE_STATUS_LABEL`), helpers `formatDate`, `formatBytes`, `relativeDays`,
 `ymd` / `todayYmd` (jour local `AAAA-MM-JJ`).
+
+- **`toast(message, "error" | "ok")`** : message éphémère (4 s) sans
+  fournisseur React, `role="status"` ; remplace `alert()` pour les erreurs.
+  `errorMessage(e, repli)` extrait le message d'une `ApiClientError`.
+- `selectClass` / `inputClass` / `selectClassXs` : texte 16 px sur mobile
+  (`text-base sm:text-sm` / `sm:text-xs`) pour éviter le zoom automatique
+  d'iOS — toute nouvelle saisie doit respecter ce minimum.
+- Couleurs : uniquement des jetons du thème (`surface`, `line`, `ink`,
+  `muted`, `brand-50/100/500/600/700`, `ok`, `warn`, `danger`…) ou les teintes
+  redéfinies en thème sombre (`red-50…800`, `amber-50…900`, `violet-50/200/700`,
+  etc., cf. `globals.css`). Pas de `brand-300/400`, pas de `bg-white`.
+- Menus et tiroirs : fermeture au clic extérieur et sur Échap ; tiroirs
+  mobiles `role="dialog"`. Cibles tactiles ≥ 32 px sur mobile
+  (`p-2 md:p-1`…).
 
 ## Graphiques (`src/components/charts/`)
 

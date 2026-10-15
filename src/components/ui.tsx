@@ -37,7 +37,7 @@ export function Button({
 export function ProgressBar({ percent, color, className = "" }: { percent: number; color?: string | null; className?: string }) {
   const pct = Math.max(0, Math.min(100, percent));
   return (
-    <div className={`h-2 w-full overflow-hidden rounded-full bg-surface-3 ${className}`} role="progressbar" aria-valuenow={pct}>
+    <div className={`h-2 w-full overflow-hidden rounded-full bg-surface-3 ${className}`} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
       <div
         className="h-full rounded-full transition-all"
         style={{ width: `${pct}%`, backgroundColor: color ?? (pct >= 100 ? "var(--color-ok)" : "var(--color-brand-500)") }}
@@ -110,6 +110,16 @@ export function InlineEdit({
   return (
     <Tag
       onClick={() => setEditing(true)}
+      onKeyDown={(e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          setEditing(true);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Modifier : ${value || placeholder}`}
       title="Cliquer pour modifier"
       className={`cursor-text rounded px-1.5 py-0.5 hover:bg-surface-2 ${!value ? "text-faint" : ""} ${className}`}
     >
@@ -140,6 +150,9 @@ export function QuickAdd({
     try {
       await onAdd(v);
       setValue("");
+    } catch (err) {
+      // On garde la saisie pour pouvoir réessayer.
+      toast(errorMessage(err, "Ajout impossible."), "error");
     } finally {
       setBusy(false);
     }
@@ -151,7 +164,8 @@ export function QuickAdd({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder}
-        className="min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+        aria-label={placeholder}
+        className="min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
       />
       <Button type="submit" size="sm" disabled={busy || !value.trim()}>
         Ajouter
@@ -226,6 +240,7 @@ export function Avatar({
   }
   return (
     <span
+      role="img"
       title={title ?? name}
       aria-label={name}
       className={`inline-flex shrink-0 items-end justify-center overflow-hidden rounded-full text-white/90 ${className}`}
@@ -248,8 +263,10 @@ export function Badge({ children, tone = "neutral", className = "" }: { children
   return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tones} ${className}`}>{children}</span>;
 }
 
-export const selectClass = "rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
-export const inputClass = "rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+export const selectClass = "rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm";
+/** Variante compacte (texte 12 px dès sm, 16 px sur mobile pour éviter le zoom iOS). */
+export const selectClassXs = "rounded-lg border border-line-strong bg-surface px-2 py-1.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-xs";
+export const inputClass = "rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm";
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
@@ -285,8 +302,8 @@ export const PRIORITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export const PRIORITY_CHIP = {
   LOW: "border-slate-300 bg-slate-100 text-slate-700",
   MEDIUM: "border-indigo-300 bg-indigo-100 text-indigo-800",
-  HIGH: "border-amber-400 bg-amber-100 text-amber-900",
-  CRITICAL: "border-red-400 bg-red-100 text-red-900",
+  HIGH: "border-amber-200 bg-amber-100 text-amber-900",
+  CRITICAL: "border-red-200 bg-red-100 text-red-800",
 } as const;
 export const COMPLEXITY_LABEL = { LOW: "Basse", MEDIUM: "Moyenne", HIGH: "Forte" } as const;
 export const COMPLEXITIES = ["LOW", "MEDIUM", "HIGH"] as const;
@@ -308,3 +325,52 @@ export function ymd(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 export const todayYmd = () => ymd(new Date());
+
+// --- Messages éphémères ------------------------------------------------------
+
+/** Message d'une erreur levée par l'API (ApiClientError) ou autre. */
+export function errorMessage(e: unknown, fallback = "Une erreur est survenue."): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
+/**
+ * Petit message éphémère (« toast ») sans fournisseur React : un conteneur
+ * fixe est ajouté au document, chaque message disparaît après 4 s.
+ */
+export function toast(message: string, tone: "error" | "ok" = "ok") {
+  if (typeof document === "undefined") return;
+  let host = document.getElementById("sb-toasts");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "sb-toasts";
+    host.setAttribute("role", "status");
+    host.setAttribute("aria-live", "polite");
+    host.className = "pointer-events-none fixed inset-x-4 bottom-4 z-[100] flex flex-col items-center gap-2 sm:inset-x-auto sm:right-4 sm:items-end";
+    document.body.appendChild(host);
+  }
+  const el = document.createElement("div");
+  el.textContent = message;
+  el.className = `pointer-events-auto max-w-sm rounded-lg border bg-surface px-4 py-2.5 text-sm shadow-lg ${
+    tone === "error" ? "border-red-200 text-danger" : "border-line text-ink"
+  }`;
+  host.appendChild(el);
+  window.setTimeout(() => el.remove(), 4000);
+}
+
+/** Interrupteur accessible (role="switch"). */
+export function Toggle({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${checked ? "bg-brand-600" : "bg-surface-3 ring-1 ring-inset ring-line-strong"}`}
+    >
+      <span className={`inline-block h-5 w-5 rounded-full bg-surface shadow transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
+    </button>
+  );
+}

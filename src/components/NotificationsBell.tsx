@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AtSign, Bell, CheckCheck, Circle, MessageSquareReply, Pencil, Trash2, UserCheck } from "lucide-react";
+import { AtSign, Bell, CheckCheck, Circle, MessageSquareReply, MessagesSquare, Pencil, Trash2, UserCheck } from "lucide-react";
 import type { NotificationDto } from "@/lib/notifications";
 import { markAllNotificationsRead, refreshNotifications, removeNotification, setRead, useNotifications } from "@/lib/notifications-store";
 
@@ -18,6 +18,7 @@ const ICON = {
   REPLY: { Icon: MessageSquareReply, className: "bg-green-50 text-green-700" },
   TASK_UPDATED: { Icon: Pencil, className: "bg-amber-50 text-amber-700" },
   MENTION: { Icon: AtSign, className: "bg-violet-50 text-violet-700" },
+  MESSAGE: { Icon: MessagesSquare, className: "bg-indigo-100 text-indigo-800" },
 } as const;
 
 export function timeAgo(iso: string): string {
@@ -50,16 +51,17 @@ export function NotificationItem({ n, onNavigate, compact = false }: { n: Notifi
         </span>
         {!n.read && <Circle className="mt-2 h-2.5 w-2.5 shrink-0 fill-brand-600 text-brand-600" aria-label="Non lue" />}
       </button>
-      <div className="absolute right-2 top-2 hidden items-center gap-0.5 rounded-lg border border-line bg-surface shadow-sm group-hover:flex">
+      <div className="hidden shrink-0 items-start gap-0.5 group-focus-within:flex [@media(hover:hover)]:absolute [@media(hover:hover)]:right-2 [@media(hover:hover)]:top-2 [@media(hover:hover)]:items-center [@media(hover:hover)]:rounded-lg [@media(hover:hover)]:border [@media(hover:hover)]:border-line [@media(hover:hover)]:bg-surface [@media(hover:hover)]:shadow-sm [@media(hover:hover)]:group-hover:flex [@media(hover:none)]:flex">
         <button
           type="button"
           onClick={() => void setRead(n.id, !n.read)}
           title={n.read ? "Marquer comme non lue" : "Marquer comme lue"}
-          className="rounded p-1 text-muted hover:bg-surface-2 hover:text-ink"
+          aria-label={n.read ? "Marquer comme non lue" : "Marquer comme lue"}
+          className="rounded p-2 text-muted hover:bg-surface-2 hover:text-ink [@media(hover:hover)]:p-1"
         >
           {n.read ? <Circle className="h-3.5 w-3.5" /> : <CheckCheck className="h-3.5 w-3.5" />}
         </button>
-        <button type="button" onClick={() => void removeNotification(n.id)} title="Supprimer" className="rounded p-1 text-muted hover:bg-red-50 hover:text-danger">
+        <button type="button" onClick={() => void removeNotification(n.id)} title="Supprimer" aria-label="Supprimer la notification" className="rounded p-2 text-muted hover:bg-red-50 hover:text-danger [@media(hover:hover)]:p-1">
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>

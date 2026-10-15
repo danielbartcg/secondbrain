@@ -1,12 +1,22 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { Monitor } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client";
 
+/** Destination après connexion : chemin de **notre** origine uniquement (pas de redirection ouverte). */
 function safeNext(value: string | null): string {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+  const fallback = "/dashboard";
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return fallback;
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin) return fallback;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return fallback;
+  }
 }
 
 function LoginForm() {
@@ -16,6 +26,15 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Options publiques : inscription ouverte, réinitialisation par e-mail disponible. */
+  const [options, setOptions] = useState<{ registration: boolean; passwordReset: boolean } | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ registration: boolean; passwordReset: boolean }>("/auth/options")
+      .then(setOptions)
+      .catch(() => setOptions(null));
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,7 +65,14 @@ function LoginForm() {
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-sm font-medium text-ink-2">Mot de passe</span>
+        <span className="mb-1 flex items-baseline justify-between text-sm font-medium text-ink-2">
+          Mot de passe
+          {options?.passwordReset && (
+            <Link href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`} className="text-xs font-medium text-brand-600 hover:underline">
+              Mot de passe oublié ?
+            </Link>
+          )}
+        </span>
         <input
           type="password"
           required
@@ -64,12 +90,14 @@ function LoginForm() {
       >
         {busy ? "Connexion…" : "Se connecter"}
       </button>
-      <p className="text-center text-sm text-muted">
-        Pas encore de compte ?{" "}
-        <Link href="/register" className="font-medium text-brand-600 hover:underline">
-          Créer un compte
-        </Link>
-      </p>
+      {options?.registration !== false && (
+        <p className="text-center text-sm text-muted">
+          Pas encore de compte ?{" "}
+          <Link href="/register" className="font-medium text-brand-600 hover:underline">
+            Créer un compte
+          </Link>
+        </p>
+      )}
     </form>
   );
 }
@@ -88,6 +116,9 @@ export default function LoginPage() {
             <LoginForm />
           </Suspense>
         </div>
+        <a href="/app" className="mt-4 flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm text-muted transition-colors hover:bg-surface hover:text-ink">
+          <Monitor className="h-4 w-4" /> Télécharger l&apos;app pour Windows <span aria-hidden>→</span>
+        </a>
       </div>
     </main>
   );

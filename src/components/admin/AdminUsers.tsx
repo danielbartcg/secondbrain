@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Crown, Search, ShieldCheck } from "lucide-react";
+import { Crown, Search, ShieldCheck, MailCheck, MailQuestion } from "lucide-react";
 import { api } from "@/lib/client";
 import type { AdminUserDto } from "@/lib/users";
-import { Avatar, Badge, formatDate, selectClass } from "@/components/ui";
+import { Avatar, Badge, errorMessage, formatDate, selectClassXs, toast } from "@/components/ui";
 
 /**
  * Gestion des utilisateurs : rôle (utilisateur / administrateur) et manager
@@ -25,7 +25,7 @@ export function AdminUsers({ initial, currentUserId }: { initial: AdminUserDto[]
       const { users } = await api.patch<{ users: AdminUserDto[] }>(`/admin/users/${id}`, data);
       setUsers(users);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erreur");
+      toast(errorMessage(e, "Modification impossible."), "error");
     } finally {
       setBusy(null);
     }
@@ -40,7 +40,7 @@ export function AdminUsers({ initial, currentUserId }: { initial: AdminUserDto[]
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 sm:max-w-xs">
           <Search className="h-4 w-4 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un nom ou un e-mail" className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un nom ou un e-mail" aria-label="Rechercher un nom ou un e-mail" className="min-w-0 flex-1 bg-transparent py-2 text-base outline-none sm:text-sm" />
         </label>
         <span className="text-xs text-muted">
           {users.length} compte{users.length > 1 ? "s" : ""} · {admins} administrateur{admins > 1 ? "s" : ""}
@@ -70,7 +70,18 @@ export function AdminUsers({ initial, currentUserId }: { initial: AdminUserDto[]
                         {u.name}
                         {u.id === currentUserId && <span className="text-xs font-normal text-muted">(vous)</span>}
                       </div>
-                      <div className="truncate text-xs text-muted">{u.email}</div>
+                      <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                        <span className="truncate">{u.email}</span>
+                        {u.emailVerified ? (
+                          <span className="inline-flex shrink-0 items-center gap-0.5 text-green-700" title="Adresse e-mail validée">
+                            <MailCheck className="h-3.5 w-3.5" aria-hidden /> validée
+                          </span>
+                        ) : (
+                          <span className="inline-flex shrink-0 items-center gap-0.5 text-faint" title="Adresse e-mail non validée (sans effet sur la connexion)">
+                            <MailQuestion className="h-3.5 w-3.5" aria-hidden /> non validée
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -84,8 +95,16 @@ export function AdminUsers({ initial, currentUserId }: { initial: AdminUserDto[]
                       value={u.role}
                       disabled={busy === u.id || u.id === currentUserId}
                       title={u.id === currentUserId ? "Vous ne pouvez pas modifier votre propre rôle" : undefined}
-                      onChange={(e) => void update(u.id, { role: e.target.value as "USER" | "ADMIN" })}
-                      className={`${selectClass} text-xs disabled:opacity-60`}
+                      aria-label={`Rôle de ${u.name}`}
+                      onChange={(e) => {
+                        const role = e.target.value as "USER" | "ADMIN";
+                        const msg =
+                          role === "ADMIN"
+                            ? `Donner le rôle d'administrateur à ${u.name} ? Cette personne verra l'administration.`
+                            : `Retirer le rôle d'administrateur à ${u.name} ?`;
+                        if (confirm(msg)) void update(u.id, { role });
+                      }}
+                      className={`${selectClassXs} disabled:opacity-60`}
                     >
                       <option value="USER">Utilisateur</option>
                       <option value="ADMIN">Administrateur</option>
@@ -93,7 +112,7 @@ export function AdminUsers({ initial, currentUserId }: { initial: AdminUserDto[]
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <select value={u.managerId ?? ""} disabled={busy === u.id} onChange={(e) => void update(u.id, { managerId: e.target.value || null })} className={`${selectClass} max-w-[14rem] text-xs`}>
+                  <select value={u.managerId ?? ""} disabled={busy === u.id} aria-label={`Manager de ${u.name}`} onChange={(e) => void update(u.id, { managerId: e.target.value || null })} className={`${selectClassXs} max-w-[14rem]`}>
                     <option value="">— Aucun —</option>
                     {users
                       .filter((m) => m.id !== u.id)

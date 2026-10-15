@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Download, FileText, Package, Paperclip, Plus, Trash2, Upload } from "lucide-react";
 import { api } from "@/lib/client";
 import type { DeliverableDto, ProjectDto } from "@/lib/projects";
-import { Avatar, Badge, Button, DELIVERABLE_STATUS_LABEL, DELIVERABLE_STATUS_TONE, InlineEdit, QuickAdd, formatBytes, formatDate, selectClass, toInputDate } from "@/components/ui";
+import { Avatar, Badge, Button, DELIVERABLE_STATUS_LABEL, DELIVERABLE_STATUS_TONE, InlineEdit, QuickAdd, formatBytes, formatDate, selectClass, selectClassXs, toInputDate } from "@/components/ui";
 import type { Resp, Run } from "./ProjectWorkspace";
 
 /** Livrables du projet : statut, responsable, dates attendues, documents rattachés. */
@@ -166,8 +166,9 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
                   if (e.target.value) void run(() => api.patch<Resp>(`/documents/${e.target.value}`, { deliverableId: d.id }));
                   e.target.value = "";
                 }}
-                className={`${selectClass} max-w-48 text-xs`}
+                className={`${selectClassXs} max-w-48`}
                 title="Rattacher un document existant du projet"
+                aria-label="Rattacher un document existant du projet"
               >
                 <option value="">Rattacher un document…</option>
                 {unattached.map((doc) => (

@@ -31,9 +31,9 @@ export function TaskOverviewTable({ tasks, showOwner = true }: { tasks: Overview
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 sm:max-w-xs">
           <Search className="h-4 w-4 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tâche, projet, personne…" className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tâche, projet, personne…" aria-label="Filtrer les tâches" className="min-w-0 flex-1 bg-transparent py-2 text-base outline-none sm:text-sm" />
         </label>
-        <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={selectClass}>
+        <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={selectClass} aria-label="Statut des tâches">
           <option value="open">Ouvertes</option>
           <option value="all">Toutes</option>
           {TASK_STATUSES.map((s) => (
@@ -92,7 +92,7 @@ export function TaskOverviewTable({ tasks, showOwner = true }: { tasks: Overview
             })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-muted">
+                <td colSpan={showOwner ? 7 : 6} className="px-3 py-8 text-center text-muted">
                   Aucune tâche pour ces critères.
                 </td>
               </tr>

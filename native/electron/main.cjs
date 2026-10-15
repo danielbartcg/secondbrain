@@ -5,14 +5,16 @@
  *   protocole interne app://local/ (repli sur index.html : routes profondes).
  * - /media/… (images des notes) est relayé vers le serveur et mis en cache
  *   sur le disque : les images restent visibles hors ligne.
- * - /api/v1/documents/… (téléchargements) est relayé avec le jeton Bearer.
+ * - /api/v1/documents/<id>/download est relayé avec le jeton Bearer.
  * - Les requêtes de l'application vers le serveur passent par ce processus
  *   (IPC « sb:fetch » / « sb:upload ») : pas de CORS, pas d'en-tête Origin.
+ *   Seule l'origine de la session est joignable (plus POST /auth/login vers le
+ *   serveur annoncé par « sb:setServer ») ; le jeton Bearer est ajouté ici.
  * - Développement : SB_DEV_URL=http://localhost:5173 charge le serveur Vite.
  *
  * Les données (IndexedDB) vivent dans le profil applicatif (userData).
  */
-const { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, net, protocol, safeStorage, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
@@ -26,22 +28,88 @@ if (SMOKE) app.setPath("userData", path.join(require("node:os").tmpdir(), `secon
 protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
 // --- Session (serveur + jeton) : transmise par l'interface, conservée sur le disque ---------
+// Le jeton est chiffré par le trousseau du système (safeStorage : DPAPI sous
+// Windows, Keychain sous macOS) quand il est disponible ; sinon en clair (0600).
 let session = { serverUrl: "", token: null };
+/** Serveur visé par une connexion en cours (sb:setServer) : seul POST /api/v1/auth/login y est permis. */
+let pendingServer = "";
 const sessionFile = () => path.join(app.getPath("userData"), "session.json");
+const canEncrypt = () => {
+  try {
+    return safeStorage.isEncryptionAvailable();
+  } catch {
+    return false;
+  }
+};
 function loadSession() {
   try {
-    session = JSON.parse(fs.readFileSync(sessionFile(), "utf8"));
+    const raw = JSON.parse(fs.readFileSync(sessionFile(), "utf8"));
+    let token = typeof raw.token === "string" ? raw.token : null;
+    if (typeof raw.tokenEnc === "string") {
+      try {
+        token = safeStorage.decryptString(Buffer.from(raw.tokenEnc, "base64"));
+      } catch {
+        token = null;
+      }
+    }
+    session = { serverUrl: originOf(raw.serverUrl) ? String(raw.serverUrl).replace(/\/+$/, "") : "", token };
   } catch {
     session = { serverUrl: "", token: null };
   }
 }
 function saveSession(s) {
   session = s ? { serverUrl: String(s.serverUrl || "").replace(/\/+$/, ""), token: s.token || null } : { serverUrl: session.serverUrl, token: null };
+  if (!originOf(session.serverUrl)) session = { serverUrl: "", token: null };
+  const stored = { serverUrl: session.serverUrl };
+  if (session.token && canEncrypt()) stored.tokenEnc = safeStorage.encryptString(session.token).toString("base64");
+  else stored.token = session.token;
   try {
-    fs.writeFileSync(sessionFile(), JSON.stringify(session), { mode: 0o600 });
+    fs.writeFileSync(sessionFile(), JSON.stringify(stored), { mode: 0o600 });
   } catch {
     /* ignoré */
   }
+}
+
+/** Origine http(s) d'une URL, ou "" si invalide. */
+function originOf(u) {
+  try {
+    const url = new URL(String(u));
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
+const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "PUT", "DELETE"]);
+/** En-têtes que l'interface peut transmettre ; l'authentification est ajoutée ici, jamais par l'appelant. */
+const ALLOWED_HEADERS = new Set(["content-type", "accept", "accept-language", "x-sync-protocol"]);
+
+/**
+ * Contrôle d'une requête de l'interface vers le serveur : uniquement l'origine
+ * de la session, ou, pendant une connexion, POST /api/v1/auth/login sur le
+ * serveur visé (sb:setServer). Renvoie l'URL, la méthode et les en-têtes.
+ */
+function checkedRequest(req, { upload = false } = {}) {
+  const method = upload ? "POST" : String(req.method || "GET").toUpperCase();
+  if (!ALLOWED_METHODS.has(method)) throw new Error("Méthode non autorisée");
+  let url;
+  try {
+    url = new URL(String(req.url));
+  } catch {
+    throw new Error("URL invalide");
+  }
+  const origin = originOf(url.href);
+  if (!origin) throw new Error("URL invalide");
+  const sessionOrigin = originOf(session.serverUrl);
+  const isLogin = !upload && method === "POST" && url.pathname === "/api/v1/auth/login";
+  const allowed = (sessionOrigin && origin === sessionOrigin) || (isLogin && pendingServer && origin === pendingServer);
+  if (!allowed) throw new Error("Serveur non autorisé");
+  const headers = {};
+  for (const [k, v] of Object.entries(req.headers || {})) {
+    if (ALLOWED_HEADERS.has(k.toLowerCase()) && typeof v === "string") headers[k] = v;
+  }
+  if (session.token && origin === sessionOrigin && !isLogin) headers.Authorization = `Bearer ${session.token}`;
+  return { url: url.href, method, headers };
 }
 
 const isHttpUrl = (u) => {
@@ -76,6 +144,8 @@ async function serveMedia(pathname) {
   }
 }
 
+const DOCUMENT_DOWNLOAD = /^\/api\/v1\/documents\/[A-Za-z0-9_-]+\/download$/;
+
 async function proxyAuthenticated(pathname, search) {
   if (!session.serverUrl || !session.token) return new Response("Connexion requise", { status: 401 });
   try {
@@ -88,11 +158,21 @@ async function proxyAuthenticated(pathname, search) {
 function registerAppProtocol() {
   protocol.handle("app", async (request) => {
     const url = new URL(request.url);
-    const pathname = decodeURIComponent(url.pathname);
-    if (pathname.startsWith("/media/")) return serveMedia(pathname);
-    if (pathname.startsWith("/api/v1/documents/")) return proxyAuthenticated(pathname, url.search);
-    const file = path.normalize(path.join(RENDERER, pathname));
-    if (file.startsWith(RENDERER) && fs.existsSync(file) && fs.statSync(file).isFile()) return net.fetch(pathToFileURL(file).toString());
+    // Chemin brut (non décodé) pour le routage : pas de « %2e%2e » ni de « %2f » qui contourneraient les contrôles.
+    const raw = url.pathname;
+    if (raw.startsWith("/media/")) return serveMedia(raw);
+    if (raw.startsWith("/api/")) {
+      if (DOCUMENT_DOWNLOAD.test(raw)) return proxyAuthenticated(raw, url.search);
+      return new Response("Introuvable", { status: 404 });
+    }
+    let decoded;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {
+      decoded = "/";
+    }
+    const file = path.join(RENDERER, decoded);
+    if (file.startsWith(RENDERER + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) return net.fetch(pathToFileURL(file).toString());
     // Route de l'application (/projects/…, /tasks/…) : l'interface gère elle-même la navigation.
     return net.fetch(pathToFileURL(path.join(RENDERER, "index.html")).toString());
   });
@@ -101,18 +181,25 @@ function registerAppProtocol() {
 // --- IPC : requêtes serveur pour l'interface -------------------------------------------------
 function registerIpc() {
   ipcMain.handle("sb:fetch", async (_e, req) => {
-    if (!isHttpUrl(req.url)) throw new Error("URL invalide");
-    const r = await net.fetch(req.url, { method: req.method, headers: req.headers, body: req.body ?? undefined });
+    const { url, method, headers } = checkedRequest(req);
+    const body = method === "GET" || typeof req.body !== "string" ? undefined : req.body;
+    const r = await net.fetch(url, { method, headers, body });
     return { status: r.status, body: await r.text() };
   });
   ipcMain.handle("sb:upload", async (_e, req) => {
-    if (!isHttpUrl(req.url)) throw new Error("URL invalide");
+    const { url, headers } = checkedRequest(req, { upload: true });
+    // Multipart : le Content-Type (avec boundary) est posé par FormData.
+    for (const k of Object.keys(headers)) if (k.toLowerCase() === "content-type") delete headers[k];
     const form = new FormData();
-    form.append(req.field, new Blob([Buffer.from(req.data)], { type: req.type }), req.filename);
-    const r = await net.fetch(req.url, { method: "POST", headers: req.headers, body: form });
+    form.append(String(req.field || "file"), new Blob([Buffer.from(req.data)], { type: String(req.type || "") }), String(req.filename || "image"));
+    const r = await net.fetch(url, { method: "POST", headers, body: form });
     return { status: r.status, body: await r.text() };
   });
   ipcMain.handle("sb:setSession", (_e, s) => saveSession(s));
+  // Connexion en cours vers `url` : autorise POST /api/v1/auth/login sur cette origine (et elle seule).
+  ipcMain.handle("sb:setServer", (_e, url) => {
+    pendingServer = originOf(url);
+  });
   ipcMain.handle("sb:openExternal", (_e, url) => (isHttpUrl(url) ? shell.openExternal(url) : undefined));
 }
 
@@ -210,7 +297,7 @@ if (!app.requestSingleInstanceLock() && !SMOKE) {
       Menu.buildFromTemplate([
         { label: "Fichier", submenu: [{ role: "quit", label: "Quitter" }] },
         { label: "Édition", submenu: [{ role: "undo", label: "Annuler" }, { role: "redo", label: "Rétablir" }, { type: "separator" }, { role: "cut", label: "Couper" }, { role: "copy", label: "Copier" }, { role: "paste", label: "Coller" }, { role: "selectAll", label: "Tout sélectionner" }] },
-        { label: "Affichage", submenu: [{ role: "reload", label: "Recharger" }, { role: "toggleDevTools", label: "Outils de développement" }, { type: "separator" }, { role: "resetZoom", label: "Taille réelle" }, { role: "zoomIn", label: "Zoom avant" }, { role: "zoomOut", label: "Zoom arrière" }, { type: "separator" }, { role: "togglefullscreen", label: "Plein écran" }] },
+        { label: "Affichage", submenu: [{ role: "reload", label: "Recharger" }, ...(DEV_URL || !app.isPackaged ? [{ role: "toggleDevTools", label: "Outils de développement" }] : []), { type: "separator" }, { role: "resetZoom", label: "Taille réelle" }, { role: "zoomIn", label: "Zoom avant" }, { role: "zoomOut", label: "Zoom arrière" }, { type: "separator" }, { role: "togglefullscreen", label: "Plein écran" }] },
       ]),
     );
     loadSession();

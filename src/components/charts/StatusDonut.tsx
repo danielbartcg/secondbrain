@@ -44,7 +44,14 @@ export function StatusDonut({ slices, height = 240, centerLabel }: { slices: Don
         label.fill = am4core.color(themeColor("--color-ink", "#17171a"));
 
         chart.legend = new am4charts.Legend();
-        chart.legend.position = "right";
+        // Légende à droite, ou dessous quand le conteneur est étroit (mobile).
+        const legend = chart.legend;
+        const placeLegend = (width: number) => {
+          const position = width < 400 ? "bottom" : "right";
+          if (legend.position !== position) legend.position = position;
+        };
+        placeLegend(container.clientWidth);
+        chart.events.on("sizechanged", () => placeLegend(chart.pixelWidth));
         chart.legend.fontSize = 12;
         chart.legend.labels.template.fill = am4core.color(themeColor("--color-ink-2", "#3b3b40"));
         chart.legend.valueLabels.template.fill = am4core.color(themeColor("--color-muted", "#6d6c72"));
