@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Chargé tel quel par Node (pas empaqueté) : modules node:* (envoi d'e-mails).
   serverExternalPackages: ["nodemailer", "exceljs"],
+  // exceljs → … → generator-function / async-function chargent « require.mjs » via le champ « exports » :
+  // le traçage du build autonome ne le voit pas, on l'inclut explicitement.
+  outputFileTracingIncludes: {
+    "/api/v1/projects/[id]/export": ["./node_modules/generator-function/**/*", "./node_modules/async-function/**/*"],
+  },
   async headers() {
     return [
       {
