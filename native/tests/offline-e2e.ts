@@ -196,6 +196,17 @@ async function main() {
   const again = await createRuntime({ dbName: name, installTransport: false });
   check("données, curseur et conflits rechargés", again.store.get("Task", offId)?.name === "Créée hors ligne" && again.store.meta.cursor === rt.store.meta.cursor && again.store.conflicts.length === rt.store.conflicts.length);
 
+  console.log("\n9 bis. Prérequis hors ligne");
+  setForcedOffline(true);
+  await api("PATCH", `/tasks/${offId}`, { prerequisiteIds: [taskId] });
+  check("prérequis appliqué localement", JSON.stringify(rt.model.task(offId)!.prerequisiteIds) === JSON.stringify([taskId]), rt.model.task(offId));
+  const cycle = await api("PATCH", `/tasks/${taskId}`, { prerequisiteIds: [offId] }).then(() => null, (e: Error) => e.message);
+  check("cycle refusé localement (mêmes règles que le serveur)", !!cycle && /circulaire/i.test(cycle), cycle);
+  setForcedOffline(false);
+  await rt.sync.syncNow();
+  const srvPrereq = await http<Any>("GET", `/tasks/${offId}`, A.token);
+  check("prérequis synchronisé au serveur", JSON.stringify(srvPrereq.data.task?.prerequisiteIds) === JSON.stringify([taskId]), srvPrereq.data.task?.prerequisiteIds);
+
   console.log("\n10. iPhone : URL des médias");
   const media = mediaRewriter(() => "https://sb.example");
   const dto = { notes: '<p><img src="/media/2026/a.png"></p>', avatarUrl: "/media/u/b.webp", other: "texte /media/ inchangé" };

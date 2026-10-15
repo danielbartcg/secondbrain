@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client";
+import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 
 const field =
   "w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
@@ -14,15 +15,20 @@ export default function RegisterPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (password !== confirm) {
+      setError("La confirmation ne correspond pas au mot de passe.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await api.post("/auth/register", { firstName, lastName, email, password, client: "Web" });
+      await api.post("/auth/register", { firstName, lastName, email, password, confirmPassword: confirm, client: "Web" });
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
@@ -62,15 +68,30 @@ export default function RegisterPage() {
               required
               minLength={8}
               autoComplete="new-password"
+              maxLength={72}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={field}
             />
+            <PasswordStrengthMeter password={password} personal={[email, firstName, lastName]} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-ink-2">Confirmation du mot de passe</span>
+            <input
+              type="password"
+              required
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              aria-invalid={confirm.length > 0 && confirm !== password}
+              className={`${field} ${confirm.length > 0 && confirm !== password ? "border-danger" : ""}`}
+            />
+            {confirm.length > 0 && confirm !== password && <span className="mt-1 block text-xs text-danger">La confirmation ne correspond pas.</span>}
           </label>
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">{error}</p>}
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || password.length < 8 || confirm !== password}
             className="w-full rounded-lg bg-brand-600 px-4 py-2.5 font-medium text-on-brand hover:bg-brand-700 disabled:opacity-60"
           >
             {busy ? "Création…" : "Créer mon compte"}

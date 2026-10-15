@@ -50,6 +50,11 @@
 
 ## 2. Périmètre synchronisé
 
+> Les prérequis de tâches (`Task.prerequisiteIds`) sont une colonne de la
+> tâche : synchronisés sans rien de plus ; l'API locale applique les mêmes
+> règles (`src/lib/shared/prerequisites.ts`). Épingles du menu et messagerie :
+> en ligne uniquement.
+
 | Synchronisé hors ligne (lecture + écriture) | Lecture seule hors ligne | Relayé au serveur (en ligne seulement) |
 | --- | --- | --- |
 | Cartes, nœuds (titre, notes, statut, couleur, position, repli), liens nœud ↔ tâche ; projets, étapes, activités, tâches (tous champs, contributeurs, sessions de travail), notes des objets, commentaires (ajout / suppression) | Équipe des projets, livrables, liste des documents et dossiers | Gestion d'équipe, livrables, documents (dépôt, téléchargement), profil et mot de passe, notifications (liste vide hors ligne), administration, « Mon équipe » |

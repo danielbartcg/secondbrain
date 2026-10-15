@@ -28,6 +28,7 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { Button, InlineEdit, NODE_STATUS_LABEL, errorMessage, toast } from "@/components/ui";
 import { NodeTasksPanel } from "./NodeTasksPanel";
 import { useSearchParams } from "next/navigation";
+import { PinButton } from "@/components/PinButton";
 
 /**
  * Éditeur de carte mentale.
@@ -676,6 +677,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <InlineEdit value={map.title} onSave={renameMap} as="h1" className="min-w-0 flex-1 truncate text-base font-semibold sm:text-lg" />
+        <PinButton kind="MINDMAP" item={{ id: map.id, name: map.title }} className="shrink-0" />
         <span className="hidden text-xs text-faint lg:block">Tab : enfant · Entrée : frère · Suppr · F2 : renommer · Espace : replier</span>
         <span className={`shrink-0 text-xs ${saving ? "text-warn" : "text-faint"}`} role="status" title={saving ? "Enregistrement…" : "Enregistré"}>
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full sm:hidden ${saving ? "bg-warn" : "bg-ok"}`} />

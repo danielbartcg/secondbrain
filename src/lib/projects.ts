@@ -6,6 +6,7 @@ import { notify } from "@/lib/notifications";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { deleteProjectDocumentsDir } from "@/lib/uploads";
 import { requireAdmin } from "@/lib/users";
+import { prerequisiteError } from "@/lib/shared/prerequisites";
 import {
   DOCUMENT_INCLUDE,
   MEMBER_INCLUDE,
@@ -507,6 +508,23 @@ export async function listOrphanTasks(userId: string): Promise<TaskDto[]> {
   return rows.map(toTaskDto);
 }
 
+/** Valide une liste de prérequis (même projet, pas soi-même, pas de cycle) ; renvoie la liste dédoublonnée. */
+async function checkPrerequisites(tx: Tx, taskId: string, projectId: string | null, ids: string[] | undefined): Promise<string[] | undefined> {
+  if (ids === undefined) return undefined;
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return [];
+  if (!projectId) throw badRequest("Une tâche sans projet ne peut pas avoir de prérequis.");
+  const tasks = await tx.task.findMany({ where: { projectId }, select: { id: true, prerequisiteIds: true } });
+  const error = prerequisiteError(taskId, unique, tasks);
+  if (error) throw badRequest(error);
+  return unique;
+}
+
+/** Retire une tâche des listes de prérequis des autres tâches (suppression, changement de projet). */
+async function dropFromPrerequisites(tx: Tx, taskId: string) {
+  await tx.$executeRaw`UPDATE "Task" SET "prerequisiteIds" = array_remove("prerequisiteIds", ${taskId}) WHERE ${taskId} = ANY("prerequisiteIds")`;
+}
+
 export async function createTask(
   userId: string,
   target: { projectId?: string | null; stageId?: string | null; activityId?: string | null; nodeId?: string | null },
@@ -522,6 +540,8 @@ export async function createTask(
       await checkMember(tx, att.projectId, input.supervisorId);
     }
     const contributorIds = (await checkMembers(tx, att.projectId, input.contributorIds)) ?? [];
+    // Nouvelle tâche : aucune autre ne dépend encore d'elle, pas de cycle possible.
+    const prerequisiteIds = (await checkPrerequisites(tx, id ?? "__nouvelle__", att.projectId, input.prerequisiteIds)) ?? [];
     const { status, progress } = reconcile({ status: "TODO", progress: 0 }, input);
     const count = await tx.task.count({ where: siblingWhere({ ...att, ownerId: userId }) });
     const created = await tx.task.create({
@@ -544,6 +564,7 @@ export async function createTask(
         startDate: toDate(input.startDate) ?? null,
         dueDate: toDate(input.dueDate) ?? null,
         closedAt: status === "CLOSED" ? new Date() : null,
+        prerequisiteIds,
         ...(target.nodeId ? { nodes: { create: { nodeId: target.nodeId } } } : {}),
       },
     });
@@ -609,11 +630,16 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     let assigneeId = input.assigneeId;
     let supervisorId = input.supervisorId;
     let contributorIds = input.contributorIds;
+    let prerequisiteInput = input.prerequisiteIds;
     if (projectChanged) {
       if (assigneeId === undefined) assigneeId = null;
       if (supervisorId === undefined) supervisorId = null;
       if (contributorIds === undefined) contributorIds = [];
+      // Les dépendances ne traversent pas les projets.
+      if (prerequisiteInput === undefined) prerequisiteInput = [];
+      await dropFromPrerequisites(tx, taskId);
     }
+    const prerequisiteIds = await checkPrerequisites(tx, taskId, att.projectId, prerequisiteInput);
     if (assigneeId || supervisorId) {
       if (!att.projectId) throw badRequest("Une tâche sans projet ne peut pas être affectée.");
       await checkMember(tx, att.projectId, assigneeId);
@@ -641,6 +667,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
         startDate: toDate(input.startDate),
         dueDate: toDate(input.dueDate),
         closedAt,
+        prerequisiteIds,
         projectId: att.projectId,
         stageId: att.stageId,
         activityId: att.activityId,
@@ -664,6 +691,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     if (input.dueDate !== undefined && iso(toDate(input.dueDate)) !== iso(t.dueDate)) changes.push("échéance");
     if (input.closedAt !== undefined && status === "CLOSED" && t.status === "CLOSED" && iso(toDate(input.closedAt)) !== iso(t.closedAt)) changes.push("date de clôture");
     if (moved) changes.push("rattachement");
+    if (prerequisiteIds !== undefined && [...prerequisiteIds].sort().join() !== [...(t.prerequisiteIds ?? [])].sort().join()) changes.push("prérequis");
     const supervisorChanged = updated.supervisorId !== t.supervisorId;
     if (supervisorChanged) changes.push("superviseur");
     const addedContributors = newContributors ? newContributors.filter((id) => !previousContributors.includes(id)) : [];
@@ -690,6 +718,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
 export async function deleteTask(userId: string, taskId: string): Promise<TaskMutation> {
   const t = await accessibleTask(userId, taskId);
   return mutateTask(t.projectId, async (tx) => {
+    await dropFromPrerequisites(tx, taskId);
     await tx.task.delete({ where: { id: taskId } });
     await resequence(tx, "task", siblingWhere({ projectId: t.projectId, stageId: t.stageId, activityId: t.activityId, ownerId: t.ownerId }));
     return null;

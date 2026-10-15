@@ -175,17 +175,87 @@ body {
 .ProseMirror img.ProseMirror-selectednode {
   @apply ring-2 ring-brand-500;
 }
-.ProseMirror ul[data-type="taskList"] {
-  @apply list-none pl-0;
+/* Texte riche (éditeur et rendu) : espacements resserrés — la typographie
+   par défaut de « prose » espace trop les paragraphes pour des notes. */
+.prose :where(p) {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
 }
-.ProseMirror ul[data-type="taskList"] li {
-  @apply flex items-start gap-2;
+.prose :where(h1) {
+  margin-top: 0.9em;
+  margin-bottom: 0.35em;
+  font-size: 1.75em;
 }
-.ProseMirror ul[data-type="taskList"] li > label {
-  @apply mt-1 shrink-0;
+.prose :where(h2) {
+  margin-top: 0.8em;
+  margin-bottom: 0.3em;
 }
-.ProseMirror ul[data-type="taskList"] li > div {
-  @apply flex-1;
+.prose :where(h3) {
+  margin-top: 0.7em;
+  margin-bottom: 0.25em;
+}
+.prose :where(ul, ol) {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+.prose :where(li) {
+  margin-top: 0.1em;
+  margin-bottom: 0.1em;
+}
+.prose :where(li > p) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.prose :where(blockquote, pre) {
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+}
+.prose > :first-child {
+  margin-top: 0;
+}
+
+/* Listes de cases à cocher : case centrée sur la première ligne du texte. */
+.prose ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.prose ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  padding-left: 0;
+}
+.prose ul[data-type="taskList"] li::marker {
+  content: none;
+}
+.prose ul[data-type="taskList"] li > label {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 1lh; /* hauteur d'une ligne de texte */
+  margin: 0;
+}
+.prose ul[data-type="taskList"] li > label input {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  accent-color: var(--color-brand-600);
+  cursor: pointer;
+}
+.prose ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.prose ul[data-type="taskList"] li > div > p {
+  margin: 0;
+}
+.prose ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--color-muted);
+  text-decoration: line-through;
+}
+.prose ul[data-type="taskList"] ul[data-type="taskList"] {
+  margin-top: 0.1em;
+  margin-bottom: 0.1em;
 }
 
 /* --- Prise de notes : document façon Notion ------------------------------- */

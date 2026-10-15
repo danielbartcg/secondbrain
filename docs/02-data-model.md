@@ -29,6 +29,8 @@ User ──< ApiKey                             clés d'accès personnelles (con
 Conversation ──< ConversationParticipant >── User   (lastReadAt : vu / non vu)
 Conversation ──< Message (author? → User ; replyToId? → Message : réponse citée)
 AppSettings (une ligne « global »)          SMTP, e-mails, notifications activées
+User ──< Pin (kind PROJECT|MINDMAP, targetId)  épingles du menu de gauche
+Task.prerequisiteIds[] → Task (même projet)  prérequis (Gantt)
 ```
 
 ## Comptes
@@ -55,7 +57,7 @@ AppSettings (une ligne « global »)          SMTP, e-mails, notifications activ
 | `ProjectMember` | `id`, `projectId`, `userId?`, `name`, `email?`, `role?`, `color?`, `createdAt` | **équipe projet** : compte de l'application (`userId`) ou nom libre. `@@unique([projectId, userId])`. Le propriétaire est créé membre (« Chef de projet ») à la création du projet |
 | `Stage` | `id`, `projectId`, `name`, `description`, `notes` (HTML), `order`, `startDate?`, `dueDate?`, timestamps | étape |
 | `Activity` | `id`, `stageId`, `name`, `description`, `notes` (HTML), `order`, timestamps | niveau intermédiaire **facultatif** |
-| `Task` | `id`, `ownerId`, `projectId?`, `stageId?`, `activityId?`, `assigneeId?`, `supervisorId?`, `name`, `description`, `notes` (HTML), `status` (`TODO` · `IN_PROGRESS` · `DONE` · `CLOSED`), `progress` 0–100, `priority` (`LOW` · `MEDIUM` · `HIGH` · `CRITICAL`, défaut `MEDIUM`), `complexity` (`LOW` · `MEDIUM` · `HIGH`, défaut `MEDIUM`), `order`, `startDate?`, `dueDate?`, `closedAt?` (date de clôture), timestamps | **rattachement facultatif et cohérent** : `activityId ⇒ stageId ⇒ projectId` ; `projectId = null` = sans projet (visible par `ownerId` seul) ; `assigneeId` → membre **du même projet** (vérifié ; impossible sans projet). `CLOSED` = clôture **manuelle** après `DONE` (la tâche sort du flux courant) |
+| `Task` | `id`, `ownerId`, `projectId?`, `stageId?`, `activityId?`, `assigneeId?`, `supervisorId?`, `name`, `description`, `notes` (HTML), `status` (`TODO` · `IN_PROGRESS` · `DONE` · `CLOSED`), `progress` 0–100, `priority` (`LOW` · `MEDIUM` · `HIGH` · `CRITICAL`, défaut `MEDIUM`), `complexity` (`LOW` · `MEDIUM` · `HIGH`, défaut `MEDIUM`), `order`, `startDate?`, `dueDate?`, `closedAt?` (date de clôture), `prerequisiteIds[]` (tâches prérequises), timestamps | **prérequis** : tâches du **même projet**, sans cycle ni soi-même (`src/lib/shared/prerequisites.ts`) ; retirés des listes des autres tâches quand la tâche est supprimée ou change de projet (`array_remove`) ; colonne synchronisée comme les autres champs. **Rattachement facultatif et cohérent** : `activityId ⇒ stageId ⇒ projectId` ; `projectId = null` = sans projet (visible par `ownerId` seul) ; `assigneeId` → membre **du même projet** (vérifié ; impossible sans projet). `CLOSED` = clôture **manuelle** après `DONE` (la tâche sort du flux courant) |
 | `TaskContributor` | `taskId`, `memberId`, `createdAt` (`@@id([taskId, memberId])`) | contributeurs d'une tâche (membres du même projet ; cascade à la suppression du membre) |
 | `MindNodeTask` | `nodeId`, `taskId`, `createdAt` (`@@id([nodeId, taskId])`) | tâche rattachée à un nœud de carte ; le nœud compte ses tâches non clôturées |
 | `Folder` | `id`, `projectId`, `parentId?`, `name`, timestamps | arborescence documentaire (racine = `parentId` null) ; supprimer un dossier remonte ses documents et sous-dossiers dans le parent |
@@ -109,6 +111,12 @@ AppSettings (une ligne « global »)          SMTP, e-mails, notifications activ
 Types de notification (`NotificationType`) : `ASSIGNED`, `TASK_UPDATED`,
 `REPLY`, `MENTION`, `MESSAGE`.
 
+## Épingles du menu
+
+| Modèle | Champs | Notes |
+| --- | --- | --- |
+| `Pin` | `userId` + `kind` (`PROJECT` · `MINDMAP`) + `targetId` (clé), `createdAt` | projet accessible ou carte possédée (vérifié à l'épinglage) ; épingles orphelines ignorées et purgées à la lecture ; 30 max par utilisateur (la plus ancienne cède) ; non synchronisé |
+
 ## Messagerie
 
 | Modèle | Champs | Notes |
@@ -141,6 +149,7 @@ Version d'un champ = `max(seq)` de ses lignes `UPSERT` (ou de la création).
 | `20261013120000_node_positions` | `MindNode.x` / `y` (position manuelle) |
 | `20261015090000_notifications_email_messaging` | `EmailState`, valeur `MESSAGE` de `NotificationType`, `Notification.emailState/emailError`, `AppSettings`, `Conversation`, `ConversationParticipant`, `Message` |
 | `20261015110000_email_tokens_api_keys` | `User.emailVerifiedAt` / `emailNotifications`, `EmailToken` (`EmailTokenKind`), `ApiKey` |
+| `20261015140000_pins_task_prerequisites` | `Task.prerequisiteIds` (`TEXT[]`), `Pin` (`PinKind`) |
 | `20261015100000_session_token_hash` | données : `Session.token` remplacé par son empreinte SHA-256 (les sessions existantes restent valides) |
 | `20261014220000_sync_log` | `SyncLog`, `AppliedOp`, fonction `sb_sync_log()` et déclencheurs sur les 14 tables synchronisées |
 | `20261014190000_task_closed_at` | `Task.closedAt` (reprise : `updatedAt` des tâches déjà clôturées) |

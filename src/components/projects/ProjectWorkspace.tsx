@@ -2,18 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users } from "lucide-react";
+import { ArrowLeft, CalendarDays, CalendarRange, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import { InlineEdit, ProgressBar, errorMessage, toInputDate, toast } from "@/components/ui";
 import { STATUS_LABEL } from "./ProjectList";
 import { ProjectBoard } from "./ProjectBoard";
 import { ProjectKanbanTab } from "./ProjectKanbanTab";
+import { ProjectGanttTab } from "./ProjectGanttTab";
 import { ProjectDashboardTab } from "./ProjectDashboardTab";
 import { TeamTab } from "./TeamTab";
 import { DeliverablesTab } from "./DeliverablesTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { NotesPreview } from "@/components/notes/NotesPreview";
+import { PinButton } from "@/components/PinButton";
 
 /**
  * Espace projet : en-tête commun + onglets (tableau de bord, plan, livrables,
@@ -27,10 +29,11 @@ export type Run = (fn: () => Promise<Resp>) => Promise<void>;
 
 const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
 
-type TabKey = "dashboard" | "plan" | "kanban" | "livrables" | "documents" | "equipe";
+type TabKey = "dashboard" | "plan" | "gantt" | "kanban" | "livrables" | "documents" | "equipe";
 const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> = [
   { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { key: "plan", label: "Plan", icon: ListTree },
+  { key: "gantt", label: "Gantt", icon: CalendarRange },
   { key: "kanban", label: "Kanban", icon: SquareKanban },
   { key: "livrables", label: "Livrables", icon: Package },
   { key: "documents", label: "Documents", icon: FileText },
@@ -95,6 +98,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
           <ArrowLeft className="h-4 w-4" /> Projets
         </Link>
         <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`} role="status">{saving ? "Enregistrement…" : saved ? "Enregistré" : ""}</span>
+        <PinButton kind="PROJECT" item={{ id: project.id, name: project.name, color: project.color }} withLabel />
       </div>
 
       {/* En-tête */}
@@ -177,6 +181,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
       <div className="mt-5" role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
         {tab === "dashboard" && <ProjectDashboardTab project={project} onGoTo={selectTab} />}
         {tab === "plan" && <ProjectBoard project={project} run={run} />}
+        {tab === "gantt" && <ProjectGanttTab project={project} run={run} />}
         {tab === "kanban" && <ProjectKanbanTab project={project} run={run} />}
         {tab === "livrables" && <DeliverablesTab project={project} run={run} />}
         {tab === "documents" && <DocumentsTab project={project} run={run} currentUserId={currentUserId} />}

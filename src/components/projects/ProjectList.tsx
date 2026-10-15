@@ -7,6 +7,7 @@ import { CalendarDays, FolderKanban, Inbox, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto, ProjectSummary } from "@/lib/projects";
 import { Button, EmptyState, PageHeader, ProgressBar, errorMessage, formatDate } from "@/components/ui";
+import { PinButton } from "@/components/PinButton";
 
 export const STATUS_LABEL: Record<ProjectSummary["status"], string> = {
   ACTIVE: "Actif",
@@ -166,6 +167,7 @@ export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initi
                     )}
                   </div>
                 </div>
+                <PinButton kind="PROJECT" item={{ id: p.id, name: p.name, color: p.color }} />
                 {(!currentUserId || p.ownerId === currentUserId) && (
                   <button
                     type="button"

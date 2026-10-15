@@ -34,7 +34,7 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password (8 à 72 caractères), firstName?, lastName?, name?, client? }` (au moins un des trois noms ; `name` seul = prénom) | `201 { user, token, expiresAt }` ; `409 EMAIL_TAKEN` (aussi pour l'e-mail du super administrateur, créé seulement par script) |
+| POST | `/auth/register` | `{ email, password (8 à 72 caractères), confirmPassword?, firstName?, lastName?, name?, client? }` (`confirmPassword` vérifiée si fournie) (au moins un des trois noms ; `name` seul = prénom) | `201 { user, token, expiresAt }` ; `409 EMAIL_TAKEN` (aussi pour l'e-mail du super administrateur, créé seulement par script) |
 | POST | `/auth/login` | `{ email, password, client? }` | `{ user, token, expiresAt }` |
 | POST | `/auth/logout` | — | `{ ok: true }` |
 | GET | `/auth/me` | — | `{ user: { id, email, name, firstName, lastName, avatarUrl, theme, role, isAdmin, createdAt } }` |
@@ -47,6 +47,8 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 | POST | `/auth/verify-email` | `{ token }` | `{ email }` ; `400 INVALID_TOKEN` |
 | POST | `/me/email` | `{ email, currentPassword }` | `{ email, verificationSent }` ; adresse non validée ensuite ; `400 BAD_PASSWORD`, `409 EMAIL_TAKEN` |
 | POST | `/me/email/verification` | — | `{ ok, to }` (renvoi du lien) ; `409 ALREADY_VERIFIED`, `503 MAIL_DISABLED` |
+| GET | `/me/pins` | — | `{ pins: { projects: { id, name, color }[], mindmaps: { id, title }[] } }` |
+| PUT | `/me/pins` | `{ kind: "PROJECT"\|"MINDMAP", id, pinned: boolean }` | `{ pins }` ; `404` si l'élément n'est pas accessible |
 | GET | `/me/api-keys` | — | `{ apiKeys: { id, name, prefix, createdAt, lastUsedAt }[] }` |
 | POST | `/me/api-keys` | `{ name }` | `201 { key, apiKey }` — `key` (`sb_…`) n'est renvoyée **qu'ici** ; 10 clés max |
 | DELETE | `/me/api-keys/:id` | — | `{ ok: true }` (révocation immédiate) |
@@ -126,7 +128,7 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 type Progress = { percent; total; done };
 type Member   = { id; userId: string | null; name; email; role; color; avatarUrl: string | null /* photo du compte */ };
 type Task     = { id; ownerId; projectId: string | null; stageId: string | null; activityId: string | null;  // rattachement facultatif
-                  assigneeId; supervisorId: string | null; contributorIds: string[]; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
+                  assigneeId; supervisorId: string | null; contributorIds: string[]; prerequisiteIds: string[]; name; description; status: "TODO"|"IN_PROGRESS"|"DONE"|"CLOSED";
                   progress: 0..100; priority: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; complexity: "LOW"|"MEDIUM"|"HIGH";
                   order; startDate; dueDate; closedAt: string | null /* date de clôture */; commentCount; hasNotes; nodeIds: string[] /* nœuds de carte */; updatedAt };
 type TaskMutation = { project: Project | null; task: Task | null };   // réponse des mutations de tâche
@@ -177,10 +179,15 @@ complet recalculé** (`{ project }`).
 | POST | `/stages/:id/tasks` | tâche directement sous l'étape → `201 TaskMutation` |
 | POST | `/activities/:id/tasks` | tâche sous une activité → `201 TaskMutation` |
 | GET | `/tasks/:id` | → `{ task: TaskDetail }` (voir fiche tâche) |
-| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, closedAt?, assigneeId?, supervisorId?, contributorIds?, order?, projectId?, stageId?, activityId? }` → `TaskMutation` |
+| PATCH | `/tasks/:id` | `{ name?, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, closedAt?, assigneeId?, supervisorId?, contributorIds?, prerequisiteIds?, order?, projectId?, stageId?, activityId? }` → `TaskMutation` |
 | DELETE | `/tasks/:id` | → `{ project: Project \| null, task: null }` |
 
-Corps d'une tâche à la création : `{ name, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, supervisorId?, contributorIds? }`
+Corps d'une tâche à la création : `{ name, description?, status?, progress?, priority?, complexity?, startDate?, dueDate?, assigneeId?, supervisorId?, contributorIds?, prerequisiteIds? }`
+
+`prerequisiteIds` **remplace** la liste des prérequis : tâches du même projet,
+ni la tâche elle-même ni une dépendance circulaire (`400` sinon) ; une tâche
+sans projet n'en a pas ; un changement de projet les efface (et retire la
+tâche des prérequis des autres).
 (priorité et complexité par défaut `MEDIUM`).
 `assigneeId` (responsable) et `supervisorId` (superviseur, un seul) doivent
 être des membres du projet (`400` sinon ; `null` désaffecte) ;

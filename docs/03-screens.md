@@ -106,6 +106,7 @@ puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) :
 | Onglet | Composant | Contenu |
 | --- | --- | --- |
 | Tableau de bord | `ProjectDashboardTab` | KPIs ; **planning Gantt** (`PlanningChart`) des étapes (part réalisée en plein) et livrables 📦 avec ligne « aujourd'hui » ; avancement par étape (`ProgressBarsChart`) ; tâches par statut ; statut des livrables (anneau + liste) ; tâches en retard |
+| Gantt | `ProjectGanttTab` → `charts/GanttChart` | tâches planifiées dans l'ordre du plan (couleur de l'étape, avancement dans la barre), flèches prérequis → tâche (rouges et pointillées si le prérequis finit après le début), échelle **Jour / Semaine / Mois** (week-ends grisés en vue jour, barre de défilement, molette = défilement horizontal), **glisser une barre** = décaler début et échéance au jour près (case « Décaler aussi les tâches qui en dépendent », cochée par défaut), double-clic ou clic sur le nom = fiche tâche ; bandeau des conflits ; liste des tâches sans date |
 | Kanban | `ProjectKanbanTab` → `tasks/KanbanBoard` | toutes les tâches du projet par statut (contexte étape › activité, responsable), glisser pour changer le statut, lien fiche ; même composant que le Kanban de « Mes tâches » |
 | Plan | `ProjectBoard` | bloc **« Tâches sans étape »** (tâches du projet non rattachées à une étape, ajout rapide) puis étapes › activités › tâches : drapeau de priorité, avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche ; détails rapides : priorité, complexité, dates, clôture |
 | Livrables | `DeliverablesTab` | cartes : statut, responsable, étape, début/fin attendus, documents rattachés (téléversement direct, rattachement d'un document existant, détachement, téléchargement) |
@@ -239,6 +240,30 @@ Carte d'invitation sur le tableau de bord (sous la recherche) : affichée
 seulement sur le site, sous Windows, masquable définitivement (✕, mémorisé
 dans le navigateur). Également : lien sous le formulaire de connexion,
 section « Application desktop » des Préférences. Jamais dans le menu latéral.
+
+## Épingles (`PinButton`, menu de gauche)
+
+Bouton punaise « Épingler dans le menu » / « Désépingler » : cartes de la
+liste des projets et des cartes mentales, en-tête de la fiche projet
+(« Épinglé ») et de l'éditeur de carte. Les éléments épinglés apparaissent
+en retrait, sous « Projets » / « Cartes mentales » (pastille de couleur,
+élément courant surligné). La barre latérale ne défile plus elle-même : seul
+le menu défile, et elle passe au-dessus du contenu (panneau des
+notifications visible en entier, plus de barre de défilement parasite).
+
+## Fiche tâche : prérequis (`projects/PrerequisitesField`)
+
+Dans le bloc Calendrier : prérequis listés (statut, échéance, alerte
+« finit après le début » ou « non terminé »), retrait ✕, ajout par liste
+déroulante limitée aux tâches du projet qui ne créent pas de cycle, et
+rappel « Bloque : … » des tâches qui en dépendent.
+
+## Mot de passe : jauge (`PasswordStrengthMeter`)
+
+Jauge 3 segments **Faible / Moyenne / Élevée** + conseil
+(`src/lib/shared/password.ts` : longueur, variété, mots de passe courants,
+répétitions, suites, nom / e-mail) : inscription (avec **confirmation** du
+mot de passe), réinitialisation, changement dans les Préférences. Indicative.
 
 ## Préférences (`PreferencesPage`)
 

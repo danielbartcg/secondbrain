@@ -54,6 +54,8 @@ export type TaskDto = {
   hasNotes: boolean;
   /** Nœuds de carte mentale auxquels la tâche est rattachée. */
   nodeIds: string[];
+  /** Tâches prérequises (même projet). */
+  prerequisiteIds: string[];
   updatedAt: string;
 };
 
@@ -208,6 +210,7 @@ export function toTaskDto(t: TaskRow): TaskDto {
     commentCount: t._count.comments,
     hasNotes: hasHtmlContent(t.notes),
     nodeIds: t.nodes.map((n) => n.nodeId),
+    prerequisiteIds: t.prerequisiteIds ?? [],
     updatedAt: t.updatedAt.toISOString(),
   };
 }

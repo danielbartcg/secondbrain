@@ -141,6 +141,17 @@ Docker + Caddy en production.
 
 ## Gestion de projet
 
+- **Prérequis** (`Task.prerequisiteIds`) : une tâche peut dépendre d'autres
+  tâches du même projet ; règles pures partagées serveur / application
+  (`src/lib/shared/prerequisites.ts` : même projet, pas soi-même, pas de cycle ;
+  conflit de planning = échéance du prérequis postérieure au début). Fiche
+  tâche : bloc Calendrier ; fiche projet : onglet **Gantt** (amCharts 4,
+  `GanttChart`) en échelle jour / semaine / mois, barres glissables qui
+  décalent début et échéance (option : décaler aussi les tâches dépendantes).
+- **Épingles** (`src/lib/pins.ts`, `pins-store.ts`) : projets et cartes
+  épinglés par chaque utilisateur, listés en retrait sous « Projets » et
+  « Cartes mentales » dans le menu de gauche (fournis par le layout serveur,
+  rafraîchis côté client).
 - Hiérarchie : `Project? › Stage? › Activity? › Task` : **les trois niveaux
   sont facultatifs** pour une tâche (invariant : activité ⇒ étape ⇒ projet,
   résolu par `resolveAttachment()`). Une tâche sans projet est « orpheline » :

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { MessagesSquare, Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
@@ -8,6 +8,8 @@ import { Avatar } from "@/components/ui";
 import { api } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { useUnreadMessages } from "@/lib/messages-store";
+import { seedPins, usePins } from "@/lib/pins-store";
+import type { PinsDto } from "@/lib/pins";
 
 const NAV = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -38,7 +40,9 @@ export type ShellUser = { id: string; name: string; email: string; avatarUrl: st
  * `statusSlot` : encart facultatif affiché au-dessus du menu (l'application
  * native y place l'état de synchronisation). Absent sur le site.
  */
-export function AppShell({ user, children, statusSlot }: { user: ShellUser; children: React.ReactNode; statusSlot?: React.ReactNode }) {
+export function AppShell({ user, children, statusSlot, pins: initialPins }: { user: ShellUser; children: React.ReactNode; statusSlot?: React.ReactNode; pins?: PinsDto }) {
+  seedPins(initialPins);
+  const pins = usePins();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -69,10 +73,18 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
         // L'administration est toujours la dernière entrée du menu.
         ...(user.isAdmin ? [{ href: "/admin", label: "Administration", icon: ShieldCheck }] : []),
       ].map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || pathname.startsWith(href + "/");
+        // Éléments épinglés, indentés sous « Projets » et « Cartes mentales ».
+        const pinned =
+          href === "/projects"
+            ? pins.projects.map((p) => ({ href: `/projects/${p.id}`, label: p.name, color: p.color }))
+            : href === "/mindmaps"
+              ? pins.mindmaps.map((m) => ({ href: `/mindmaps/${m.id}`, label: m.title, color: null as string | null }))
+              : [];
+        const onPinned = pinned.some((p) => pathname === p.href || pathname.startsWith(p.href + "/"));
+        const active = !onPinned && (pathname === href || pathname.startsWith(href + "/"));
         return (
+          <Fragment key={href}>
           <Link
-            key={href}
             href={href}
             onClick={() => setOpen(false)}
             aria-current={active ? "page" : undefined}
@@ -84,6 +96,28 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
             <span className="flex-1">{label}</span>
             {href === "/messages" && <UnreadBadge count={unreadMessages} />}
           </Link>
+          {pinned.length > 0 && (
+            <ul className="mb-1 ml-5 flex flex-col gap-0.5 border-l border-line pl-2" aria-label={`${label} épinglés`}>
+              {pinned.map((p) => {
+                const on = pathname === p.href || pathname.startsWith(p.href + "/");
+                return (
+                  <li key={p.href}>
+                    <Link
+                      href={p.href}
+                      onClick={() => setOpen(false)}
+                      aria-current={on ? "page" : undefined}
+                      title={p.label}
+                      className={`flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors md:py-1 ${on ? "bg-brand-50 font-medium text-brand-700" : "text-ink-2 hover:bg-surface-2"}`}
+                    >
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? "var(--color-line-strong)" }} aria-hidden />
+                      <span className="truncate">{p.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          </Fragment>
         );
       })}
     </nav>
@@ -111,7 +145,10 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
   return (
     <div className="flex min-h-dvh">
       {/* Barre latérale (≥ md) */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface p-4 md:sticky md:top-0 md:flex md:h-dvh md:overflow-y-auto">
+      {/* Pas d'overflow sur la barre elle-même (il rognerait le panneau des notifications, qui
+          déborde sur le contenu) : seul le menu défile. z-40 : la barre « sticky » forme son propre
+          contexte d'empilement, il doit passer au-dessus du contenu principal. */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface p-4 md:sticky md:top-0 md:z-40 md:flex md:h-dvh">
         <div className="mb-6 flex items-center gap-2 px-2">
           <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-base text-on-brand">🧠</span>
@@ -120,7 +157,7 @@ export function AppShell({ user, children, statusSlot }: { user: ShellUser; chil
           <NotificationsBell align="left" />
         </div>
         {statusSlot}
-        {nav}
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-1">{nav}</div>
         {footer}
       </aside>
 

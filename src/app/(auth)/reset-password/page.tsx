@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client";
 import { AuthFrame, authButtonClass, authInputClass } from "@/components/AuthFrame";
+import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 
 /** Choix d'un nouveau mot de passe depuis le lien reçu par e-mail. */
 function ResetForm() {
@@ -48,6 +49,7 @@ function ResetForm() {
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-ink-2">Nouveau mot de passe (8 caractères min.)</span>
         <input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={authInputClass} autoFocus />
+        <PasswordStrengthMeter password={password} />
       </label>
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-ink-2">Confirmation</span>

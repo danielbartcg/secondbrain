@@ -7,6 +7,7 @@ import { ApiClientError, api, uploadImage } from "@/lib/client";
 import type { ProfileDto, Theme } from "@/lib/users";
 import { Avatar, Button, PageHeader, inputClass } from "@/components/ui";
 import { ConnectorSection, EmailSection } from "@/components/preferences/AccountSections";
+import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 
 /**
  * Préférences personnelles : prénom et nom (nom affiché partout à la place de
@@ -259,6 +260,7 @@ function PasswordSection() {
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Nouveau mot de passe (8 caractères min.)</span>
             <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className={`${inputClass} w-full ${tooShort || same ? "border-danger" : ""}`} />
+            <PasswordStrengthMeter password={next} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Confirmation</span>

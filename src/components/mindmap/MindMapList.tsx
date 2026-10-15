@@ -7,6 +7,7 @@ import { Brain, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindMapSummary } from "@/lib/mindmaps";
 import { Button, EmptyState, InlineEdit, PageHeader, errorMessage, formatDate } from "@/components/ui";
+import { PinButton } from "@/components/PinButton";
 
 export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
   const router = useRouter();
@@ -108,6 +109,7 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
                   <Brain className="h-5 w-5" />
                 </div>
+                <PinButton kind="MINDMAP" item={{ id: m.id, name: m.title }} className="ml-auto" />
                 <button
                   type="button"
                   onClick={() => remove(m.id, m.title)}

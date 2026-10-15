@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CalendarDays, CalendarPlus, Check, Circle, CircleDot, CornerDownRight, Eye, Flag, FolderKanban, Gauge, Layers, Lock, MessageSquare, Plus, Send, Trash2, Unlink, User, Users, Workflow, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, CalendarPlus, Check, Circle, CircleDot, CornerDownRight, Eye, Flag, FolderKanban, Gauge, Layers, Link2, Lock, MessageSquare, Plus, Send, Trash2, Unlink, User, Users, Workflow, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MemberDto, ProjectDto, ProjectSummary, TaskMutation } from "@/lib/projects";
 import type { TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
@@ -31,6 +31,7 @@ import {
   toast,
   todayYmd,
 } from "@/components/ui";
+import { PrerequisitesField } from "@/components/projects/PrerequisitesField";
 import { EmojiButton } from "@/components/EmojiPicker";
 
 /**
@@ -265,6 +266,12 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
                 />
                 {task.status !== "CLOSED" && <p className="mt-1 text-[11px] text-faint">Remplie automatiquement à la clôture.</p>}
               </SubField>
+            </div>
+            <div className="mt-3 border-t border-line pt-3">
+              <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
+                <Link2 className="h-3.5 w-3.5" /> Prérequis (tâches à terminer avant)
+              </span>
+              <PrerequisitesField task={task} disabled={!task.canEdit} onChange={(prerequisiteIds) => patch({ prerequisiteIds })} />
             </div>
           </Block>
 

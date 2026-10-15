@@ -27,6 +27,7 @@ import { ZodError, type ZodTypeAny, type z } from "zod";
 import { byOrder, type LocalModel } from "./model";
 import { NetworkError, remote, remoteUpload } from "./remote";
 import type { Store } from "./store";
+import { prerequisiteError } from "@/lib/shared/prerequisites";
 import { labelOf, newId, type SyncEngine } from "./sync";
 import type { Entity, Profile, Row } from "./types";
 
@@ -368,6 +369,24 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     for (const mid of ids) if (!current.some((c) => c.memberId === mid)) store.put("TaskContributor", `${taskId}:${mid}`, { taskId, memberId: mid, createdAt: now() });
   }
 
+  /** Prérequis : mêmes règles que le serveur (src/lib/shared/prerequisites.ts). */
+  function checkPrerequisites(taskId: string, projectId: string | null, ids: string[] | undefined): string[] | undefined {
+    if (ids === undefined) return undefined;
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return [];
+    if (!projectId) throw badRequest("Une tâche sans projet ne peut pas avoir de prérequis.");
+    const tasks = store.where("Task", (x) => x.projectId === projectId).map((x) => ({ id: x.id as string, prerequisiteIds: (x.prerequisiteIds as string[] | undefined) ?? [] }));
+    const error = prerequisiteError(taskId, unique, tasks);
+    if (error) throw badRequest(error);
+    return unique;
+  }
+
+  function dropFromPrerequisites(taskId: string) {
+    for (const x of store.where("Task", (r) => ((r.prerequisiteIds as string[] | undefined) ?? []).includes(taskId))) {
+      store.patch("Task", x.id as string, { prerequisiteIds: (x.prerequisiteIds as string[]).filter((p) => p !== taskId) });
+    }
+  }
+
   function createTask(target: { projectId?: string | null; stageId?: string | null; activityId?: string | null; nodeId?: string | null }, body: unknown) {
     const input = parse(createTaskSchema, body);
     const att = resolveAttachment(target);
@@ -380,6 +399,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     }
     const { status, progress } = reconcile({ status: "TODO", progress: 0 }, input);
     const id = newId();
+    const prerequisiteIds = checkPrerequisites(id, att.projectId, input.prerequisiteIds) ?? [];
     const t = now();
     const u = me();
     const order = store.where("Task", siblingPred(att, u.id)).length;
@@ -400,13 +420,14 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
       startDate: toDay(input.startDate) ?? null,
       dueDate: toDay(input.dueDate) ?? null,
       closedAt: status === "CLOSED" ? t : null,
+      prerequisiteIds,
       createdAt: t,
       updatedAt: t,
     });
     if (input.contributorIds?.length) setContributors(id, [...new Set(input.contributorIds)]);
     if (target.nodeId) store.put("MindNodeTask", `${target.nodeId}:${id}`, { nodeId: target.nodeId, taskId: id, createdAt: t });
     touchProject(att.projectId);
-    sync.enqueue("Task", id, "create", defined({ ...att, nodeId: target.nodeId ?? undefined, name: input.name, description: input.description, status: input.status, progress: input.progress, priority: input.priority, complexity: input.complexity, startDate: input.startDate, dueDate: input.dueDate, assigneeId: input.assigneeId, supervisorId: input.supervisorId, contributorIds: input.contributorIds }), input.name);
+    sync.enqueue("Task", id, "create", defined({ ...att, nodeId: target.nodeId ?? undefined, name: input.name, description: input.description, status: input.status, progress: input.progress, priority: input.priority, complexity: input.complexity, startDate: input.startDate, dueDate: input.dueDate, assigneeId: input.assigneeId, supervisorId: input.supervisorId, contributorIds: input.contributorIds, prerequisiteIds: input.prerequisiteIds }), input.name);
     return taskResp(id, att.projectId);
   }
 
@@ -443,11 +464,15 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     let assigneeId = input.assigneeId;
     let supervisorId = input.supervisorId;
     let contributorIds = input.contributorIds;
+    let prerequisiteInput = input.prerequisiteIds;
     if (projectChanged) {
       if (assigneeId === undefined) assigneeId = null;
       if (supervisorId === undefined) supervisorId = null;
       if (contributorIds === undefined) contributorIds = [];
+      if (prerequisiteInput === undefined) prerequisiteInput = [];
+      dropFromPrerequisites(taskId);
     }
+    const prerequisiteIds = checkPrerequisites(taskId, att.projectId, prerequisiteInput);
     if (assigneeId || supervisorId || contributorIds?.length) {
       if (!att.projectId) throw badRequest("Une tâche sans projet ne peut pas être affectée.");
       checkMember(att.projectId, assigneeId);
@@ -457,7 +482,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
 
     store.put("Task", taskId, {
       ...t,
-      ...defined({ name: input.name, description: input.description, priority: input.priority, complexity: input.complexity, assigneeId, supervisorId, startDate: toDay(input.startDate), dueDate: toDay(input.dueDate), closedAt }),
+      ...defined({ name: input.name, description: input.description, priority: input.priority, complexity: input.complexity, assigneeId, supervisorId, startDate: toDay(input.startDate), dueDate: toDay(input.dueDate), closedAt, prerequisiteIds }),
       status,
       progress,
       ...att,
@@ -481,6 +506,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   function deleteTask(taskId: string) {
     const t = must("Task", taskId, "Tâche");
     enqueue("Task", taskId, "delete");
+    dropFromPrerequisites(taskId);
     store.removeCascade("Task", taskId);
     resequence("Task", siblingPred({ projectId: t.projectId ?? null, stageId: t.stageId ?? null, activityId: t.activityId ?? null }, t.ownerId));
     touchProject(t.projectId);

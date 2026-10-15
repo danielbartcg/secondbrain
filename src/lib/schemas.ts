@@ -39,8 +39,11 @@ export const registerSchema = z
   name: z.string().trim().max(100).optional(),
   /** Libellé du client (« iPhone »…) : utile aux applications mobiles. */
   client: z.string().trim().max(100).optional(),
+  /** Confirmation (facultative côté API, vérifiée si fournie). */
+  confirmPassword: z.string().max(200).optional(),
 })
-  .refine((v) => v.firstName || v.lastName || v.name, { message: "Prénom ou nom requis", path: ["firstName"] });
+  .refine((v) => v.firstName || v.lastName || v.name, { message: "Prénom ou nom requis", path: ["firstName"] })
+  .refine((v) => v.confirmPassword === undefined || v.confirmPassword === v.password, { message: "La confirmation ne correspond pas", path: ["confirmPassword"] });
 
 // --- Profil et administration ------------------------------------------------
 export const themeSchema = z.enum(["light", "dark", "sepia", "ocean", "forest"]);
@@ -154,6 +157,8 @@ export const createTaskSchema = z.object({
   supervisorId: nullableId,
   /** Contributeurs : liste de membres (remplace la liste existante). */
   contributorIds: z.array(shortId).max(100).optional(),
+  /** Tâches prérequises (même projet, sans cycle ; remplace la liste existante). */
+  prerequisiteIds: z.array(shortId).max(100).optional(),
 });
 /** Création libre : rattachement facultatif (le niveau le plus précis l'emporte) et nœud de carte. */
 export const createFreeTaskSchema = createTaskSchema.extend({
@@ -347,3 +352,6 @@ export const changeEmailSchema = z.object({ email: emailAddress, currentPassword
 
 // --- Clés d'accès (connecteur MCP) ---------------------------------------------------------------
 export const createApiKeySchema = z.object({ name: z.string().trim().min(1, "Nom requis").max(80) });
+
+// --- Épingles du menu ------------------------------------------------------------------------------
+export const setPinSchema = z.object({ kind: z.enum(["PROJECT", "MINDMAP"]), id: z.string().min(1).max(64), pinned: z.boolean() });
