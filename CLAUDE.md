@@ -54,8 +54,11 @@ Tout graphique utilise `@amcharts/amcharts4` via l'enveloppe
 `src/components/charts/AmChart.tsx` (import dynamique côté client, disposal au
 démontage, couleurs du thème résolues par `themeColor()`). Composants
 existants : `StatusDonut`, `ProgressBarsChart`, `PlanningChart` (Gantt).
-Pas de Recharts, Chart.js, d3 custom ni SVG maison pour un graphique. Le petit
-logo amCharts reste affiché (licence gratuite).
+Pas de Recharts, Chart.js, d3 custom ni SVG maison pour un graphique.
+**Licence amCharts 4** : la même clé partout (`CH214458775` graphiques,
+`MP214458775` cartes), appliquée par `applyLicense()` dans `AmChart.tsx`
+(`AMCHARTS_LICENSES`) : tout graphique passe par l'enveloppe, jamais
+d'`addLicense` ailleurs.
 
 ## Sécurité
 

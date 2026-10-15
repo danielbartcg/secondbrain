@@ -27,11 +27,24 @@ export function themeColor(variable: string, fallback: string): string {
   return resolved || fallback;
 }
 
+/**
+ * Licence commerciale amCharts 4 (même clé partout : graphiques « CH » et
+ * cartes « MP ») : retire le logo amCharts. Appliquée une fois, à la première
+ * construction d'un graphique, par l'enveloppe — tout graphique y passe.
+ */
+export const AMCHARTS_LICENSES = ["CH214458775", "MP214458775"] as const;
+let licensed = false;
+export function applyLicense(am4core: Am4Core) {
+  if (licensed) return;
+  for (const key of AMCHARTS_LICENSES) am4core.addLicense(key);
+  licensed = true;
+}
+
 export const PALETTE = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
 
-/** Réglages communs : police, couleurs de texte, pas de logo. */
+/** Réglages communs : licence, police, taille. */
 export function applyBaseTheme(am4core: Am4Core, chart: { fontFamily?: string; fontSize?: number }) {
-  // Licence gratuite amCharts 4 : le petit logo reste affiché (obligation de licence).
+  applyLicense(am4core);
   am4core.options.autoDispose = true;
   chart.fontFamily = "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
   chart.fontSize = 12;
@@ -61,6 +74,7 @@ export function AmChart({
     const dark = document.documentElement.dataset.theme === "dark";
     Promise.all([import("@amcharts/amcharts4/core"), import("@amcharts/amcharts4/charts"), dark ? import("@amcharts/amcharts4/themes/dark") : Promise.resolve(null)]).then(([am4core, am4charts, darkTheme]) => {
       if (disposed || !ref.current) return;
+      applyLicense(am4core);
       // Thème « sombre » de l'application : thème sombre amCharts (textes clairs).
       am4core.unuseAllThemes();
       if (darkTheme) am4core.useTheme(darkTheme.default);

@@ -383,8 +383,10 @@ disposal au démontage / changement de dépendances, `themeColor()` pour
 résoudre les variables CSS du thème. Composants : `StatusDonut` (PieChart),
 `ProgressBarsChart` (XYChart, barres empilées jauge), `PlanningChart` (Gantt :
 DateAxis + CategoryAxis, barre prévisionnelle claire + part réalisée pleine,
-ligne « aujourd'hui », libellés français). Licence gratuite : le logo
-amCharts reste affiché.
+ligne « aujourd'hui », libellés français). Licence commerciale amCharts 4
+(`CH214458775`, `MP214458775`) appliquée une fois par l'enveloppe
+(`applyLicense`) : plus de logo amCharts. Libellés issus des utilisateurs :
+`[` et `]` doublés (codes de mise en forme amCharts).
 
 ## Interface
 
