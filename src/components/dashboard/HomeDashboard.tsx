@@ -29,7 +29,8 @@ import {
  */
 export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; maps: MindMapSummary[]; userName: string }) {
   const openMine = data.myTasks.filter((t) => !isFinished(t.status));
-  const next7 = data.deadlines.filter((d) => d.daysLeft >= 0 && d.daysLeft <= 7).length;
+  const openCount = data.myOpenCount;
+  const next7 = data.next7Count;
   const activeProjects = data.projects.filter((p) => p.status === "ACTIVE");
 
   return (
@@ -45,7 +46,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
 
       {/* Indicateurs */}
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi icon={<ListTodo className="h-5 w-5" />} label="Mes tâches ouvertes" value={openMine.length} hint={`${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED} terminée${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED > 1 ? "s" : ""}`} />
+        <Kpi icon={<ListTodo className="h-5 w-5" />} label="Mes tâches ouvertes" value={openCount} hint={`${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED} terminée${data.myStatusCounts.DONE + data.myStatusCounts.CLOSED > 1 ? "s" : ""}`} />
         <Kpi icon={<AlertTriangle className="h-5 w-5" />} label="En retard" value={data.overdueCount} tone={data.overdueCount > 0 ? "danger" : "ok"} hint="tâches et livrables" />
         <Kpi icon={<CalendarClock className="h-5 w-5" />} label="Échéances sous 7 jours" value={next7} tone={next7 > 0 ? "warn" : "neutral"} />
         <Kpi icon={<CheckCircle2 className="h-5 w-5" />} label="Avancement global" value={`${data.globalProgress.percent}%`} hint={`${data.globalProgress.done}/${data.globalProgress.total} tâches · ${activeProjects.length} projet${activeProjects.length > 1 ? "s" : ""} actif${activeProjects.length > 1 ? "s" : ""}`} />
@@ -56,7 +57,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
         <section className="rounded-2xl border border-line bg-surface p-5 lg:col-span-2">
           <h2 className="flex items-center gap-2 font-semibold">
             <ListTodo className="h-5 w-5 text-brand-600" /> Mes tâches
-            <span className="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-muted">{openMine.length}</span>
+            <span className="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-muted">{openCount}</span>
           </h2>
           {openMine.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
@@ -89,7 +90,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
               ))}
             </ul>
           )}
-          {openMine.length > 12 && <p className="mt-2 text-xs text-muted">… et {openMine.length - 12} autre{openMine.length - 12 > 1 ? "s" : ""}.</p>}
+          {openCount > 12 && <p className="mt-2 text-xs text-muted">… et {openCount - 12} autre{openCount - 12 > 1 ? "s" : ""}.</p>}
         </section>
 
         {/* Mes tâches par statut */}

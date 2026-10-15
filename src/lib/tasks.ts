@@ -301,7 +301,8 @@ const PRIORITY_WEIGHT = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 } as const;
 
 export async function getMyTasks(userId: string): Promise<OrganizerDto> {
   const rows = await prisma.task.findMany({
-    where: { AND: [taskAccessWhere(userId), { OR: [{ projectId: null }, { project: { status: { in: ["ACTIVE", "ON_HOLD"] } } }] }] },
+    // Filtre « à moi » en base (et non après coup) : seules mes tâches sont chargées.
+    where: { AND: [taskAccessWhere(userId), tasksOfUsersWhere([userId]), { OR: [{ projectId: null }, { project: { status: { in: ["ACTIVE", "ON_HOLD"] } } }] }] },
     include: {
       ...TASK_BASE_INCLUDE,
       ...TASK_PEOPLE_SELECT,

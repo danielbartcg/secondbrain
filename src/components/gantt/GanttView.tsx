@@ -65,6 +65,9 @@ type Props = {
 const LEFT_W = "w-[170px] md:w-[400px]";
 const HEAD_UP = 22;
 const HEAD_LOW = 30;
+/** Au-delà de ce nombre de lignes, le diagramme est virtualisé. */
+const VIRTUAL_MIN = 150;
+const OVERSCAN = 25;
 const BAR_H = 20;
 const BAR_TOP = (ROW_H - BAR_H) / 2;
 const DRAG_THRESHOLD = 4;
@@ -109,6 +112,31 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
   const range = useMemo(() => timelineRange(baseSpans, today, scale), [baseSpans, today, scale]);
   const width = (range.end - range.start + 1) * px;
   const height = Math.max(rows.length, 1) * ROW_H;
+
+  // Virtualisation verticale (gros projets) : seules les lignes visibles, plus
+  // une marge, sont rendues ; les lignes ont une hauteur fixe (ROW_H).
+  const [view, setView] = useState({ top: 0, h: 800 });
+  useEffect(() => {
+    const sc = scrollerRef.current;
+    if (!sc) return;
+    let raf = 0;
+    const update = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setView((v) => (v.top === sc.scrollTop && v.h === sc.clientHeight ? v : { top: sc.scrollTop, h: sc.clientHeight })));
+    };
+    update();
+    sc.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      cancelAnimationFrame(raf);
+      sc.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  const virtual = rows.length > VIRTUAL_MIN;
+  const from = virtual ? Math.max(0, Math.floor((view.top - HEAD_UP - HEAD_LOW) / ROW_H) - OVERSCAN) : 0;
+  const to = virtual ? Math.min(rows.length, Math.ceil((view.top + view.h) / ROW_H) + OVERSCAN) : rows.length;
+  const inView = (i: number) => i >= from && i < to;
   const xOf = useCallback((d: number) => (d - range.start) * px, [range.start, px]);
 
   const tasks = useMemo(() => planned.map((p) => p.task), [planned]);
@@ -350,8 +378,9 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
 
           {/* Corps */}
           <div className="flex">
-            <div ref={leftRef} className={`${LEFT_W} sticky left-0 z-20 shrink-0 border-r border-line-strong bg-surface`}>
-              {rows.map((r) => {
+            <div ref={leftRef} className={`${LEFT_W} sticky left-0 z-20 shrink-0 border-r border-line-strong bg-surface`} style={virtual ? { height } : undefined}>
+              {from > 0 && <div style={{ height: from * ROW_H }} aria-hidden />}
+              {rows.slice(from, to).map((r) => {
                 const span = r.span;
                 return (
                   <GridRow
@@ -394,7 +423,7 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
                 <div key={`w${w.start}`} className="absolute inset-y-0 bg-surface-2 opacity-70" style={{ left: xOf(w.start), width: duration(w) * px }} aria-hidden />
               ))}
               {rows.map((r, i) =>
-                r.kind !== "task" ? (
+                !inView(i) ? null : r.kind !== "task" ? (
                   <div key={`bg${r.key}`} className="absolute inset-x-0 bg-surface-2 opacity-60" style={{ top: i * ROW_H, height: ROW_H - 1 }} aria-hidden />
                 ) : selected === r.key || hover === r.key ? (
                   <div key={`bg${r.key}`} className={`absolute inset-x-0 ${selected === r.key ? "bg-brand-50" : "bg-surface-2"}`} style={{ top: i * ROW_H, height: ROW_H - 1 }} aria-hidden />
@@ -435,7 +464,7 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
                 onKeyDown={onKeyDown}
               >
                 {rows.map((r, i) => {
-                  if (!r.span) return null;
+                  if (!r.span || (!inView(i) && r.key !== dragId)) return null;
                   const left = xOf(r.span.start);
                   const w = duration(r.span) * px;
                   if (r.kind === "task") {

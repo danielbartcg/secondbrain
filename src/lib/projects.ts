@@ -220,19 +220,60 @@ async function checkMember(tx: Tx, projectId: string, memberId: string | null | 
 
 // --- Projets -----------------------------------------------------------------
 
-export async function listProjects(userId: string): Promise<ProjectSummary[]> {
-  const rows = await prisma.project.findMany({ where: projectAccessWhere(userId), orderBy: { updatedAt: "desc" }, include: PROJECT_INCLUDE });
-  return rows.map((p) => {
-    const { stages: _s, tasks: _t, members: _m, deliverables: _d, documents: _doc, folders: _f, notes: _n, ...summary } = toProjectDto(p);
-    void _s;
-    void _n;
-    void _t;
-    void _m;
-    void _d;
-    void _doc;
-    void _f;
-    return summary;
+/**
+ * Résumés de projets : compteurs et avancement calculés en base (agrégats),
+ * sans charger les tâches — même résultat que `toProjectDto` (`aggregate`).
+ */
+async function projectSummaries(where: Prisma.ProjectWhereInput): Promise<ProjectSummary[]> {
+  const rows = await prisma.project.findMany({
+    where,
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      ownerId: true,
+      name: true,
+      description: true,
+      color: true,
+      status: true,
+      startDate: true,
+      dueDate: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: { select: { stages: true, members: true, deliverables: true } },
+    },
   });
+  if (rows.length === 0) return [];
+  const ids = rows.map((p) => p.id);
+  const [stats, done] = await Promise.all([
+    prisma.task.groupBy({ by: ["projectId"], where: { projectId: { in: ids } }, _count: { _all: true }, _sum: { progress: true } }),
+    prisma.task.groupBy({ by: ["projectId"], where: { projectId: { in: ids }, progress: { gte: 100 } }, _count: { _all: true } }),
+  ]);
+  const statBy = new Map(stats.map((s) => [s.projectId, s]));
+  const doneBy = new Map(done.map((s) => [s.projectId, s._count._all]));
+  return rows.map((p) => {
+    const st = statBy.get(p.id);
+    const total = st?._count._all ?? 0;
+    return {
+      id: p.id,
+      ownerId: p.ownerId,
+      name: p.name,
+      description: p.description,
+      color: p.color,
+      status: p.status,
+      startDate: p.startDate?.toISOString() ?? null,
+      dueDate: p.dueDate?.toISOString() ?? null,
+      progress: total ? { percent: Math.round((st?._sum.progress ?? 0) / total), total, done: doneBy.get(p.id) ?? 0 } : { percent: 0, total: 0, done: 0 },
+      stageCount: p._count.stages,
+      memberCount: p._count.members,
+      deliverableCount: p._count.deliverables,
+      createdAt: p.createdAt.toISOString(),
+      updatedAt: p.updatedAt.toISOString(),
+    };
+  });
+}
+
+export async function listProjects(userId: string): Promise<ProjectSummary[]> {
+  return projectSummaries(projectAccessWhere(userId));
 }
 
 // --- Administration (lecture seule) ---------------------------------------------
@@ -242,18 +283,12 @@ export type AdminProjectSummary = ProjectSummary & { ownerName: string; ownerEma
 /** Tous les projets (administration ; lecture seule, rôle vérifié ici). */
 export async function listAllProjectsAdmin(admin: Pick<User, "email" | "role">): Promise<AdminProjectSummary[]> {
   requireAdmin(admin);
-  const rows = await prisma.project.findMany({ orderBy: { updatedAt: "desc" }, include: { ...PROJECT_INCLUDE, owner: { select: { name: true, email: true } } } });
-  return rows.map((p) => {
-    const { stages: _s, tasks: _t, members: _m, deliverables: _d, documents: _doc, folders: _f, notes: _n, ...summary } = toProjectDto(p);
-    void _s;
-    void _t;
-    void _m;
-    void _d;
-    void _doc;
-    void _f;
-    void _n;
-    return { ...summary, ownerName: p.owner.name, ownerEmail: p.owner.email, taskCount: summary.progress.total };
-  });
+  const [summaries, owners] = await Promise.all([
+    projectSummaries({}),
+    prisma.project.findMany({ select: { id: true, owner: { select: { name: true, email: true } } } }),
+  ]);
+  const ownerBy = new Map(owners.map((p) => [p.id, p.owner]));
+  return summaries.map((s) => ({ ...s, ownerName: ownerBy.get(s.id)?.name ?? "", ownerEmail: ownerBy.get(s.id)?.email ?? "", taskCount: s.progress.total }));
 }
 
 /** Un projet quelconque (administration, lecture seule). */

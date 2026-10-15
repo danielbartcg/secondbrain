@@ -402,6 +402,12 @@ Agrège, pour les projets actifs / en pause accessibles : mes tâches
 (`isMyTask`), échéances (tâches non terminées et livrables
 non livrés, sous un horizon de 30 jours, retards inclus), répartitions par
 statut, avancement global. Exposé par `GET /api/v1/dashboard` pour le mobile.
+Compteurs calculés **en base** (`groupBy`, `aggregate`, `count`) ; listes
+plafonnées à 100 (`DASHBOARD_LIST_LIMIT`) : la réponse reste légère quel que
+soit le volume. « Mes tâches » (`getMyTasks`) filtre aussi en base
+(`tasksOfUsersWhere`) au lieu de charger toutes les tâches accessibles. Les
+résumés de projets (`listProjects`, administration) agrègent l'avancement par
+`groupBy` sans charger les tâches.
 
 ## Fichiers
 
@@ -490,3 +496,29 @@ ligne « aujourd'hui », libellés français). Licence commerciale amCharts 4
   d'image **optimiste** (aperçu blob immédiat, upload en arrière-plan,
   sauvegarde différée tant qu'une URL `blob:` est présente).
 - Inventaire des écrans : docs/03-screens.md.
+
+## Performance et gros volumes
+
+Jeu de données conservé : `npm run perf:seed` (200 comptes, ~20 000 tâches,
+projet de 4 000 tâches, carte de 5 000 nœuds, 9 000 messages, 3 000
+notifications ; `SCALE=` pour l'ajuster) ; mesures : `npm run perf:bench`
+(32 routes et pages, budgets indicatifs : auto-complétion < 150 ms, ouverture
+< 800 ms). Règles appliquées, à respecter dans toute évolution :
+
+- **Serveur** : filtrer et compter en base, jamais charger une collection
+  entière pour filtrer en JS ; requêtes indépendantes en `Promise.all`
+  (recherche) ; listes d'un tableau de bord plafonnées avec compteurs exacts.
+- **Client** : pas de rendu de milliers d'éléments d'un coup — rendu
+  progressif « Afficher plus » (Kanban : 50 cartes par colonne ; Synthèse :
+  100 lignes ; Plan : 100 tâches par liste, étapes repliées à l'ouverture
+  au-delà de 400 tâches sauf la première ; retards du tableau de bord projet :
+  20), **virtualisation** verticale du Gantt au-delà de 150 lignes (lignes de
+  hauteur fixe, marge de 25), carte mentale en `onlyRenderVisibleElements`
+  avec **réutilisation des objets nœuds inchangés** (une sélection ne recrée
+  plus les milliers de nœuds React Flow).
+
+Mesures (build de production local, jeu complet) : tableau de bord 2,9 s →
+0,1 s ; liste des projets 1 s → 40 ms ; Organiser 2,8 s / 11 Mo → 0,56 s /
+3,4 Mo, blocage navigateur 1,1 s → 10 ms ; onglet Plan du projet géant 2,9 s →
+0,4 s ; Gantt 1,6 s → 0,2 s ; clic sur un nœud de la carte géante 1,5 s →
+50 ms ; auto-complétion ≈ 40 ms.

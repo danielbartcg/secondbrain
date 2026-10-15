@@ -16,6 +16,8 @@ import type { OrganizerActions } from "./TaskOrganizer";
 export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; actions: OrganizerActions }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  // Rendu progressif (gros volumes) : 100 lignes, puis « Afficher plus ».
+  const [limit, setLimit] = useState(100);
   const today = todayYmd();
 
   const drop = (targetId: string) => {
@@ -55,7 +57,7 @@ export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; acti
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
-          {tasks.map((t, i) => {
+          {tasks.slice(0, limit).map((t, i) => {
             const late = t.dueDate ? t.dueDate.slice(0, 10) < today : false;
             const planned = t.sessions.length > 0;
             return (
@@ -137,6 +139,15 @@ export function SynthesisView({ tasks, actions }: { tasks: OrganizerTask[]; acti
               </tr>
             );
           })}
+          {tasks.length > limit && (
+            <tr>
+              <td colSpan={8} className="px-4 py-2 text-center">
+                <button type="button" onClick={() => setLimit((l) => l + 400)} className="text-xs font-medium text-brand-700 hover:underline">
+                  Afficher plus ({tasks.length - limit} restante{tasks.length - limit > 1 ? "s" : ""})
+                </button>
+              </td>
+            </tr>
+          )}
           {tasks.length === 0 && (
             <tr>
               <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">

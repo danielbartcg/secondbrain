@@ -89,9 +89,11 @@ les projets et tâches des autres.
 ```ts
 type DashboardDto = {
   projects: ProjectSummary[];                 // tous mes projets (propriétaire ou membre)
-  myTasks: (Task & { projectId; projectName; projectColor; stageName; assigneeName })[];
+  myTasks: (Task & { projectId; projectName; projectColor; stageName; assigneeName })[]; // mes tâches OUVERTES, par échéance, 100 max
+  myOpenCount: number;                        // nombre exact de mes tâches ouvertes
   deadlines: { kind: "task" | "deliverable"; id; name; projectId; projectName; projectColor;
-               dueDate; status; assigneeName; daysLeft; mine }[];   // sous `horizon` jours, retards inclus
+               dueDate; status; assigneeName; daysLeft; mine }[];   // sous `horizon` jours, retards inclus, plus urgentes d'abord, 100 max
+  next7Count: number;                         // nombre exact d'échéances dans les 7 jours (tâches + livrables)
   statusCounts: { TODO; IN_PROGRESS; DONE };    // toutes les tâches des projets actifs
   myStatusCounts: { TODO; IN_PROGRESS; DONE };  // mes tâches
   deliverableCounts: { PLANNED; IN_PROGRESS; DELIVERED; VALIDATED };

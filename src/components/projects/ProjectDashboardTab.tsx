@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, ListTodo, Package } from "lucide-react";
 import type { ProjectDto } from "@/lib/projects";
@@ -12,7 +13,9 @@ import { Avatar, Badge, DELIVERABLE_STATUS_COLOR, DELIVERABLE_STATUS_LABEL, DELI
 export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; onGoTo: (tab: "plan" | "livrables" | "documents" | "equipe") => void }) {
   const allTasks = [...project.tasks, ...project.stages.flatMap((s) => [...s.tasks, ...s.activities.flatMap((a) => a.tasks)])];
   const now = new Date();
-  const overdueTasks = allTasks.filter((t) => t.dueDate && !isFinished(t.status) && new Date(t.dueDate) < now);
+  const overdueTasks = allTasks.filter((t) => t.dueDate && !isFinished(t.status) && new Date(t.dueDate) < now).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!));
+  // Gros projets : les 20 plus anciens retards, puis « Tout afficher ».
+  const [allOverdue, setAllOverdue] = useState(false);
   const overdueDeliverables = project.deliverables.filter((d) => d.expectedEnd && (d.status === "PLANNED" || d.status === "IN_PROGRESS") && new Date(d.expectedEnd) < now);
   const delivered = project.deliverables.filter((d) => d.status === "DELIVERED" || d.status === "VALIDATED").length;
   const statusCounts = { TODO: 0, IN_PROGRESS: 0, DONE: 0, CLOSED: 0 } as Record<"TODO" | "IN_PROGRESS" | "DONE" | "CLOSED", number>;
@@ -135,7 +138,7 @@ export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; 
             <AlertTriangle className="h-5 w-5" /> Tâches en retard
           </h2>
           <ul className="mt-2 divide-y divide-red-100">
-            {overdueTasks.map((t) => {
+            {(allOverdue ? overdueTasks : overdueTasks.slice(0, 20)).map((t) => {
               const m = t.assigneeId ? memberById.get(t.assigneeId) : null;
               return (
                 <li key={t.id}>
@@ -148,6 +151,11 @@ export function ProjectDashboardTab({ project, onGoTo }: { project: ProjectDto; 
               );
             })}
           </ul>
+          {!allOverdue && overdueTasks.length > 20 && (
+            <button type="button" onClick={() => setAllOverdue(true)} className="mt-2 text-xs font-medium text-danger hover:underline">
+              Tout afficher ({overdueTasks.length})
+            </button>
+          )}
         </section>
       )}
     </div>

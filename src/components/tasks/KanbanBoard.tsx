@@ -35,6 +35,8 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
   const [over, setOver] = useState<TaskStatus | null>(null);
   const [showClosed, setShowClosed] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  // Rendu progressif : PAGE cartes par colonne, puis « Afficher plus » (gros volumes).
+  const [shown, setShown] = useState<Partial<Record<TaskStatus, number>>>({});
   const today = todayYmd();
 
   // Menu « Déplacer » : fermeture au clic extérieur et sur Échap.
@@ -56,6 +58,7 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
     };
   }, [menuFor]);
 
+  const PAGE = 50;
   const columns = useMemo(() => {
     const m = new Map<TaskStatus, KanbanTask[]>(TASK_STATUSES.map((s) => [s, []]));
     for (const t of tasks) m.get(t.status)!.push(t);
@@ -111,7 +114,7 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
                     </p>
                   )
                 ) : (
-                  list.map((t) => {
+                  list.slice(0, shown[status] ?? PAGE).map((t) => {
                     const late = t.dueDate ? t.dueDate.slice(0, 10) < today && t.status !== "DONE" && t.status !== "CLOSED" : false;
                     return (
                       <article
@@ -184,6 +187,15 @@ export function KanbanBoard({ tasks, onMove, emptyHint }: { tasks: KanbanTask[];
                       </article>
                     );
                   })
+                )}
+                {!collapsed && list.length > (shown[status] ?? PAGE) && (
+                  <button
+                    type="button"
+                    onClick={() => setShown((m) => ({ ...m, [status]: (m[status] ?? PAGE) + PAGE * 4 }))}
+                    className="w-full rounded-lg py-1.5 text-xs font-medium text-brand-700 hover:bg-surface"
+                  >
+                    Afficher plus ({list.length - (shown[status] ?? PAGE)} restante{list.length - (shown[status] ?? PAGE) > 1 ? "s" : ""})
+                  </button>
                 )}
                 {!collapsed && list.length === 0 && <p className="px-1 py-6 text-center text-xs text-faint">Déposez une tâche ici</p>}
               </div>

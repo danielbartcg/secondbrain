@@ -274,8 +274,9 @@ export class LocalModel {
       const project = p ? { id: p.id, name: p.name, color: p.color, ownerId: p.ownerId } : { id: null, name: NO_PROJECT_LABEL, color: null, ownerId: t.ownerId };
       const people = this.people(t);
       const mine = isMyTask(people, project.ownerId, me);
-      if (mine) {
-        myStatusCounts[t.status as TaskStatus]++;
+      if (mine) myStatusCounts[t.status as TaskStatus]++;
+      // Même contrat que le serveur : mes tâches ouvertes, 100 au plus.
+      if (mine && !finished(t.status) && myTasks.length < 100) {
         myTasks.push({ ...toTaskDto(this.taskRow(t)), projectId: project.id, projectName: project.name, projectColor: project.color, stageName: t.stageId ? (this.store.get("Stage", t.stageId)?.name ?? null) : null, assigneeName: people.assignee?.name ?? null });
       }
       if (t.dueDate && !finished(t.status)) {
@@ -298,13 +299,15 @@ export class LocalModel {
       }
     }
     deadlines.sort((a, b) => a.daysLeft - b.daysLeft);
-    myTasks.sort((a, b) => (finished(a.status) !== finished(b.status) ? (finished(a.status) ? 1 : -1) : (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999")));
+    const next7Count = deadlines.filter((d) => d.daysLeft >= 0 && d.daysLeft <= 7).length;
     const active = projects.filter((p) => activeIds.has(p.id));
     const sum = tasks.reduce((a, t) => a + (t.progress ?? 0), 0);
     return {
       projects,
       myTasks,
-      deadlines,
+      myOpenCount: myStatusCounts.TODO + myStatusCounts.IN_PROGRESS,
+      deadlines: deadlines.slice(0, 100),
+      next7Count,
       statusCounts,
       myStatusCounts,
       deliverableCounts,

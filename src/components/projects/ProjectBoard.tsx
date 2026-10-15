@@ -16,6 +16,8 @@ import { DateField, type Resp, type Run } from "./ProjectWorkspace";
 export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }) {
   const [showAddStage, setShowAddStage] = useState(project.stages.length === 0);
   const [addingLoose, setAddingLoose] = useState(false);
+  // Gros projet : seules les premières étapes sont dépliées à l’ouverture (réactivité).
+  const big = project.progress.total > BIG_PROJECT;
   return (
     <div>
       {/* Tâches du projet non rattachées à une étape */}
@@ -67,7 +69,7 @@ export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }
       )}
       <div className="mt-3 space-y-3">
         {project.stages.map((stage, i) => (
-          <StageCard key={stage.id} stage={stage} index={i} count={project.stages.length} project={project} run={run} />
+          <StageCard key={stage.id} stage={stage} index={i} count={project.stages.length} project={project} run={run} defaultOpen={!big || i === 0} />
         ))}
         {project.stages.length === 0 && !showAddStage && (
           <p className="rounded-2xl border border-dashed border-line-strong p-6 text-center text-sm text-muted">Aucune étape : commencez par en ajouter une.</p>
@@ -77,8 +79,8 @@ export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }
   );
 }
 
-function StageCard({ stage, index, count, project, run }: { stage: StageDto; index: number; count: number; project: ProjectDto; run: Run }) {
-  const [open, setOpen] = useState(true);
+function StageCard({ stage, index, count, project, run, defaultOpen = true }: { stage: StageDto; index: number; count: number; project: ProjectDto; run: Run; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [adding, setAdding] = useState<"task" | "activity" | null>(null);
   const patch = (data: Record<string, unknown>) => run(() => api.patch<Resp>(`/stages/${stage.id}`, data));
   const total = stage.activities.reduce((a, x) => a + x.tasks.length, 0) + stage.tasks.length;
@@ -238,13 +240,26 @@ function ActivityBlock({ activity, index, count, project, run }: { activity: Act
   );
 }
 
+/** Au-delà, une étape est repliée à l’ouverture du plan (sauf la première). */
+const BIG_PROJECT = 400;
+/** Lignes rendues d’emblée par liste ; « Afficher plus » pour la suite. */
+const LIST_PAGE = 100;
+
 function TaskList({ tasks, project, run }: { tasks: TaskDto[]; project: ProjectDto; run: Run }) {
+  const [limit, setLimit] = useState(LIST_PAGE);
   if (tasks.length === 0) return null;
   return (
     <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-      {tasks.map((t, i) => (
+      {tasks.slice(0, limit).map((t, i) => (
         <TaskRow key={t.id} task={t} index={i} count={tasks.length} project={project} run={run} />
       ))}
+      {tasks.length > limit && (
+        <li className="px-3 py-1.5 text-center">
+          <button type="button" onClick={() => setLimit((l) => l + LIST_PAGE * 4)} className="text-xs font-medium text-brand-700 hover:underline">
+            Afficher plus ({tasks.length - limit} restante{tasks.length - limit > 1 ? "s" : ""})
+          </button>
+        </li>
+      )}
     </ul>
   );
 }

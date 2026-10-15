@@ -201,6 +201,16 @@ export function MindMapEditor({ initial }: { initial: MindMapDto }) {
   );
 }
 
+/** Même rendu ? (position, taille, état, données — comparaison superficielle). */
+function sameNode(a: MindNode, b: MindNode): boolean {
+  if (a.position.x !== b.position.x || a.position.y !== b.position.y || a.width !== b.width || a.height !== b.height) return false;
+  if (a.draggable !== b.draggable || !!a.selected !== !!b.selected) return false;
+  const da = a.data as Record<string, unknown>;
+  const db = b.data as Record<string, unknown>;
+  for (const k in db) if (da[k] !== db[k]) return false;
+  return true;
+}
+
 function Editor({ initial }: { initial: MindMapDto }) {
   const [map, setMap] = useState(initial);
   const [nodes, setNodes] = useState<MindNodeDto[]>(initial.nodes);
@@ -564,10 +574,14 @@ function Editor({ initial }: { initial: MindMapDto }) {
 
   const [rfNodes, setRfNodes] = useState<MindNode[]>([]);
   useEffect(() => {
-    setRfNodes(
-      [...positions.values()].map((p) => {
+    // Les objets inchangés sont réutilisés (même référence) : React Flow ne
+    // ré-adopte que les nœuds modifiés — indispensable sur les grandes cartes
+    // (une sélection ne recrée plus des milliers de nœuds).
+    setRfNodes((prev) => {
+      const old = new Map(prev.map((o) => [o.id, o]));
+      return [...positions.values()].map((p) => {
         const n = byId.get(p.id)!;
-        return {
+        const next: MindNode = {
           id: p.id,
           type: "mind",
           position: { x: p.x, y: p.y },
@@ -593,8 +607,10 @@ function Editor({ initial }: { initial: MindMapDto }) {
             onShowClosed: showClosedNodes,
           },
         };
-      }),
-    );
+        const o = old.get(p.id);
+        return o && sameNode(o, next) ? o : next;
+      });
+    });
   }, [positions, byId, closedHidden, selectedId, editingId, rename, stopEditing, toggleCollapse, showClosedNodes, layoutTick, readOnly]);
 
   // Le côté des connecteurs suit la position réelle (un nœud déplacé à gauche de
@@ -789,6 +805,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
             multiSelectionKeyCode={null}
             minZoom={0.2}
             maxZoom={2.5}
+            onlyRenderVisibleElements
             proOptions={{ hideAttribution: true }}
             fitView
           >
