@@ -111,6 +111,20 @@ Task.prerequisiteIds[] → Task (même projet)  prérequis (Gantt)
 Types de notification (`NotificationType`) : `ASSIGNED`, `TASK_UPDATED`,
 `REPLY`, `MENTION`, `MESSAGE`.
 
+## Piste d'audit, risques, réunions
+
+| Modèle | Champs | Notes |
+| --- | --- | --- |
+| `TaskEvent` | `id`, `taskId` (cascade), `actorId?` (`SetNull`), `actorName`, `kind` (created · field · assignee · supervisor · contributors · prerequisites · attachment · comment · session · node · risk), `field?`, `oldValue?`, `newValue?`, `message`, `createdAt` | message lisible figé ; écrit dans la transaction de la modification |
+| `Risk` | `id`, `projectId`, `kind` (`RISK` · `OPPORTUNITY`), `title`, `description`, `category`, `probability` 1–5, `impact` 1–5, `status` (`OPEN` · `MONITORING` · `TREATED` · `CLOSED`), `ownerId?` → ProjectMember, `response`, `dueDate?`, `order`, timestamps | criticité = p × i (≤ 4 faible, ≤ 9 modéré, ≤ 15 élevé, sinon critique) |
+| `RiskTask` | `riskId` + `taskId` (clé, cascades) | tâche du même projet |
+| `Meeting` | `id`, `projectId`, `title`, `date`, `location`, `authorId?` (rédacteur, `SetNull`), `minutes` (HTML assaini), `minutesUpdatedAt?`, timestamps | |
+| `MeetingParticipant` | `meetingId` + `memberId` | |
+| `MeetingApprover` | `meetingId` + `memberId`, `decision` (`PENDING` · `APPROVED` · `REJECTED`), `comment`, `decidedAt?` | remis à `PENDING` à chaque modification du compte-rendu |
+
+Non synchronisés (en ligne uniquement dans l'application native).
+`AppSettings.registrationEnabled` : inscriptions libres.
+
 ## Épingles du menu
 
 | Modèle | Champs | Notes |
@@ -150,6 +164,7 @@ Version d'un champ = `max(seq)` de ses lignes `UPSERT` (ou de la création).
 | `20261015090000_notifications_email_messaging` | `EmailState`, valeur `MESSAGE` de `NotificationType`, `Notification.emailState/emailError`, `AppSettings`, `Conversation`, `ConversationParticipant`, `Message` |
 | `20261015110000_email_tokens_api_keys` | `User.emailVerifiedAt` / `emailNotifications`, `EmailToken` (`EmailTokenKind`), `ApiKey` |
 | `20261015140000_pins_task_prerequisites` | `Task.prerequisiteIds` (`TEXT[]`), `Pin` (`PinKind`) |
+| `20261015200000_audit_risks_meetings` | `TaskEvent` ; `Risk` (`RiskKind`, `RiskStatus`), `RiskTask` ; `Meeting`, `MeetingParticipant`, `MeetingApprover` (`ApprovalDecision`) ; valeurs `MEETING_REVIEW` / `MEETING_DECISION` de `NotificationType` ; `AppSettings.registrationEnabled` |
 | `20261015100000_session_token_hash` | données : `Session.token` remplacé par son empreinte SHA-256 (les sessions existantes restent valides) |
 | `20261014220000_sync_log` | `SyncLog`, `AppliedOp`, fonction `sb_sync_log()` et déclencheurs sur les 14 tables synchronisées |
 | `20261014190000_task_closed_at` | `Task.closedAt` (reprise : `updatedAt` des tâches déjà clôturées) |

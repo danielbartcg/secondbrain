@@ -451,3 +451,68 @@ zip, Office (doc/x, xls/x, ppt/x) et OpenDocument. 25 Mo max. Pas de SVG.
 | --- | --- | --- | --- |
 | POST | `/uploads` | `multipart/form-data`, `file` (JPEG/PNG/GIF/WebP ≤ 10 Mo) | `201 { url: "/media/AAAA/MM/<aléatoire>.ext" }` |
 | GET | `/media/…` (hors `/api`) | — | image, cache immuable (URL non devinable, sans authentification) |
+
+## Historique d'une tâche
+
+| Méthode | Route | Réponse |
+| --- | --- | --- |
+| GET | `/tasks/:id/history` | `{ events: { id, kind, field, oldValue, newValue, message, actorId, actorName, actorAvatarUrl, createdAt }[] }` (plus récent d'abord, 300 max ; mêmes droits que la fiche, 404 sinon) |
+
+## Réunions
+
+```ts
+type Meeting = { id; projectId; title; date /* ISO */; location; authorId; authorName; minutes /* HTML assaini */; minutesUpdatedAt;
+  participants: { memberId; name; userId; avatarUrl }[];
+  approvers: { memberId; userId; name; avatarUrl; decision: "PENDING"|"APPROVED"|"REJECTED"; comment; decidedAt }[];
+  status: "draft"|"no_review"|"pending"|"approved"|"rejected"; canEdit; myDecision: "PENDING"|"APPROVED"|"REJECTED"|null; createdAt; updatedAt };
+```
+
+Toutes les réponses : `{ meetings: Meeting[] }` (liste du projet, plus récentes d'abord).
+
+| Méthode | Route | Corps | Notes |
+| --- | --- | --- | --- |
+| GET | `/projects/:id/meetings` | — | membres du projet (404 sinon) |
+| POST | `/projects/:id/meetings` | `{ title (1–200), date (ISO), location?, participantIds?, approverIds?, minutes? }` | 201 ; validateurs = membres rattachés à un compte (400 sinon) |
+| PATCH | `/meetings/:meetingId` | mêmes champs, facultatifs | rédacteur ou propriétaire (403 sinon) ; modifier `minutes` remet toutes les décisions à `PENDING` et notifie les validateurs |
+| DELETE | `/meetings/:meetingId` | — | rédacteur ou propriétaire |
+| POST | `/meetings/:meetingId/decision` | `{ decision: "APPROVED"\|"REJECTED", comment }` | validateur uniquement (403) ; motif obligatoire pour un refus (400) ; compte-rendu vide : 400 ; notifie le rédacteur |
+
+## Risques et opportunités
+
+```ts
+type Risk = { id; projectId; kind: "RISK"|"OPPORTUNITY"; title; description; category; probability /* 1–5 */; impact /* 1–5 */;
+  score /* p × i */; level: "low"|"medium"|"high"|"critical"; levelLabel; status: "OPEN"|"MONITORING"|"TREATED"|"CLOSED";
+  ownerId; ownerName; response; dueDate /* AAAA-MM-JJ */; order; taskIds; tasks: { id; name; status }[]; createdAt; updatedAt };
+```
+
+Réponses : `{ risks: Risk[] }` (liste complète du projet, triée par `order` puis création).
+
+| Méthode | Route | Corps | Notes |
+| --- | --- | --- | --- |
+| GET | `/projects/:id/risks` | — | membre, propriétaire ou administrateur (lecture) |
+| POST | `/projects/:id/risks` | `{ title, kind?, description?, category?, probability?, impact?, status?, ownerId?, response?, dueDate? }` | 201 ; responsable = membre du projet |
+| PATCH | `/risks/:riskId` | mêmes champs + `order?` | `dueDate: null` efface |
+| DELETE | `/risks/:riskId` | — | trace sur les tâches liées |
+| PUT | `/risks/:riskId/tasks` | `{ taskIds (≤ 500) }` | remplace les tâches liées (même projet, 400 sinon) ; tracé dans l'historique des tâches |
+
+## Export Excel
+
+| Méthode | Route | Réponse |
+| --- | --- | --- |
+| GET | `/projects/:id/export` | classeur `.xlsx` (`attachment`) : Synthèse, Tâches, Étapes & activités, Livrables, Risques & opportunités, Matrices, Réunions, Équipe, Documents ; membres du projet (404 sinon) ; 30 / 15 min |
+
+## Administration (compléments)
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/admin/settings` | — | `{ registration: { enabled, forcedClosed, open } }` |
+| PATCH | `/admin/settings` | `{ registrationEnabled }` | idem ; ferme / ouvre les inscriptions libres |
+| POST | `/admin/users` | `{ email, firstName, lastName, password (8–72), role?, managerId? }` | 201 `{ users }` ; 409 `EMAIL_TAKEN` (y compris l'adresse du super administrateur) ; 404 manager ; 429 (30 / h / administrateur) ; adresse non validée |
+| POST | `/admin/users/:id/password` | `{ password }` | `{ ok: true }` ; ferme toutes les sessions de la personne ; 403 sur le super administrateur (sauf lui-même) |
+
+`/auth/options` → `registration` reflète ce réglage ; `/auth/register` répond 403
+`REGISTRATION_CLOSED` quand elles sont fermées.
+
+## Téléchargements (compléments)
+
+`GET /downloads/latest.json` (public, `no-cache`) : `{ platform, version, file, size, sha256, publishedAt }` de la dernière version desktop (404 si aucune) ; lu par l'updater de l'application.

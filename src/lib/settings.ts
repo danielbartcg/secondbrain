@@ -12,7 +12,7 @@ import { badRequest } from "@/lib/api";
  * SESSION_SECRET) et n'est jamais renvoyé au navigateur.
  */
 
-export const NOTIFICATION_TYPES = ["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE"] as const satisfies readonly NotificationType[];
+export const NOTIFICATION_TYPES = ["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE", "MEETING_REVIEW", "MEETING_DECISION"] as const satisfies readonly NotificationType[];
 
 export type NotificationSettingsDto = {
   smtpHost: string;
@@ -136,4 +136,31 @@ export async function updateNotificationSettings(input: NotificationSettingsInpu
   await prisma.appSettings.update({ where: { id: "global" }, data });
   invalidateSettingsCache();
   return getNotificationSettings();
+}
+
+// --- Inscriptions libres ---------------------------------------------------------------------------
+
+/** La variable d'environnement ALLOW_REGISTRATION=false ferme les inscriptions quoi qu'il arrive. */
+function registrationForcedClosed(): boolean {
+  return (process.env.ALLOW_REGISTRATION ?? "true").toLowerCase() === "false";
+}
+
+export type RegistrationSettingsDto = { enabled: boolean; forcedClosed: boolean; open: boolean };
+
+export async function getRegistrationSettings(): Promise<RegistrationSettingsDto> {
+  const s = await getAppSettings();
+  const forcedClosed = registrationForcedClosed();
+  return { enabled: s.registrationEnabled, forcedClosed, open: s.registrationEnabled && !forcedClosed };
+}
+
+/** Inscriptions ouvertes (réglage d'administration ET variable d'environnement). */
+export async function registrationOpen(): Promise<boolean> {
+  return (await getRegistrationSettings()).open;
+}
+
+export async function setRegistrationEnabled(enabled: boolean): Promise<RegistrationSettingsDto> {
+  await getAppSettings();
+  await prisma.appSettings.update({ where: { id: "global" }, data: { registrationEnabled: enabled } });
+  invalidateSettingsCache();
+  return getRegistrationSettings();
 }

@@ -13,6 +13,20 @@ interface SecondBrainBridge {
   /** Annonce le serveur d'une connexion en cours (seul POST /api/v1/auth/login y est permis avant la session). Absent des anciennes coques. */
   setServer?(url: string): Promise<void>;
   openExternal(url: string): Promise<void>;
+  /** Mises à jour (absentes des coques antérieures à 0.2.0). */
+  checkUpdate?(): Promise<SecondBrainUpdateInfo>;
+  /** Télécharge, vérifie (SHA-256) et lance l'installateur, puis quitte l'application. */
+  installUpdate?(): Promise<{ ok: true }>;
+  onUpdateAvailable?(cb: (info: SecondBrainUpdateInfo) => void): () => void;
+  onUpdateProgress?(cb: (p: { received: number; total: number }) => void): () => void;
+}
+
+interface SecondBrainUpdateInfo {
+  available: boolean;
+  current: string;
+  latest: string | null;
+  publishedAt: string | null;
+  size: number | null;
 }
 
 interface Window {

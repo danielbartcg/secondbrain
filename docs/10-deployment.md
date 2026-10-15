@@ -120,6 +120,25 @@ Préférences → Connecteur Claude ; l'adresse est
 `https://secondbrain.danielbar-tcg.fr/api/v1/mcp`. Claude Desktop passe par
 `npx mcp-remote` (Node.js requis sur le poste).
 
+## Mise à jour de l'application desktop
+
+- Publier : incrémenter `native/electron/package.json`, `npm run desktop:build`,
+  `npm run desktop:publish`. Les applications ≥ 0.2.0 lisent
+  `GET /downloads/latest.json` (public, `no-cache`) 10 s après le lancement puis
+  toutes les 6 h, ou via Préférences → « Rechercher une mise à jour ».
+- L'installateur est vérifié (SHA-256 de `latest.json`) avant d'être lancé en
+  silencieux (`/S --force-run`) ; ne jamais modifier l'installateur ni
+  `latest.json` à la main sur le serveur.
+- Les 3 derniers installateurs sont conservés ; un retour arrière consiste à
+  republier une version **supérieure** (l'updater n'installe jamais une version
+  inférieure ou égale).
+- Les postes en 0.1.x installent 0.2.0 une fois à la main depuis `/app`.
+
+## Inscriptions
+
+Ouvertes / fermées depuis Administration → Utilisateurs (réglage en base).
+`ALLOW_REGISTRATION=false` dans le `.env` du serveur les ferme quoi qu'il arrive.
+
 ## Sauvegardes
 
 `ops/server/backup.sh` (cron quotidien 3h25 + `prod:backup`) produit

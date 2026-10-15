@@ -31,6 +31,7 @@ import type { AdminUserDto, ProfileDto } from "@/lib/users";
 import { getLocation, navigate, refresh, subscribe } from "./shims/router";
 import type { Runtime } from "./local/runtime";
 import { SyncPanel, useSyncStatus } from "./ui/SyncPanel";
+import { UpdateBanner } from "./ui/UpdateBanner";
 import { useData } from "./ui/useData";
 import { Login } from "./screens/Login";
 import { Conflicts } from "./screens/Conflicts";
@@ -90,6 +91,7 @@ export function App({ runtime }: { runtime: Runtime }) {
       user={{ id: user!.id, name: user!.name, email: user!.email, avatarUrl: user!.avatarUrl, isAdmin: user!.isAdmin, reportCount: user!.reportCount }}
       statusSlot={<SyncPanel sync={runtime.sync} />}
     >
+      <UpdateBanner runtime={runtime} />
       {status.remoteChanges > 0 && !PASSIVE.some((re) => re.test(path)) && (
         <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-brand-100 bg-brand-50 px-4 py-2 text-sm text-brand-700">
           <RefreshCw className="h-4 w-4" /> Des modifications sont arrivées du serveur.

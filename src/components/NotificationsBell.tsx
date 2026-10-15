@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AtSign, Bell, CheckCheck, Circle, MessageSquareReply, MessagesSquare, Pencil, Trash2, UserCheck } from "lucide-react";
+import { AtSign, Bell, ClipboardCheck, CheckCheck, Circle, MessageSquareReply, MessagesSquare, Pencil, Trash2, UserCheck } from "lucide-react";
 import type { NotificationDto } from "@/lib/notifications";
 import { markAllNotificationsRead, refreshNotifications, removeNotification, setRead, useNotifications } from "@/lib/notifications-store";
 
@@ -19,6 +19,8 @@ const ICON = {
   TASK_UPDATED: { Icon: Pencil, className: "bg-amber-50 text-amber-700" },
   MENTION: { Icon: AtSign, className: "bg-violet-50 text-violet-700" },
   MESSAGE: { Icon: MessagesSquare, className: "bg-indigo-100 text-indigo-800" },
+  MEETING_REVIEW: { Icon: ClipboardCheck, className: "bg-amber-50 text-amber-700" },
+  MEETING_DECISION: { Icon: ClipboardCheck, className: "bg-green-50 text-green-700" },
 } as const;
 
 export function timeAgo(iso: string): string {

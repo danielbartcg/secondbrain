@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client";
@@ -18,6 +18,15 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Inscriptions fermées par l'administrateur : on le dit d'emblée. */
+  const [closed, setClosed] = useState(false);
+
+  useEffect(() => {
+    api
+      .get<{ registration: boolean }>("/auth/options")
+      .then((r) => setClosed(!r.registration))
+      .catch(() => {});
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,6 +55,14 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-semibold">Créer un compte</h1>
           <p className="mt-1 text-sm text-muted">Votre second cerveau commence ici.</p>
         </div>
+        {closed ? (
+          <div className="space-y-4 rounded-2xl border border-line bg-surface p-6 text-center shadow-sm">
+            <p className="text-sm text-ink-2">Les inscriptions sont fermées. Demandez la création de votre compte à un administrateur.</p>
+            <Link href="/login" className="inline-block font-medium text-brand-600 hover:underline">
+              Se connecter
+            </Link>
+          </div>
+        ) : (
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-surface p-6 shadow-sm">
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
@@ -103,6 +120,7 @@ export default function RegisterPage() {
             </Link>
           </p>
         </form>
+        )}
       </div>
     </main>
   );

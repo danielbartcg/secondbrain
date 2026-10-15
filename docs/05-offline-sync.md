@@ -126,10 +126,27 @@ Page **Conflits** : votre valeur et la valeur retenue, « Copier ma valeur ».
   Windows x64, sans aucune dépendance npm embarquée (≈ 110 Mo, essentiellement
   le moteur Electron). Non signé : avertissement SmartScreen à la première
   installation.
-- Distribution : `npm run desktop:publish` dépose l'installateur et
-  `latest.json` dans `data/downloads` du serveur ; page publique **`/app`**,
-  fichier servi par `/downloads/<fichier>`. Le bouton « Mise à jour
-  nécessaire » de l'application y mène.
+- Distribution : `npm run desktop:publish` dépose l'installateur et `latest.json`
+  (`{platform, version, file, size, sha256, publishedAt}`) dans `data/downloads`
+  du serveur ; page publique **`/app`**, fichier servi par `/downloads/<fichier>`
+  (nom contrôlé : regex de l'installateur ou exactement `latest.json`, servi en
+  `no-cache`). Le bouton « Mise à jour nécessaire » y mène.
+- **Mises à jour (coque ≥ 0.2.0)** : `native/electron/updater.cjs` (sans
+  dépendance npm). Le processus principal lit `<serveur de la session>/downloads/latest.json`
+  (à défaut `https://secondbrain.danielbar-tcg.fr`) 10 s après le démarrage puis
+  toutes les 6 h (Windows, pas en `--smoke-test`), compare la version à
+  `app.getVersion()` et l'annonce à l'interface (`sb:update-available`). IPC
+  `sb:checkUpdate` / `sb:installUpdate` **sans paramètre** (serveur et fichier
+  déterminés par le processus principal). Installation : téléchargement dans
+  `%TEMP%` avec progression, **vérification SHA-256**, lancement détaché
+  silencieux (`/S --force-run`), puis l'application quitte et redémarre mise à
+  jour. Avant : `syncNow` + `store.flush` ; s'il reste des opérations, elles
+  sont conservées (IndexedDB et `session.json` dans `userData`). Les coques
+  0.1.x n'ont pas d'updater : installer 0.2.0 une fois depuis `/app`.
+- Liste blanche des routes relayées avec le jeton par le protocole `app://` :
+  téléchargement de document et export Excel d'un projet.
+- Réunions, risques, historique des tâches, export : en ligne uniquement
+  (relayés au serveur par l'API locale).
 
 ## 6. Application iPhone (`capacitor.config.ts`, `native/ios`)
 

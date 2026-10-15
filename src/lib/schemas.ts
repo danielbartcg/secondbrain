@@ -312,7 +312,7 @@ export type CreateWorkSessionInput = z.infer<typeof createWorkSessionSchema>;
 export type OrderMyTasksInput = z.infer<typeof orderMyTasksSchema>;
 
 // --- Administration → Notifications --------------------------------------------------------
-const notificationTypeSchema = z.enum(["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE"]);
+const notificationTypeSchema = z.enum(["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE", "MEETING_REVIEW", "MEETING_DECISION"]);
 export const notificationSettingsSchema = z.object({
   smtpHost: z.string().trim().max(253).regex(/^[A-Za-z0-9.-]*$/, "Nom d'hôte SMTP invalide").optional(),
   smtpPort: z.number().int().min(1).max(65_535).optional(),

@@ -283,19 +283,69 @@ function PasswordSection() {
   );
 }
 
-/** Application desktop : lien de téléchargement (site) ou version installée (application). */
+/** Application desktop : lien de téléchargement (site) ou version installée et mises à jour (application). */
 function DesktopSection() {
-  const [desktop, setDesktop] = useState<{ version: string } | null>(null);
+  const [desktop, setDesktop] = useState<{ version: string; canUpdate: boolean } | null>(null);
+  const [update, setUpdate] = useState<{ state: "idle" | "checking" | "done" | "started" | "error"; latest?: string | null; available?: boolean; error?: string }>({ state: "idle" });
   useEffect(() => {
-    if (window.secondBrain) setDesktop({ version: window.secondBrain.version });
+    const sb = window.secondBrain;
+    if (sb) setDesktop({ version: sb.version, canUpdate: !!(sb.checkUpdate && sb.installUpdate) });
   }, []);
+
+  async function check() {
+    const sb = window.secondBrain;
+    if (!sb?.checkUpdate) return;
+    setUpdate({ state: "checking" });
+    try {
+      const r = await sb.checkUpdate();
+      setUpdate({ state: "done", latest: r.latest, available: r.available });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : "";
+      setUpdate({ state: "error", error: msg || "Impossible de joindre le serveur de mise à jour." });
+    }
+  }
+
+  // Le parcours (synchronisation, téléchargement, installation) est mené par le bandeau de
+  // l'application (native/src/ui/UpdateBanner.tsx), qui intercepte cet évènement.
+  function install() {
+    const sb = window.secondBrain;
+    if (!sb?.checkUpdate) return;
+    const handled = !window.dispatchEvent(new CustomEvent("secondbrain:install-update", { cancelable: true, detail: { available: true, current: sb.version, latest: update.latest ?? null, publishedAt: null, size: null } }));
+    if (handled) setUpdate((u) => ({ ...u, state: "started" }));
+    else setUpdate({ state: "error", error: "Mise à jour indisponible depuis cet écran : redémarrez l'application." });
+  }
+
   return (
     <section className="mt-6 rounded-2xl border border-line bg-surface p-5">
       <h2 className="flex items-center gap-2 font-semibold">
         <Monitor className="h-5 w-5 text-brand-600" /> Application desktop
       </h2>
       {desktop ? (
-        <p className="mt-1 text-sm text-muted">Vous utilisez l'application desktop, version {desktop.version}. Vos projets et cartes restent disponibles hors ligne.</p>
+        <>
+          <p className="mt-1 text-sm text-muted">Vous utilisez l'application desktop, version {desktop.version}. Vos projets et cartes restent disponibles hors ligne.</p>
+          {desktop.canUpdate && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <Button variant="outline" size="sm" onClick={() => void check()} disabled={update.state === "checking" || update.state === "started"}>
+                {update.state === "checking" && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Rechercher une mise à jour
+              </Button>
+              {update.state === "done" && !update.available && (
+                <span className="flex items-center gap-1 text-ok">
+                  <Check className="h-4 w-4" /> À jour
+                </span>
+              )}
+              {update.state === "done" && update.available && (
+                <>
+                  <span className="font-medium text-ink">Version {update.latest} disponible</span>
+                  <Button size="sm" onClick={install}>
+                    Installer
+                  </Button>
+                </>
+              )}
+              {update.state === "started" && <span className="text-muted">Mise à jour en cours : suivez le bandeau en haut de la page.</span>}
+              {update.state === "error" && <span className="text-danger">{update.error}</span>}
+            </div>
+          )}
+        </>
       ) : (
         <p className="mt-1 text-sm text-muted">
           Projets et cartes mentales disponibles hors ligne, synchronisés automatiquement :{" "}

@@ -45,6 +45,15 @@ README.
   via les fonctions métier avec `userId` ; l'accès aux données des autres
   exige `admin_access: true` **et** `isAdmin`. Les clés `sb_…` ne valent pas
   session.
+- **Piste d'audit des tâches** (`src/lib/task-events.ts`) : toute écriture sur
+  une tâche (champs, personnes, prérequis, rattachement, commentaires, sessions,
+  nœuds, risques) enregistre des `TaskEvent` **dans la même transaction**
+  (`diffTaskEvents` avant / après, ou `recordTaskEvents`). Nouvelle écriture
+  sur une tâche ⇒ l'auditer.
+- **Réunions** (`src/lib/meetings.ts`) : seul le rédacteur (ou le propriétaire
+  du projet) modifie ; modifier le compte-rendu remet **toutes** les décisions
+  à `PENDING` ; HTML assaini ; notifications `MEETING_REVIEW` /
+  `MEETING_DECISION`.
 - **Messagerie** (`src/lib/messages.ts`) : tout accès passe par
   `requireParticipant` ; HTML assaini à l'écriture et au rendu.
 
@@ -53,8 +62,12 @@ README.
 Tout graphique utilise `@amcharts/amcharts4` via l'enveloppe
 `src/components/charts/AmChart.tsx` (import dynamique côté client, disposal au
 démontage, couleurs du thème résolues par `themeColor()`). Composants
-existants : `StatusDonut`, `ProgressBarsChart`, `PlanningChart` (Gantt).
-Pas de Recharts, Chart.js, d3 custom ni SVG maison pour un graphique.
+existants : `StatusDonut`, `ProgressBarsChart`, `PlanningChart` (planning des
+étapes). Pas de Recharts, Chart.js, d3 custom ni SVG maison pour un graphique.
+**Exception assumée (demande de Daniel)** : le **diagramme de Gantt** des
+tâches est un composant dédié `src/components/gantt/` (HTML/CSS + SVG pour les
+flèches), car amCharts ne permet pas le glisser / redimensionner ni les
+connecteurs de Gantt ; logique pure dans `ganttModel.ts` (`npm run test:gantt`).
 **Licence amCharts 4** : la même clé partout (`CH214458775` graphiques,
 `MP214458775` cartes), appliquée par `applyLicense()` dans `AmChart.tsx`
 (`AMCHARTS_LICENSES`) : tout graphique passe par l'enveloppe, jamais

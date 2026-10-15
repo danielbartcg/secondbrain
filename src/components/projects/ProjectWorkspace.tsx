@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, CalendarRange, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import { InlineEdit, ProgressBar, errorMessage, toInputDate, toast } from "@/components/ui";
@@ -10,6 +10,8 @@ import { STATUS_LABEL } from "./ProjectList";
 import { ProjectBoard } from "./ProjectBoard";
 import { ProjectKanbanTab } from "./ProjectKanbanTab";
 import { ProjectGanttTab } from "./ProjectGanttTab";
+import { ProjectMeetingsTab } from "./ProjectMeetingsTab";
+import { ProjectRisksTab } from "./ProjectRisksTab";
 import { ProjectDashboardTab } from "./ProjectDashboardTab";
 import { TeamTab } from "./TeamTab";
 import { DeliverablesTab } from "./DeliverablesTab";
@@ -29,13 +31,15 @@ export type Run = (fn: () => Promise<Resp>) => Promise<void>;
 
 const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
 
-type TabKey = "dashboard" | "plan" | "gantt" | "kanban" | "livrables" | "documents" | "equipe";
+type TabKey = "dashboard" | "plan" | "gantt" | "kanban" | "reunions" | "livrables" | "risques" | "documents" | "equipe";
 const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> = [
   { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { key: "plan", label: "Plan", icon: ListTree },
   { key: "gantt", label: "Gantt", icon: CalendarRange },
   { key: "kanban", label: "Kanban", icon: SquareKanban },
+  { key: "reunions", label: "Réunions", icon: CalendarClock },
   { key: "livrables", label: "Livrables", icon: Package },
+  { key: "risques", label: "Risques", icon: ShieldAlert },
   { key: "documents", label: "Documents", icon: FileText },
   { key: "equipe", label: "Équipe", icon: Users },
 ];
@@ -98,6 +102,14 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
           <ArrowLeft className="h-4 w-4" /> Projets
         </Link>
         <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`} role="status">{saving ? "Enregistrement…" : saved ? "Enregistré" : ""}</span>
+        <a
+          href={`/api/v1/projects/${project.id}/export`}
+          download
+          title="Exporter tout le projet au format Excel (.xlsx)"
+          className="inline-flex items-center gap-1.5 rounded-lg p-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-ink md:p-1.5"
+        >
+          <FileSpreadsheet className="h-4 w-4" /> <span className="hidden sm:inline">Export Excel</span>
+        </a>
         <PinButton kind="PROJECT" item={{ id: project.id, name: project.name, color: project.color }} withLabel />
       </div>
 
@@ -182,6 +194,8 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
         {tab === "dashboard" && <ProjectDashboardTab project={project} onGoTo={selectTab} />}
         {tab === "plan" && <ProjectBoard project={project} run={run} />}
         {tab === "gantt" && <ProjectGanttTab project={project} run={run} />}
+        {tab === "reunions" && <ProjectMeetingsTab project={project} currentUserId={currentUserId} />}
+        {tab === "risques" && <ProjectRisksTab project={project} canEdit />}
         {tab === "kanban" && <ProjectKanbanTab project={project} run={run} />}
         {tab === "livrables" && <DeliverablesTab project={project} run={run} />}
         {tab === "documents" && <DocumentsTab project={project} run={run} currentUserId={currentUserId} />}

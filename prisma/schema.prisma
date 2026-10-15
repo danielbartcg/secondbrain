@@ -48,6 +48,8 @@ model User {
   emailTokens          EmailToken[]
   apiKeys              ApiKey[]
   pins                 Pin[]
+  taskEvents           TaskEvent[]               @relation("TaskEventActor")
+  meetingsAuthored     Meeting[]                 @relation("MeetingAuthor")
   mindMaps             MindMap[]
   projects             Project[]
   memberships          ProjectMember[]
@@ -194,6 +196,8 @@ model Project {
   deliverables Deliverable[]
   documents    Document[]
   folders      Folder[]
+  risks        Risk[]
+  meetings     Meeting[]
   tasks        Task[]
 
   @@index([ownerId])
@@ -214,10 +218,13 @@ model ProjectMember {
   color     String?
   createdAt DateTime @default(now())
 
-  tasks           Task[]            @relation("TaskAssignee")
-  supervisedTasks Task[]            @relation("TaskSupervisor")
+  tasks           Task[]               @relation("TaskAssignee")
+  supervisedTasks Task[]               @relation("TaskSupervisor")
   contributions   TaskContributor[]
   deliverables    Deliverable[]
+  ownedRisks      Risk[]
+  meetingSeats    MeetingParticipant[]
+  meetingReviews  MeetingApprover[]
 
   @@unique([projectId, userId])
   @@index([projectId])
@@ -306,6 +313,10 @@ model Task {
   nodes         MindNodeTask[]
   /// Contributeurs (plusieurs membres).
   contributors  TaskContributor[]
+  /// Piste d'audit (historique des modifications).
+  events        TaskEvent[]
+  /// Risques / opportunités liés.
+  risks         RiskTask[]
 
   @@index([ownerId])
   @@index([supervisorId])
@@ -396,6 +407,10 @@ enum NotificationType {
   ASSIGNED
   /// Nouveau message dans une conversation (regroupé : une notification non lue par conversation).
   MESSAGE
+  /// Un compte-rendu de réunion attend votre validation (regroupée par réunion).
+  MEETING_REVIEW
+  /// Un validateur a validé ou refusé votre compte-rendu.
+  MEETING_DECISION
 }
 
 /// Envoi de la copie e-mail d'une notification (null : pas d'e-mail à envoyer).
@@ -442,6 +457,127 @@ model ApiKey {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
+}
+
+/// Piste d'audit d'une tâche : une ligne par modification, message lisible
+/// figé à l'écriture (« Alice a modifié la date de début de 01/10 à 05/10 »).
+model TaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?    @relation("TaskEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String
+  /// created · field · assignee · supervisor · contributors · prerequisites · attachment · comment · session · node · risk
+  kind      String
+  field     String?
+  oldValue  String?
+  newValue  String?
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+/// Gestion des risques du projet : risques (menaces) et opportunités, cotés
+/// en probabilité × gravité (1 à 5), avec tâches liées.
+enum RiskKind {
+  RISK
+  OPPORTUNITY
+}
+
+enum RiskStatus {
+  OPEN
+  MONITORING
+  TREATED
+  CLOSED
+}
+
+model Risk {
+  id          String         @id @default(cuid())
+  projectId   String
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind        RiskKind       @default(RISK)
+  title       String
+  description String         @default("")
+  category    String         @default("")
+  /// 1 (rare) à 5 (quasi certain)
+  probability Int            @default(3)
+  /// Gravité (risque) ou bénéfice (opportunité) : 1 (faible) à 5 (majeur)
+  impact      Int            @default(3)
+  status      RiskStatus     @default(OPEN)
+  /// Responsable : membre du projet.
+  ownerId     String?
+  owner       ProjectMember? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  /// Plan de traitement (risque) ou d'exploitation (opportunité).
+  response    String         @default("")
+  dueDate     DateTime?
+  order       Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  tasks       RiskTask[]
+
+  @@index([projectId])
+}
+
+model RiskTask {
+  riskId String
+  risk   Risk   @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([riskId, taskId])
+  @@index([taskId])
+}
+
+/// Réunion de projet et son compte-rendu (HTML assaini) soumis à validation.
+enum ApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Meeting {
+  id               String               @id @default(cuid())
+  projectId        String
+  project          Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  date             DateTime
+  location         String               @default("")
+  /// Rédacteur du compte-rendu (créateur par défaut).
+  authorId         String?
+  author           User?                @relation("MeetingAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  minutes          String               @default("")
+  minutesUpdatedAt DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  participants     MeetingParticipant[]
+  approvers        MeetingApprover[]
+
+  @@index([projectId, date])
+}
+
+model MeetingParticipant {
+  meetingId String
+  meeting   Meeting       @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    ProjectMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, memberId])
+}
+
+/// Validateur du compte-rendu (membre avec compte) ; toute modification du
+/// compte-rendu remet les décisions à PENDING.
+model MeetingApprover {
+  meetingId String
+  meeting   Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    ProjectMember    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  decision  ApprovalDecision @default(PENDING)
+  comment   String           @default("")
+  decidedAt DateTime?
+
+  @@id([meetingId, memberId])
 }
 
 /// Élément épinglé dans le menu de gauche (projet ou carte mentale), par utilisateur.
@@ -527,22 +663,24 @@ model Notification {
 /// Paramètres globaux de la plateforme (une seule ligne, id = "global"),
 /// gérés dans Administration → Notifications.
 model AppSettings {
-  id                 String             @id @default("global")
-  smtpHost           String             @default("")
-  smtpPort           Int                @default(587)
+  id                  String             @id @default("global")
+  smtpHost            String             @default("")
+  smtpPort            Int                @default(587)
   /// true : TLS dès la connexion (port 465) ; false : STARTTLS si proposé.
-  smtpSecure         Boolean            @default(false)
-  smtpUser           String             @default("")
+  smtpSecure          Boolean            @default(false)
+  smtpUser            String             @default("")
   /// Mot de passe SMTP chiffré (AES-256-GCM, clé dérivée de SESSION_SECRET) ; jamais renvoyé au client.
-  smtpPasswordEnc    String             @default("")
-  smtpFrom           String             @default("")
+  smtpPasswordEnc     String             @default("")
+  smtpFrom            String             @default("")
   /// Doubler les notifications d'un e-mail.
-  emailEnabled       Boolean            @default(false)
+  emailEnabled        Boolean            @default(false)
   /// Types de notification désactivés pour tout le monde (ni cloche, ni e-mail).
-  disabledTypes      NotificationType[] @default([])
+  disabledTypes       NotificationType[] @default([])
   /// Types sans copie e-mail.
-  emailDisabledTypes NotificationType[] @default([])
-  updatedAt          DateTime           @updatedAt
+  emailDisabledTypes  NotificationType[] @default([])
+  /// Inscriptions libres depuis la page de connexion (ALLOW_REGISTRATION=false les ferme quoi qu'il arrive).
+  registrationEnabled Boolean            @default(true)
+  updatedAt           DateTime           @updatedAt
 }
 
 /// Messagerie interne : fil de discussion entre deux utilisateurs ou plus.

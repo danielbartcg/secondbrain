@@ -15,6 +15,7 @@ directories:
 files:
   - main.cjs
   - preload.cjs
+  - updater.cjs
   - package.json
   - renderer/**
   # Aucune dépendance npm : l'interface est déjà empaquetée par Vite dans renderer/.

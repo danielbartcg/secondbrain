@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma, User } from "@prisma/client";
 import { requireAdmin } from "@/lib/users";
 import { prisma } from "@/lib/prisma";
+import { actorDisplayName, frDate, listTaskEventsRaw, recordTaskEvents, type TaskEventDto } from "@/lib/task-events";
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { isAdmin } from "@/lib/roles";
@@ -106,6 +107,18 @@ async function canConsultTask(userId: string, taskId: string): Promise<boolean> 
   return (await prisma.task.count({ where: { id: taskId, ...tasksOfUsersWhere(reports) } })) > 0;
 }
 
+/** Piste d'audit d'une tâche (mêmes droits de lecture que la fiche). */
+export async function getTaskHistory(userId: string, taskId: string): Promise<TaskEventDto[]> {
+  const canEdit = (await prisma.task.count({ where: { id: taskId, ...taskAccessWhere(userId) } })) > 0;
+  if (!canEdit && !(await canConsultTask(userId, taskId))) throw notFound("Tâche");
+  return listTaskEventsRaw(taskId);
+}
+
+const commentExcerpt = (s: string, n = 120) => {
+  const t = s.replace(/@\[([^\]]+)\]/g, "@$1").replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, n - 1) + "…" : t;
+};
+
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
   const canEdit = (await prisma.task.count({ where: { id: taskId, ...taskAccessWhere(userId) } })) > 0;
   if (!canEdit && !(await canConsultTask(userId, taskId))) throw notFound("Tâche");
@@ -176,6 +189,16 @@ export async function addComment(userId: string, taskId: string, body: string, p
       data: { id, taskId, authorId: userId, parentId: parent?.id ?? null, body: resolved.body, mentions: resolved.mentions },
     });
     await tx.task.update({ where: { id: taskId }, data: { updatedAt: new Date() } });
+    await recordTaskEvents(tx, [
+      {
+        taskId,
+        actorId: userId,
+        actorName: author.name,
+        kind: "comment",
+        newValue: commentExcerpt(resolved.body, 500),
+        message: `${author.name} a ${parent ? "répondu à un commentaire" : "commenté"} : « ${commentExcerpt(resolved.body)} »`,
+      },
+    ]);
 
     const href = `${taskHref(taskId)}#comment-${comment.id}`;
     const excerpt = body.length > 140 ? body.slice(0, 137) + "…" : body;
@@ -207,7 +230,12 @@ export async function deleteComment(userId: string, commentId: string): Promise<
   const owner = c.task.project?.ownerId ?? c.task.ownerId;
   if (c.authorId !== userId && owner !== userId) throw forbidden();
   // Les réponses sont supprimées en cascade (fil).
-  await prisma.taskComment.delete({ where: { id: commentId } });
+  await prisma.$transaction(async (tx) => {
+    const body = (await tx.taskComment.findUnique({ where: { id: commentId }, select: { body: true } }))?.body ?? "";
+    await tx.taskComment.delete({ where: { id: commentId } });
+    const actor = await actorDisplayName(tx, userId);
+    await recordTaskEvents(tx, [{ taskId: c.taskId, actorId: userId, actorName: actor, kind: "comment", oldValue: commentExcerpt(body, 500), message: `${actor} a supprimé un commentaire (« ${commentExcerpt(body, 60)} »)` }]);
+  });
   return getTaskDetail(userId, c.taskId);
 }
 
@@ -223,19 +251,25 @@ export async function addWorkSession(userId: string, taskId: string, date: strin
   const t = await accessibleTask(userId, taskId);
   const day = new Date(`${date}T00:00:00.000Z`);
   if (Number.isNaN(day.getTime())) throw badRequest("Date invalide.");
-  await prisma.workSession.upsert({
-    where: { taskId_userId_date: { taskId, userId, date: day } },
-    create: { id, taskId, userId, date: day },
-    update: {},
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.workSession.findUnique({ where: { taskId_userId_date: { taskId, userId, date: day } }, select: { id: true } });
+    if (existing) return;
+    await tx.workSession.create({ data: { id, taskId, userId, date: day } });
+    const actor = await actorDisplayName(tx, userId);
+    await recordTaskEvents(tx, [{ taskId, actorId: userId, actorName: actor, kind: "session", newValue: frDate(day), message: `${actor} a planifié une session de travail le ${frDate(day)}` }]);
   });
   return sessionsOf(userId, taskId, t.dueDate);
 }
 
 /** Retire une de ses propres sessions. */
 export async function deleteWorkSession(userId: string, sessionId: string): Promise<WorkSessionDto[]> {
-  const s = await prisma.workSession.findFirst({ where: { id: sessionId, userId }, select: { id: true, taskId: true, task: { select: { dueDate: true } } } });
+  const s = await prisma.workSession.findFirst({ where: { id: sessionId, userId }, select: { id: true, taskId: true, date: true, task: { select: { dueDate: true } } } });
   if (!s) throw notFound("Session");
-  await prisma.workSession.delete({ where: { id: s.id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.workSession.delete({ where: { id: s.id } });
+    const actor = await actorDisplayName(tx, userId);
+    await recordTaskEvents(tx, [{ taskId: s.taskId, actorId: userId, actorName: actor, kind: "session", oldValue: frDate(s.date), message: `${actor} a retiré sa session de travail du ${frDate(s.date)}` }]);
+  });
   return sessionsOf(userId, s.taskId, s.task.dueDate);
 }
 
@@ -354,14 +388,27 @@ export async function listNodeTasks(userId: string, nodeId: string): Promise<Nod
 export async function linkNodeTask(userId: string, nodeId: string, taskId: string): Promise<NodeTasksResult> {
   await checkNode(prisma, userId, nodeId);
   await accessibleTask(userId, taskId);
-  await prisma.mindNodeTask.upsert({ where: { nodeId_taskId: { nodeId, taskId } }, create: { nodeId, taskId }, update: {} });
-  await prisma.mindNode.update({ where: { id: nodeId }, data: { updatedAt: new Date() } });
+  await prisma.$transaction(async (tx) => {
+    const exists = await tx.mindNodeTask.findUnique({ where: { nodeId_taskId: { nodeId, taskId } } });
+    if (exists) return;
+    await tx.mindNodeTask.create({ data: { nodeId, taskId } });
+    await tx.mindNode.update({ where: { id: nodeId }, data: { updatedAt: new Date() } });
+    const node = await tx.mindNode.findUnique({ where: { id: nodeId }, select: { title: true, map: { select: { title: true } } } });
+    const actor = await actorDisplayName(tx, userId);
+    await recordTaskEvents(tx, [{ taskId, actorId: userId, actorName: actor, kind: "node", newValue: node?.title ?? null, message: `${actor} a rattaché la tâche au nœud « ${node?.title ?? "?"} » (carte « ${node?.map.title ?? "?"} »)` }]);
+  });
   return nodeTasksResult(userId, nodeId);
 }
 
 export async function unlinkNodeTask(userId: string, nodeId: string, taskId: string): Promise<NodeTasksResult> {
   await checkNode(prisma, userId, nodeId);
-  await prisma.mindNodeTask.deleteMany({ where: { nodeId, taskId } });
+  await prisma.$transaction(async (tx) => {
+    const removed = await tx.mindNodeTask.deleteMany({ where: { nodeId, taskId } });
+    if (removed.count === 0) return;
+    const node = await tx.mindNode.findUnique({ where: { id: nodeId }, select: { title: true } });
+    const actor = await actorDisplayName(tx, userId);
+    await recordTaskEvents(tx, [{ taskId, actorId: userId, actorName: actor, kind: "node", oldValue: node?.title ?? null, message: `${actor} a détaché la tâche du nœud « ${node?.title ?? "?"} »` }]);
+  });
   return nodeTasksResult(userId, nodeId);
 }
 

@@ -2,6 +2,7 @@ import "server-only";
 import type { User, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError, badRequest, forbidden, notFound } from "@/lib/api";
+import { hashPassword } from "@/lib/auth";
 
 /**
  * Comptes : profil (prénom, nom, photo, thème), rôles et hiérarchie.
@@ -173,6 +174,67 @@ export async function updateUserAdmin(admin: User, targetId: string, input: { ro
   }
   await prisma.user.update({ where: { id: targetId }, data: { role: input.role, managerId: input.managerId } });
   return listUsersAdmin(admin);
+}
+
+/**
+ * Création d'un compte par un administrateur, avec un mot de passe imposé
+ * (à communiquer à la personne par un canal sûr). Le super administrateur ne
+ * se crée jamais ainsi (seulement par `scripts/create-user.ts`). L'adresse
+ * n'est pas marquée validée. Renvoie la liste à jour.
+ */
+export async function createUserAdmin(
+  admin: User,
+  input: { email: string; firstName: string; lastName: string; password: string; role?: UserRole; managerId?: string | null },
+): Promise<AdminUserDto[]> {
+  requireAdmin(admin);
+  const email = input.email.trim().toLowerCase();
+  const taken = () => new ApiError(409, "EMAIL_TAKEN", "Un compte existe déjà avec cet e-mail.");
+  if (isSuperAdmin({ email })) throw taken();
+  if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) throw taken();
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+  if (!firstName && !lastName) throw badRequest("Indiquez au moins un prénom ou un nom.");
+  if (input.managerId) {
+    const manager = await prisma.user.findUnique({ where: { id: input.managerId }, select: { id: true } });
+    if (!manager) throw notFound("Manager");
+  }
+  const passwordHash = await hashPassword(input.password);
+  try {
+    await prisma.user.create({
+      data: {
+        email,
+        firstName,
+        lastName,
+        name: displayName(firstName, lastName, email),
+        passwordHash,
+        role: input.role ?? "USER",
+        managerId: input.managerId ?? null,
+        emailVerifiedAt: null,
+      },
+    });
+  } catch (e) {
+    // Course entre deux créations simultanées : contrainte d'unicité de l'e-mail.
+    if (e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002") throw taken();
+    throw e;
+  }
+  return listUsersAdmin(admin);
+}
+
+/**
+ * Mot de passe imposé par un administrateur : remplace l'empreinte et ferme
+ * toutes les sessions de la personne (web, applications). Seul le super
+ * administrateur peut réinitialiser son propre mot de passe par cette voie.
+ */
+export async function setUserPasswordAdmin(admin: User, targetId: string, password: string): Promise<void> {
+  requireAdmin(admin);
+  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true, email: true } });
+  if (!target) throw notFound("Utilisateur");
+  if (isSuperAdmin(target) && !isSuperAdmin(admin)) throw forbidden();
+  const passwordHash = await hashPassword(password);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: targetId }, data: { passwordHash } }),
+    prisma.session.deleteMany({ where: { userId: targetId } }),
+  ]);
 }
 
 /** Identifiants des N-1 directs. */

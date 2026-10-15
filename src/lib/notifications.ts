@@ -99,7 +99,7 @@ export async function notify(db: Db, items: NotifyInput[]): Promise<void> {
     const groupWhere =
       item.type === "TASK_UPDATED" && item.taskId
         ? { taskId: item.taskId }
-        : item.type === "MESSAGE"
+        : item.type === "MESSAGE" || item.type === "MEETING_REVIEW"
           ? { href: item.href }
           : null;
     if (groupWhere) {

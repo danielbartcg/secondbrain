@@ -31,7 +31,10 @@
     "desktop:publish": "tsx ops/desktop-publish.ts",
     "ios:sync": "npm run native:build && cap sync ios",
     "ios:open": "cap open ios",
-    "test:features": "tsx scripts/features-e2e.ts"
+    "test:features": "tsx scripts/features-e2e.ts",
+    "test:risks": "tsx scripts/risks-test.ts",
+    "test:admin-users": "tsx scripts/admin-users-test.ts",
+    "test:gantt": "tsx scripts/gantt-model-test.ts"
   },
   "dependencies": {
     "@amcharts/amcharts4": "^4.10.40",
@@ -42,6 +45,10 @@
     "@tiptap/extension-image": "^2.27.3",
     "@tiptap/extension-link": "2.27.3",
     "@tiptap/extension-placeholder": "2.27.3",
+    "@tiptap/extension-table": "2.27.3",
+    "@tiptap/extension-table-cell": "2.27.3",
+    "@tiptap/extension-table-header": "2.27.3",
+    "@tiptap/extension-table-row": "2.27.3",
     "@tiptap/extension-task-item": "2.27.3",
     "@tiptap/extension-task-list": "2.27.3",
     "@tiptap/pm": "2.27.3",
@@ -51,6 +58,7 @@
     "bcryptjs": "3.0.3",
     "d3-hierarchy": "3.1.2",
     "emoji-mart": "5.6.0",
+    "exceljs": "4.4.0",
     "lucide-react": "1.55.0",
     "next": "15.5.27",
     "nodemailer": "10.0.13",

@@ -386,6 +386,58 @@ Règles communes (`src/lib/uploads.ts`) : allowlist MIME, taille bornée
 répertoire racine. Les deux répertoires sont montés en volume Docker et
 inclus dans les sauvegardes. Caddy accepte 30 Mo de corps de requête.
 
+## Piste d'audit des tâches (`src/lib/task-events.ts`)
+
+Table `TaskEvent` : une ligne par modification, message lisible figé à
+l'écriture (« Alice a modifié la date de début du 12/10/2026 au 13/10/2026 »,
+« … a assigné la tâche à Bob », « … a ajouté le prérequis « Murs » », « … a
+commenté : « … » », « … a lié la tâche au risque « … » »…). Écrite **dans la
+transaction** de chaque mutation : `createTask` / `updateTask` comparent un
+instantané avant / après (`taskSnapshot`, `diffTaskEvents` : nom,
+description, statut, avancement, priorité, complexité, dates, clôture,
+responsable, superviseur, contributeurs, prérequis, rattachement) ;
+commentaires, sessions de travail, nœuds de carte et risques appellent
+`recordTaskEvents`. Les écritures rejouées par la synchro passent par les
+mêmes fonctions : l'application hors ligne est auditée aussi. Lecture :
+`GET /tasks/:id/history` (mêmes droits que la fiche).
+
+## Réunions de projet (`src/lib/meetings.ts`)
+
+Réunion = titre, date, lieu, rédacteur (créateur), participants et
+validateurs (membres ; un validateur doit avoir un compte), compte-rendu en
+texte riche assaini. Modifiable par le rédacteur ou le propriétaire du
+projet (verrou de ligne sur la réunion). Circuit de validation : chaque
+validateur valide ou refuse (motif obligatoire) → `MEETING_DECISION` au
+rédacteur ; **toute modification du compte-rendu remet les décisions à
+« en attente »** et notifie les validateurs (`MEETING_REVIEW`, regroupée par
+réunion, lien `/projects/:id?meeting=…#reunions`). Statut calculé : brouillon,
+sans validation, en validation, validé, refusé.
+
+## Risques et opportunités (`src/lib/risks.ts`)
+
+Registre par projet (`Risk` : nature, probabilité × gravité / bénéfice 1–5,
+criticité p × i et niveau, statut, responsable, plan, échéance) ; tâches liées
+(`RiskTask`, même projet, liens tracés dans l'historique des tâches).
+Règles pures partagées : `src/lib/shared/risks.ts`. Verrou de ligne du projet.
+
+## Export Excel (`src/lib/project-export.ts`)
+
+`GET /projects/:id/export` (exceljs, rendu côté serveur, paquet externe) :
+classeur avec Synthèse, Tâches (références T1…, prérequis, risques liés,
+notes en texte), Étapes & activités, Livrables, Risques & opportunités
+(couleurs de niveau), Matrices 5 × 5, Réunions (comptes-rendus en texte,
+décisions), Équipe, Documents. En-têtes figés, filtres, dates et pourcentages
+typés. 30 exports / 15 min / utilisateur. Dans l'application desktop, la
+coque relaie cette route avec le jeton (liste blanche).
+
+## Inscriptions et comptes
+
+`AppSettings.registrationEnabled` (Administration → Utilisateurs) ouvre ou
+ferme les inscriptions libres ; `ALLOW_REGISTRATION=false` les ferme quoi
+qu'il arrive (`registrationOpen()`). Les administrateurs créent des comptes
+avec un mot de passe imposé et réinitialisent un mot de passe (sessions de la
+personne fermées).
+
 ## Graphiques (amCharts 4)
 
 `src/components/charts/AmChart.tsx` : enveloppe générique — import dynamique

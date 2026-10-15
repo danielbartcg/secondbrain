@@ -9,7 +9,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   // Chargé tel quel par Node (pas empaqueté) : modules node:* (envoi d'e-mails).
-  serverExternalPackages: ["nodemailer"],
+  serverExternalPackages: ["nodemailer", "exceljs"],
   async headers() {
     return [
       {

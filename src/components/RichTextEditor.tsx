@@ -8,6 +8,10 @@ import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableHeader from "@tiptap/extension-table-header";
+import TableCell from "@tiptap/extension-table-cell";
 import { uploadImage } from "@/lib/client";
 import { EmojiButton } from "@/components/EmojiPicker";
 
@@ -94,6 +98,10 @@ export function RichTextEditor({
       Placeholder.configure({ placeholder }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      Table.configure({ resizable: false, HTMLAttributes: { class: "sb-table" } }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: initialHtml,
     autofocus: autoFocus ? "end" : false,
@@ -193,6 +201,12 @@ export function RichTextEditor({
           <ToolbarButton onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive("orderedList")} label="1. Liste" title="Liste numérotée" />
           <ToolbarButton onClick={() => editor.chain().focus().toggleTaskList().run()} active={editor.isActive("taskList")} label="☑ Tâches" title="Liste de cases à cocher" />
           <ToolbarButton onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive("blockquote")} label="❝" title="Citation" />
+          <ToolbarButton
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            active={editor.isActive("table")}
+            label="▦ Tableau"
+            title="Insérer un tableau (3 × 3 avec ligne d'en-tête)"
+          />
           <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive("codeBlock")} label="</>" title="Bloc de code" />
           <ToolbarButton
             onClick={() => {
@@ -219,9 +233,42 @@ export function RichTextEditor({
           />
         </div>
       )}
+      {editor?.isActive("table") && <TableBar editor={editor} />}
       <div style={{ ["--editor-min-height" as string]: `${minHeight}px` }}>
         <EditorContent editor={editor} />
       </div>
+    </div>
+  );
+}
+
+/** Actions sur le tableau où se trouve le curseur (lignes, colonnes, en-tête, suppression). */
+function TableBar({ editor }: { editor: Editor }) {
+  const run = (fn: (c: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>) => fn(editor.chain().focus()).run();
+  const actions: Array<{ label: string; title: string; fn: (c: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>; danger?: boolean }> = [
+    { label: "+ Ligne", title: "Ajouter une ligne en dessous", fn: (c) => c.addRowAfter() },
+    { label: "+ Colonne", title: "Ajouter une colonne à droite", fn: (c) => c.addColumnAfter() },
+    { label: "− Ligne", title: "Supprimer la ligne", fn: (c) => c.deleteRow() },
+    { label: "− Colonne", title: "Supprimer la colonne", fn: (c) => c.deleteColumn() },
+    { label: "En-tête", title: "Ligne d'en-tête oui / non", fn: (c) => c.toggleHeaderRow() },
+    { label: "Fusionner", title: "Fusionner ou scinder les cellules sélectionnées", fn: (c) => c.mergeOrSplit() },
+    { label: "Supprimer le tableau", title: "Supprimer le tableau", fn: (c) => c.deleteTable(), danger: true },
+  ];
+  return (
+    <div className="flex flex-wrap gap-1 border-x border-line-strong bg-surface-2/60 px-1.5 py-1" role="toolbar" aria-label="Tableau">
+      <span className="self-center px-1 text-xs font-medium text-muted">Tableau :</span>
+      {actions.map((a) => (
+        <button
+          key={a.label}
+          type="button"
+          title={a.title}
+          aria-label={a.title}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => run(a.fn)}
+          className={`rounded px-2 py-1 text-xs font-medium ring-1 ring-line ${a.danger ? "bg-surface text-danger hover:bg-red-50" : "bg-surface text-ink-2 hover:bg-surface-3"}`}
+        >
+          {a.label}
+        </button>
+      ))}
     </div>
   );
 }

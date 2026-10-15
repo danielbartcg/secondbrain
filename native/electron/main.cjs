@@ -5,12 +5,15 @@
  *   protocole interne app://local/ (repli sur index.html : routes profondes).
  * - /media/… (images des notes) est relayé vers le serveur et mis en cache
  *   sur le disque : les images restent visibles hors ligne.
- * - /api/v1/documents/<id>/download est relayé avec le jeton Bearer.
+ * - /api/v1/documents/<id>/download et /api/v1/projects/<id>/export sont relayés avec le jeton Bearer.
  * - Les requêtes de l'application vers le serveur passent par ce processus
  *   (IPC « sb:fetch » / « sb:upload ») : pas de CORS, pas d'en-tête Origin.
  *   Seule l'origine de la session est joignable (plus POST /auth/login vers le
  *   serveur annoncé par « sb:setServer ») ; le jeton Bearer est ajouté ici.
  * - Développement : SB_DEV_URL=http://localhost:5173 charge le serveur Vite.
+ *
+ * - Mises à jour (updater.cjs) : vérification au démarrage puis toutes les
+ *   6 h (« sb:update-available »), installation à la demande de l'interface.
  *
  * Les données (IndexedDB) vivent dans le profil applicatif (userData).
  */
@@ -18,6 +21,7 @@ const { app, BrowserWindow, Menu, ipcMain, net, protocol, safeStorage, shell } =
 const path = require("node:path");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
+const { createUpdater } = require("./updater.cjs");
 
 const RENDERER = path.join(__dirname, "renderer");
 const DEV_URL = process.env.SB_DEV_URL || "";
@@ -145,6 +149,8 @@ async function serveMedia(pathname) {
 }
 
 const DOCUMENT_DOWNLOAD = /^\/api\/v1\/documents\/[A-Za-z0-9_-]+\/download$/;
+/** Export Excel d'un projet (fichier binaire authentifié). */
+const PROJECT_EXPORT = /^\/api\/v1\/projects\/[A-Za-z0-9_-]+\/export$/;
 
 async function proxyAuthenticated(pathname, search) {
   if (!session.serverUrl || !session.token) return new Response("Connexion requise", { status: 401 });
@@ -162,7 +168,7 @@ function registerAppProtocol() {
     const raw = url.pathname;
     if (raw.startsWith("/media/")) return serveMedia(raw);
     if (raw.startsWith("/api/")) {
-      if (DOCUMENT_DOWNLOAD.test(raw)) return proxyAuthenticated(raw, url.search);
+      if (DOCUMENT_DOWNLOAD.test(raw) || PROJECT_EXPORT.test(raw)) return proxyAuthenticated(raw, url.search);
       return new Response("Introuvable", { status: 404 });
     }
     let decoded;
@@ -178,8 +184,15 @@ function registerAppProtocol() {
   });
 }
 
+// --- Mises à jour -----------------------------------------------------------------------------
+let mainWindow = null;
+const updater = createUpdater({ getServerUrl: () => session.serverUrl, getWindow: () => mainWindow });
+
 // --- IPC : requêtes serveur pour l'interface -------------------------------------------------
 function registerIpc() {
+  // Aucun paramètre accepté : serveur et fichier sont déterminés ici (session, latest.json contrôlé).
+  ipcMain.handle("sb:checkUpdate", () => updater.check());
+  ipcMain.handle("sb:installUpdate", () => updater.install());
   ipcMain.handle("sb:fetch", async (_e, req) => {
     const { url, method, headers } = checkedRequest(req);
     const body = method === "GET" || typeof req.body !== "string" ? undefined : req.body;
@@ -279,6 +292,10 @@ function createWindow() {
   }
 
   void win.loadURL(DEV_URL || "app://local/");
+  mainWindow = win;
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
+  });
   return win;
 }
 
@@ -304,6 +321,7 @@ if (!app.requestSingleInstanceLock() && !SMOKE) {
     registerAppProtocol();
     registerIpc();
     createWindow();
+    if (!SMOKE) updater.start();
     app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
   });
   app.on("window-all-closed", () => {

@@ -7,6 +7,7 @@ import { sanitizeNotes } from "@/lib/sanitize";
 import { deleteProjectDocumentsDir } from "@/lib/uploads";
 import { requireAdmin } from "@/lib/users";
 import { prerequisiteError } from "@/lib/shared/prerequisites";
+import { actorDisplayName, diffTaskEvents, recordTaskEvents, taskSnapshot } from "@/lib/task-events";
 import {
   DOCUMENT_INCLUDE,
   MEMBER_INCLUDE,
@@ -568,6 +569,14 @@ export async function createTask(
         ...(target.nodeId ? { nodes: { create: { nodeId: target.nodeId } } } : {}),
       },
     });
+    // Piste d'audit : création, puis l'état initial (affectations, dates…) comme des modifications.
+    const creator = await actorDisplayName(tx, userId);
+    await recordTaskEvents(tx, [{ taskId: created.id, actorId: userId, actorName: creator, kind: "created", message: `${creator} a créé la tâche « ${created.name} »` }]);
+    const initial = await taskSnapshot(tx, created.id);
+    if (initial) {
+      const empty = { ...initial, assigneeId: null, supervisorId: null, contributorIds: [], prerequisiteIds: [], startDate: null, dueDate: null, closedAt: initial.closedAt };
+      await recordTaskEvents(tx, (await diffTaskEvents(tx, created.id, userId, empty, initial)).filter((e) => e.kind !== "field" || e.field === "startDate" || e.field === "dueDate"));
+    }
     const assignee = await memberUser(tx, input.assigneeId);
     if (assignee?.userId) {
       const name = await actorName(tx, userId);
@@ -611,6 +620,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
   const projectChanged = att.projectId !== t.projectId;
 
   return mutateTask(att.projectId, async (tx) => {
+    const before = await taskSnapshot(tx, taskId);
     const { status, progress } = reconcile(t, input);
 
     // Date de clôture : automatique à la clôture, effacée à la réouverture,
@@ -700,6 +710,9 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
       ...(supervisorChanged && updated.supervisorId ? [{ memberId: updated.supervisorId, role: "superviseur" }] : []),
       ...addedContributors.map((memberId) => ({ memberId, role: "contributeur" })),
     ]);
+    // Piste d'audit : différence avant / après (dans la transaction).
+    const after = await taskSnapshot(tx, taskId);
+    if (before && after) await recordTaskEvents(tx, await diffTaskEvents(tx, taskId, userId, before, after));
     const assigneeChanged = updated.assigneeId !== t.assigneeId;
     const assignee = await memberUser(tx, updated.assigneeId);
     if (assignee?.userId && assignee.userId !== userId && (assigneeChanged || changes.length > 0)) {

@@ -42,6 +42,10 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    projets et cartes **utilisables hors ligne**, synchronisation automatique
    (conflits par champ, le serveur l'emporte, historique « Conflits ») ;
    téléchargement sur `/app`.
+   **Gantt** interactif (étapes › activités › tâches, glisser / redimensionner,
+   flèches de prérequis), **réunions** avec comptes-rendus validés, **registre
+   des risques et opportunités** (matrice 5 × 5), **piste d'audit** de chaque
+   tâche, **export Excel** complet d'un projet, tableaux dans le texte riche.
    **Messagerie interne** (fils à plusieurs, vu / non vu, réponse à un
    message précis, suppression, emoji) ; **notifications par e-mail**
    (SMTP et activation par type dans l'administration, préférence
@@ -94,6 +98,8 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:migrate` / `db:deploy` / `db:studio` | Prisma |
 | `npm run user:create -- --email=… --password=… [--name=…]` | créer / réinitialiser un utilisateur |
+| `npm run test:risks` / `test:admin-users` | tests de bout en bout des risques et opportunités / de la création de comptes et réinitialisation par l'administrateur (serveur de dev lancé) |
+| `npm run test:gantt` | tests de la logique du diagramme de Gantt (dates, déplacement, redimensionnement, cascade, flèches) — sans serveur |
 | `npm run test:features` | tests de bout en bout des e-mails (faux serveur SMTP local), de la messagerie, des comptes (mot de passe oublié, validation, changement d'adresse) et du connecteur MCP (serveur de dev lancé) |
 | `npm run test:native` | tests de bout en bout du client hors ligne de l'application (serveur de dev lancé) |
 | `npm run native:dev` / `native:build` | interface de l'application native dans le navigateur (Vite, relais vers le serveur de dev) / build |

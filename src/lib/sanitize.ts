@@ -12,6 +12,8 @@ const OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "p", "br", "strong", "em", "u", "s", "code", "pre", "blockquote",
     "h1", "h2", "h3", "h4", "ul", "ol", "li", "a", "hr", "label", "div", "input", "span", "img",
+    // Tableaux (éditeur riche) : structure seule, pas de style.
+    "table", "thead", "tbody", "tr", "th", "td", "colgroup", "col",
   ],
   allowedAttributes: {
     a: ["href", "target", "rel"],
@@ -19,6 +21,8 @@ const OPTIONS: sanitizeHtml.IOptions = {
     li: ["data-type", "data-checked"],
     input: ["type", "checked"],
     img: ["src", "alt", "title", "width", "height"],
+    td: ["colspan", "rowspan", "colwidth"],
+    th: ["colspan", "rowspan", "colwidth"],
   },
   allowedSchemes: ["http", "https", "mailto"],
   allowedSchemesByTag: { img: ["https"] },

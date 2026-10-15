@@ -5,6 +5,8 @@ export const NOTIFICATION_TYPE_INFO = {
   REPLY: { label: "Réponse", description: "Quelqu'un a répondu à votre commentaire." },
   MENTION: { label: "Mention", description: "Vous avez été mentionné (@) dans un commentaire." },
   MESSAGE: { label: "Message", description: "Nouveau message dans une de vos conversations (messagerie)." },
+  MEETING_REVIEW: { label: "Compte-rendu à valider", description: "Un compte-rendu de réunion attend votre validation (ou a été modifié depuis votre décision)." },
+  MEETING_DECISION: { label: "Validation de compte-rendu", description: "Un validateur a validé ou refusé votre compte-rendu de réunion." },
 } as const;
 
 export type NotificationTypeKey = keyof typeof NOTIFICATION_TYPE_INFO;

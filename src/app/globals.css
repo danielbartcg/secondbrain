@@ -361,3 +361,34 @@ body {
 .message-flash {
   animation: message-flash 1.6s ease-out;
 }
+
+/* Tableaux du texte riche (éditeur et rendu) */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+  font-size: 0.95em;
+}
+.prose :where(th, td) {
+  border: 1px solid var(--color-line-strong);
+  padding: 0.35em 0.6em;
+  vertical-align: top;
+  min-width: 3em;
+}
+.prose :where(th) {
+  background: var(--color-surface-2);
+  font-weight: 600;
+  text-align: left;
+}
+.prose :where(th, td) > p {
+  margin: 0;
+}
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+}
+.ProseMirror td.selectedCell,
+.ProseMirror th.selectedCell {
+  background: color-mix(in srgb, var(--color-brand-500) 15%, transparent);
+}

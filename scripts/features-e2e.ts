@@ -448,10 +448,98 @@ async function main() {
     console.log("\n11. Inscription : confirmation du mot de passe");
     r = await call(null, "POST", "/auth/register", { email: `feat-conf-${tag}@test.local`, password: "Password123!", confirmPassword: "Autre123!", firstName: "Conf" });
     check("confirmation différente refusée", r.status === 400 || r.status === 429, r.status);
+
+    console.log("\n12. Piste d'audit des tâches");
+    {
+      const t = await call<TaskResp>(B, "POST", `/projects/${projB}/tasks`, { name: "Audit", startDate: "2026-12-01", dueDate: "2026-12-05" });
+      const auditId = (t.data as TaskResp).project!.tasks.find((x) => !known.has(x.id))!.id;
+      known.add(auditId);
+      const members = await call<{ project: { members: { id: string; userId: string | null }[] } }>(B, "GET", `/projects/${projB}`);
+      const bMember = members.data.project.members.find((m) => m.userId === B.id)!.id;
+      await call(B, "PATCH", `/tasks/${auditId}`, { startDate: "2026-12-03", assigneeId: bMember, priority: "HIGH", status: "IN_PROGRESS" });
+      await call(B, "POST", `/tasks/${auditId}/comments`, { body: "Un commentaire d'audit" });
+      const h = await call<{ events: { kind: string; message: string; actorName: string }[] }>(B, "GET", `/tasks/${auditId}/history`);
+      const msgs = h.data.events.map((e) => e.message);
+      check("création tracée", msgs.some((m) => /a créé la tâche « Audit »/.test(m)), msgs);
+      check("date de début : ancienne et nouvelle valeur", msgs.some((m) => /modifié la date de début du 01\/12\/2026 au 03\/12\/2026/.test(m)), msgs);
+      check("affectation tracée", msgs.some((m) => /a assigné la tâche à /.test(m)), msgs);
+      check("priorité et statut tracés", msgs.some((m) => /priorité de Moyenne à Haute/.test(m)) && msgs.some((m) => /statut de À faire à En cours/.test(m)), msgs);
+      check("commentaire tracé", msgs.some((m) => /a commenté : « Un commentaire d'audit »/.test(m)), msgs);
+      check("plus récent d'abord, auteur nommé", h.data.events[0].kind === "comment" && h.data.events.every((e) => e.actorName), h.data.events[0]);
+      const hC = await call(C, "GET", `/tasks/${auditId}/history`);
+      check("historique d'une tâche inaccessible : 404", hC.status === 404, hC.status);
+    }
+
+    console.log("\n13. Réunions et validation des comptes-rendus");
+    {
+      // C rejoint le projet de B (membre avec compte) pour valider.
+      const addC = await call<{ project: { members: { id: string; userId: string | null }[] } }>(B, "POST", `/projects/${projB}/members`, { userId: C.id });
+      const cMember = addC.data.project.members.find((m) => m.userId === C.id)!.id;
+      const created = await call<{ meetings: { id: string; status: string }[] }>(B, "POST", `/projects/${projB}/meetings`, { title: "Comité", date: "2026-11-10T09:00:00.000Z", location: "Salle A", approverIds: [cMember], participantIds: [cMember] });
+      const meetingId = created.data.meetings[0].id;
+      check("réunion créée (brouillon)", created.status === 201 && created.data.meetings[0].status === "draft", created.data);
+      await prisma.notification.deleteMany({ where: { userId: C.id } });
+      let r2 = await call<{ meetings: { id: string; status: string; approvers: { decision: string }[] }[] }>(B, "PATCH", `/meetings/${meetingId}`, { minutes: "<p>Décisions : <strong>GO</strong></p><table><tbody><tr><td>A</td><td>B</td></tr></tbody></table><script>x</script>" });
+      check("compte-rendu enregistré, en validation", r2.data.meetings[0].status === "pending", r2.data);
+      const list = await call<{ meetings: { minutes: string; myDecision: string | null }[] }>(C, "GET", `/projects/${projB}/meetings`);
+      check("compte-rendu assaini (tableau gardé, script retiré)", /<table>/.test(list.data.meetings[0].minutes) && !/script/.test(list.data.meetings[0].minutes), list.data.meetings[0].minutes);
+      check("le validateur voit sa décision en attente", list.data.meetings[0].myDecision === "PENDING");
+      const review = await prisma.notification.findMany({ where: { userId: C.id, type: "MEETING_REVIEW" } });
+      check("validateur notifié (MEETING_REVIEW)", review.length === 1, review.length);
+      r2 = await call(C, "PATCH", `/meetings/${meetingId}`, { minutes: "<p>pirate</p>" });
+      check("un validateur ne modifie pas le compte-rendu", r2.status === 403, r2.status);
+      r2 = await call(C, "POST", `/meetings/${meetingId}/decision`, { decision: "REJECTED", comment: "" });
+      check("refus sans motif refusé", r2.status === 400, r2.status);
+      r2 = await call(C, "POST", `/meetings/${meetingId}/decision`, { decision: "REJECTED", comment: "Il manque le budget" });
+      check("refus avec motif", r2.status === 200 && r2.data.meetings[0].status === "rejected", r2.data);
+      const decisionNotif = await prisma.notification.findFirst({ where: { userId: B.id, type: "MEETING_DECISION" }, orderBy: { createdAt: "desc" } });
+      check("rédacteur notifié du refus (motif)", !!decisionNotif && /refusé/.test(decisionNotif.title) && /budget/.test(decisionNotif.body), decisionNotif);
+      r2 = await call(B, "PATCH", `/meetings/${meetingId}`, { minutes: "<p>Décisions : GO, budget 10 k€</p>" });
+      check("modification du compte-rendu : décisions remises en attente", r2.data.meetings[0].status === "pending" && r2.data.meetings[0].approvers.every((a) => a.decision === "PENDING"), r2.data);
+      r2 = await call(B, "POST", `/meetings/${meetingId}/decision`, { decision: "APPROVED" });
+      check("un non-validateur ne décide pas", r2.status === 403, r2.status);
+      r2 = await call(C, "POST", `/meetings/${meetingId}/decision`, { decision: "APPROVED", comment: "" });
+      check("validation → compte-rendu validé", r2.status === 200 && r2.data.meetings[0].status === "approved", r2.data);
+      r2 = await call(A, "GET", `/projects/${projB}/meetings`);
+      check("non-membre : 404", r2.status === 404, r2.status);
+    }
+
+    console.log("\n14. Inscriptions libres (administration)");
+    {
+      let reg = await call<{ registration: { enabled: boolean; open: boolean } }>(B, "PATCH", "/admin/settings", { registrationEnabled: false });
+      check("non-administrateur : refusé", reg.status === 403, reg.status);
+      reg = await call(A, "PATCH", "/admin/settings", { registrationEnabled: false });
+      check("administrateur ferme les inscriptions", reg.status === 200 && reg.data.registration.open === false, reg.data);
+      const opts2 = await call<{ registration: boolean }>(null, "GET", "/auth/options");
+      check("options publiques : inscription fermée", opts2.data.registration === false, opts2.data);
+      const tryReg = await call(null, "POST", "/auth/register", { email: `feat-closed-${tag}@test.local`, password: "Password123!", firstName: "Closed" });
+      check("inscription refusée (403)", tryReg.status === 403 || tryReg.status === 429, tryReg.status);
+      reg = await call(A, "PATCH", "/admin/settings", { registrationEnabled: true });
+      check("réouverture", reg.data.registration.open === true, reg.data);
+    }
+
+    console.log("\n15. Export Excel du projet");
+    {
+      const res = await fetch(`${BASE}/projects/${projB}/export`, { headers: { Authorization: `Bearer ${B.token}` } });
+      check("export : 200 et type xlsx", res.status === 200 && (res.headers.get("content-type") ?? "").includes("spreadsheetml"), res.status);
+      const ExcelJS = (await import("exceljs")).default;
+      const wbx = new ExcelJS.Workbook();
+      await wbx.xlsx.load(Buffer.from(await res.arrayBuffer()) as unknown as ArrayBuffer);
+      const names = wbx.worksheets.map((w) => w.name);
+      check("feuilles attendues", ["Synthèse", "Tâches", "Étapes & activités", "Livrables", "Risques & opportunités", "Matrices", "Réunions", "Équipe", "Documents"].every((n) => names.includes(n)), names);
+      const ws = wbx.getWorksheet("Tâches")!;
+      const header = (ws.getRow(1).values as unknown[]).slice(1);
+      check("colonnes des tâches (dont prérequis et risques)", header.includes("Prérequis") && header.includes("Risques liés") && header.includes("Responsable"), header);
+      check("une ligne par tâche", ws.rowCount - 1 >= 2, ws.rowCount);
+      const meetingsWs = wbx.getWorksheet("Réunions")!;
+      check("réunion exportée avec son compte-rendu", String(meetingsWs.getRow(2).getCell(8).value ?? "").includes("budget"), meetingsWs.getRow(2).getCell(8).value);
+      const resC = await fetch(`${BASE}/projects/${projB}/export`, { headers: { Authorization: `Bearer ${A.token}` } });
+      check("export d'un projet inaccessible : 404", resC.status === 404, resC.status);
+    }
     if (projA) await call(A, "DELETE", `/projects/${projA}`);
     if (projB) await call(B, "DELETE", `/projects/${projB}`);
   } finally {
-    console.log("\n12. Nettoyage");
+    console.log("\n16. Nettoyage");
     await prisma.conversation.deleteMany({ where: { id: { in: created.conversations.filter(Boolean) } } });
     await prisma.conversation.deleteMany({ where: { participants: { some: { userId: { in: created.users } } } } });
     await prisma.user.deleteMany({ where: { id: { in: created.users } } });
