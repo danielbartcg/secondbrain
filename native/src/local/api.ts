@@ -113,6 +113,16 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   // --- Cartes mentales -------------------------------------------------------------------
+  // Droits comme le serveur (src/lib/map-access.ts) : lecture seule refusée (403), suppression = propriétaire.
+  function writableMap(mapId: string) {
+    must("MindMap", mapId, "Carte");
+    if (model.mapAccess(mapId) === "read") throw new ApiClientError(403, "READ_ONLY", "Cette carte vous est partagée en lecture seule.");
+  }
+  function ownMap(mapId: string) {
+    must("MindMap", mapId, "Carte");
+    if (model.mapAccess(mapId) !== "owner") throw new ApiClientError(403, "FORBIDDEN", "Seul le propriétaire de la carte peut faire cela.");
+  }
+
   function mapResp(mapId: string) {
     const m = model.mindmap(mapId);
     if (!m) throw notFound("Carte");
@@ -132,7 +142,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
 
   function updateMap(mapId: string, body: unknown) {
     const input = parse(updateMindMapSchema, body);
-    must("MindMap", mapId, "Carte");
+    writableMap(mapId);
     if (input.title) {
       store.patch("MindMap", mapId, { title: input.title });
       for (const root of store.where("MindNode", (n) => n.mapId === mapId && !n.parentId)) store.patch("MindNode", root.id, { title: input.title });
@@ -142,7 +152,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   function deleteMap(mapId: string) {
-    must("MindMap", mapId, "Carte");
+    ownMap(mapId);
     enqueue("MindMap", mapId, "delete");
     store.removeCascade("MindMap", mapId);
     return { ok: true };
@@ -155,7 +165,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   function createNode(mapId: string, body: unknown) {
-    must("MindMap", mapId, "Carte");
+    writableMap(mapId);
     const input = parse(createNodeSchema, body);
     const parent = node(mapId, input.parentId);
     const id = newId();
@@ -170,6 +180,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
 
   function updateNode(mapId: string, nodeId: string, body: unknown) {
     const input = parse(updateNodeSchema, body);
+    writableMap(mapId);
     const n = node(mapId, nodeId);
     const fields = defined({ title: input.title, notes: input.notes, color: input.color, collapsed: input.collapsed, status: input.status, x: input.x, y: input.y });
     store.patch("MindNode", nodeId, fields);
@@ -181,6 +192,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
 
   function moveNode(mapId: string, nodeId: string, body: unknown) {
     const input = parse(moveNodeSchema, body);
+    writableMap(mapId);
     const n = node(mapId, nodeId);
     if (!n.parentId) throw badRequest("La racine ne peut pas être déplacée.");
     const target = node(mapId, input.parentId);
@@ -198,6 +210,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   function deleteNode(mapId: string, nodeId: string) {
+    writableMap(mapId);
     const n = node(mapId, nodeId);
     if (!n.parentId) throw badRequest("La racine ne peut pas être supprimée.");
     enqueue("MindNode", nodeId, "delete");
@@ -207,7 +220,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   function resetLayout(mapId: string) {
-    must("MindMap", mapId, "Carte");
+    writableMap(mapId);
     for (const n of store.where("MindNode", (r) => r.mapId === mapId && (r.x != null || r.y != null))) {
       store.patch("MindNode", n.id, { x: null, y: null });
       enqueue("MindNode", n.id, "update", { x: null, y: null });
@@ -216,6 +229,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   function linkTask(mapId: string, nodeId: string, body: unknown) {
+    writableMap(mapId);
     node(mapId, nodeId);
     const { taskId } = parse(linkNodeTaskSchema, body);
     must("Task", taskId, "Tâche");
@@ -228,6 +242,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   function unlinkTask(mapId: string, nodeId: string, taskId: string) {
+    writableMap(mapId);
     node(mapId, nodeId);
     const key = `${nodeId}:${taskId}`;
     if (store.get("MindNodeTask", key)) {
@@ -390,7 +405,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   function createTask(target: { projectId?: string | null; stageId?: string | null; activityId?: string | null; nodeId?: string | null }, body: unknown) {
     const input = parse(createTaskSchema, body);
     const att = resolveAttachment(target);
-    if (target.nodeId) must("MindNode", target.nodeId, "Nœud");
+    if (target.nodeId) writableMap(must("MindNode", target.nodeId, "Nœud").mapId);
     if (input.assigneeId || input.supervisorId || input.contributorIds?.length) {
       if (!att.projectId) throw badRequest("Une tâche sans projet ne peut pas être affectée.");
       checkMember(att.projectId, input.assigneeId);
@@ -580,12 +595,13 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
       case "mindmap": {
         const root = store.where("MindNode", (n) => n.mapId === id && !n.parentId)[0];
         if (!root) throw notFound("Carte");
+        writableMap(id);
         store.patch("MindNode", root.id, { notes });
         enqueue("MindNode", root.id, "update", { notes });
         break;
       }
       case "node":
-        must("MindNode", id, "Nœud");
+        writableMap(must("MindNode", id, "Nœud").mapId);
         store.patch("MindNode", id, { notes });
         enqueue("MindNode", id, "update", { notes });
         break;

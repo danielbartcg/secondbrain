@@ -179,6 +179,7 @@ function CopyButton({ text, label = "Copier" }: { text: string; label?: string }
 export function ConnectorSection() {
   const [keys, setKeys] = useState<ApiKeyDto[] | null>(null);
   const [name, setName] = useState("Claude Desktop");
+  const [canWrite, setCanWrite] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<string | null>(null);
@@ -203,7 +204,7 @@ export function ConnectorSection() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api.post<{ key: string; apiKey: ApiKeyDto }>("/me/api-keys", { name });
+      const r = await api.post<{ key: string; apiKey: ApiKeyDto }>("/me/api-keys", { name, canWrite });
       setKeys((k) => [r.apiKey, ...(k ?? [])]);
       setCreated(r.key);
     } catch (err) {
@@ -245,8 +246,9 @@ export function ConnectorSection() {
         <Bot className="h-5 w-5 text-brand-600" /> Connecteur Claude (MCP)
       </h2>
       <p className="mt-1 text-sm text-muted">
-        Interrogez vos projets, tâches, cartes mentales et notes depuis Claude Desktop (ou tout client MCP). Accès en <strong>lecture seule</strong>, limité à ce que vous voyez dans
-        l&apos;application ; un administrateur peut analyser les projets des autres en le demandant explicitement à Claude.
+        Pilotez Second Brain depuis Claude Desktop (ou tout client MCP) : interroger <strong>et modifier</strong> projets, tâches, réunions, risques, cartes et notes
+        (assigner, replanifier, rédiger un compte-rendu, tout ce que permet l&apos;application), avec exactement vos droits et une trace dans l&apos;historique.
+        Une clé peut être limitée à la lecture. Un administrateur peut analyser les projets des autres en le demandant explicitement à Claude.
       </p>
 
       {created && (
@@ -291,6 +293,10 @@ export function ConnectorSection() {
         <Button type="submit" disabled={busy || !name.trim()}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Créer une clé
         </Button>
+        <label className="flex w-full items-center gap-2 text-sm">
+          <input type="checkbox" checked={canWrite} onChange={(e) => setCanWrite(e.target.checked)} className="h-4 w-4 accent-[var(--color-brand-600)]" />
+          Autoriser les modifications (créer, modifier, supprimer) — sinon lecture seule
+        </label>
       </form>
       <p className="mt-2 text-xs text-muted">
         Adresse du serveur MCP : <code className="break-all">{url}</code>
@@ -304,7 +310,10 @@ export function ConnectorSection() {
           <li key={k.id} className="flex items-center gap-3 px-3 py-2">
             <KeyRound className="h-4 w-4 shrink-0 text-muted" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{k.name}</div>
+              <div className="flex items-center gap-2 truncate text-sm font-medium">
+                {k.name}
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${k.canWrite ? "bg-amber-50 text-amber-800" : "bg-surface-2 text-muted"}`}>{k.canWrite ? "Lecture et écriture" : "Lecture seule"}</span>
+              </div>
               <div className="text-xs text-muted">
                 <code>{k.prefix}…</code> · créée le {new Date(k.createdAt).toLocaleDateString("fr-FR")} ·{" "}
                 {k.lastUsedAt ? `utilisée le ${new Date(k.lastUsedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : "jamais utilisée"}

@@ -49,8 +49,8 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 | POST | `/me/email/verification` | — | `{ ok, to }` (renvoi du lien) ; `409 ALREADY_VERIFIED`, `503 MAIL_DISABLED` |
 | GET | `/me/pins` | — | `{ pins: { projects: { id, name, color }[], mindmaps: { id, title }[] } }` |
 | PUT | `/me/pins` | `{ kind: "PROJECT"\|"MINDMAP", id, pinned: boolean }` | `{ pins }` ; `404` si l'élément n'est pas accessible |
-| GET | `/me/api-keys` | — | `{ apiKeys: { id, name, prefix, createdAt, lastUsedAt }[] }` |
-| POST | `/me/api-keys` | `{ name }` | `201 { key, apiKey }` — `key` (`sb_…`) n'est renvoyée **qu'ici** ; 10 clés max |
+| GET | `/me/api-keys` | — | `{ apiKeys: { id, name, prefix, canWrite, createdAt, lastUsedAt }[] }` |
+| POST | `/me/api-keys` | `{ name, canWrite? (défaut true) }` | `201 { key, apiKey }` — `key` (`sb_…`) n'est renvoyée **qu'ici** ; 10 clés max |
 | DELETE | `/me/api-keys/:id` | — | `{ ok: true }` (révocation immédiate) |
 | GET | `/me/team` | — | `{ members: { id, name, email, avatarUrl }[], tasks: OverviewTask[] }` (mes N-1 directs) |
 
@@ -106,12 +106,21 @@ type DashboardDto = {
 type MindNode = { id; parentId: string | null; title; notes /* HTML assaini */; color; collapsed;
                   status: "OPEN"|"WATCH"|"CLOSED"; order; x: number | null; y: number | null /* position manuelle */;
                   taskCount; openTaskCount; updatedAt };
-type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
+type MapSharing = { access: "owner" | "write" | "read" /* mon droit */;
+                    owner: { id; name; avatarUrl } | null /* qui me l'a partagée ; null = à moi */;
+                    sharedWith: number /* nb de partages (vue propriétaire, 0 sinon) */ };
+type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] } & MapSharing;
 ```
+
+Accès : lecture (`GET`) pour le propriétaire et toute personne avec qui la
+carte est partagée ; écriture (nœuds, titre, mise en page, notes, tâches
+rattachées) pour le propriétaire et les partages `WRITE` (sinon **403
+`READ_ONLY`**) ; suppression de la carte et gestion des partages :
+propriétaire seulement (**403**). Carte non accessible : **404**.
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
-| GET | `/mindmaps` | — | `{ mindmaps: [{ id, title, nodeCount, createdAt, updatedAt }] }` |
+| GET | `/mindmaps` | — | `{ mindmaps: [{ id, title, nodeCount, createdAt, updatedAt, access, owner, sharedWith }] }` (mes cartes **et** celles partagées avec moi) |
 | POST | `/mindmaps` | `{ title }` | `201 { mindmap }` |
 | GET | `/mindmaps/:id` | — | `{ mindmap }` |
 | PATCH | `/mindmaps/:id` | `{ title? }` | `{ mindmap }` |
@@ -121,6 +130,25 @@ type MindMap  = { id; title; createdAt; updatedAt; rootId; nodes: MindNode[] };
 | DELETE | `/mindmaps/:id/layout` | — | `{ mindmap }` « Affichage optimisé » : efface toutes les positions manuelles |
 | DELETE | `/mindmaps/:id/nodes/:nodeId` | — | `{ ok: true }` |
 | POST | `/mindmaps/:id/nodes/:nodeId/move` | `{ parentId, index? }` | `{ node }` |
+
+### Partage d'une carte
+
+```ts
+type MapShare = { userId; name; email; avatarUrl; permission: "READ" | "WRITE"; createdAt };
+```
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/mindmaps/:id/shares` | — | `{ shares: MapShare[] }` (propriétaire seulement) |
+| POST | `/mindmaps/:id/shares` | `{ userId }` **ou** `{ email }` (compte existant, adresse exacte), `permission?: "READ"\|"WRITE"` (défaut `READ`) | `201 { shares }` — crée ou met à jour le partage ; propriétaire seulement ; `400` soi-même, `404` compte inconnu ; 60 / 15 min / utilisateur (`429`) ; 200 personnes max par carte |
+| PATCH | `/mindmaps/:id/shares/:userId` | `{ permission }` | `{ shares }` (propriétaire seulement) |
+| DELETE | `/mindmaps/:id/shares/:userId` | — | propriétaire : retire l'accès → `{ shares }` ; `:userId` = moi : **quitter** la carte → `{ ok: true }` |
+
+Le destinataire reçoit une notification `MAP_SHARED` (« Alice a partagé la
+carte « X » avec vous (lecture | écriture) », lien `/mindmaps/:id`), aussi
+lors d'un changement de droit ; jamais le propriétaire. Retirer un partage
+(ou quitter) supprime l'épingle de la carte du destinataire. Choix du
+destinataire côté client : `GET /messages/contacts` et `GET /users/lookup?email=`.
 
 ## Projets
 
@@ -252,11 +280,13 @@ type NodeTasks = { nodeId; tasks: (Task & { projectName; projectColor })[]; task
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
 | GET | `/mindmaps/:id/nodes/:nodeId/tasks` | — | `NodeTasks` |
-| POST | `/mindmaps/:id/nodes/:nodeId/tasks` | `{ taskId }` (tâche accessible ; idempotent) | `201 NodeTasks` |
+| POST | `/mindmaps/:id/nodes/:nodeId/tasks` | `{ taskId }` (tâche accessible, carte modifiable ; idempotent) | `201 NodeTasks` |
 | DELETE | `/mindmaps/:id/nodes/:nodeId/tasks/:taskId` | — | `NodeTasks` (la tâche subsiste) |
 
 `MindNode` expose aussi `taskCount` et `openTaskCount`. Créer une tâche depuis
-un nœud : `POST /tasks { name, nodeId }`.
+un nœud : `POST /tasks { name, nodeId }`. Lister : droit de lecture sur la
+carte (seules les tâches qui me sont accessibles sont listées) ; rattacher,
+détacher, créer avec `nodeId` : droit d'écriture.
 
 ## Téléchargements (public)
 
@@ -270,7 +300,7 @@ La page publique `/app` lit `DATA_DIR/downloads/latest.json` (`version`,
 ## Synchronisation hors ligne (applications)
 
 Réservé aux applications desktop / iPhone (le web reste en ligne). En-tête
-**`X-Sync-Protocol: 1`** obligatoire : sinon `426 UPGRADE_REQUIRED` (« mettez
+**`X-Sync-Protocol: 2`** obligatoire : sinon `426 UPGRADE_REQUIRED` (« mettez
 l'application à jour »), `details.serverVersion` donne la version attendue.
 
 | Méthode | Route | Réponse |
@@ -293,7 +323,10 @@ Entités : `MindMap` (create `{ title, rootId? }`), `MindNode` (`{ mapId, parent
 changer `parentId` = déplacer), `MindNodeTask` (id `nodeId:taskId`, create / delete), `Project`, `Stage`, `Activity`, `Task`
 (mêmes champs que l'API REST, plus `notes`), `TaskContributor` (id `taskId:memberId`, create / delete), `WorkSession`
 (`{ taskId, date }`), `TaskComment` (`{ taskId, body, parentId? }`, pas de modification). Lecture seule :
-`ProjectMember`, `Deliverable`, `Document` (sans chemin de stockage), `Folder`.
+`ProjectMember`, `Deliverable`, `Document` (sans chemin de stockage), `Folder`, `MindMapShare` (id `mapId:userId` ;
+le propriétaire reçoit tous les partages de sa carte, un destinataire seulement le sien). Les lignes `MindMap`
+portent en plus `ownerName` et `ownerAvatarUrl` (dérivés, non versionnés). Le périmètre `mapIds` comprend les
+cartes partagées avec moi ; une écriture sur une carte en lecture seule est `rejected` (403 `READ_ONLY`).
 
 Règles :
 - **Mise à jour** : chaque champ est appliqué si sa version serveur ≤ `base[champ]`
@@ -325,8 +358,9 @@ type NoteDocument = { ref; kind; id; title; breadcrumb: { ref; title }[]; href: 
 | PATCH | `/notes/:kind/:id` | `{ notes }` (HTML ≤ 500 ko, assaini) → `{ document }` ; `400` sur une section |
 
 `mindmap:<id>` lit et écrit les notes du **nœud racine** de la carte (un
-`node:<id>` racine est redirigé vers sa carte). Accès : cartes du compte,
-projets accessibles, tâches accessibles (y compris sans projet).
+`node:<id>` racine est redirigé vers sa carte). Accès : cartes du compte et
+cartes partagées avec moi (`editable: false` et `PATCH` → 403 en lecture
+seule), projets accessibles, tâches accessibles (y compris sans projet).
 
 ## Recherche
 
@@ -390,7 +424,10 @@ réponses `application/json`, lots acceptés, notifications → `202`).
 `Authorization: Bearer sb_…` (clé d'accès, pas un jeton de session) ;
 `401` sinon ; `403` si `Origin` étranger ; `GET` → `405`. Méthodes :
 `initialize`, `ping`, `tools/list`, `tools/call` (`resources/list` et
-`prompts/list` vides). Outils en lecture seule (voir docs/01) ; une erreur
+`prompts/list` vides). Outils de lecture, et d'écriture si la clé a
+`canWrite` (voir docs/01 : `create_task`, `update_task`, `bulk_update_tasks`,
+`update_meeting`…, `api_reference`, `api_request` vers toute route de ce
+document sauf auth, clés, mot de passe, e-mail, sync, mcp) ; une erreur
 métier revient en résultat d'outil `isError: true`. Paramètre
 `admin_access: true` (administrateurs) sur `list_projects`, `get_project`,
 `list_tasks`, `get_task`.

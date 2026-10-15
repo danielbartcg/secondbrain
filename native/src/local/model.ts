@@ -15,7 +15,8 @@ import {
 } from "@/lib/shared/project-model";
 import { NO_PROJECT_LABEL, dayString } from "@/lib/shared/task-model";
 import { sanitizeNotes } from "@/lib/sanitize";
-import type { MindMapDto, MindMapSummary, MindNodeDto } from "@/lib/mindmaps";
+import type { MindMapDto, MindMapSharing, MindMapSummary, MindNodeDto } from "@/lib/mindmaps";
+import { mapAccessOf, type MapAccess } from "@/lib/shared/map-access";
 import type { NodeTaskDto, NodeTasksResult, OrganizerDto, OrganizerTask, TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
 import type { DashboardDto, DashboardTask, Deadline } from "@/lib/dashboard";
 import type { NoteDocument, NoteKind, TreeItem } from "@/lib/notes";
@@ -333,11 +334,29 @@ export class LocalModel {
     };
   }
 
+  /** Mon droit sur une carte : propriétaire, sinon mon partage synchronisé (MindMapShare). */
+  mapAccess(mapId: string): MapAccess | null {
+    const m = this.store.get("MindMap", mapId);
+    if (!m) return null;
+    const me = this.store.meta.user?.id ?? "";
+    return mapAccessOf(m.ownerId, me, this.store.get("MindMapShare", `${mapId}:${me}`)?.permission) ?? "read";
+  }
+
+  /** Champs de partage du DTO (comme src/lib/mindmaps.ts) ; le nom du propriétaire vient de la ligne MindMap synchronisée. */
+  private mapSharing(m: Row): MindMapSharing {
+    const access = this.mapAccess(m.id) ?? "read";
+    return {
+      access,
+      owner: access === "owner" ? null : { id: m.ownerId, name: m.ownerName ?? this.userName(m.ownerId), avatarUrl: m.ownerAvatarUrl ?? null },
+      sharedWith: access === "owner" ? this.store.where("MindMapShare", (s) => s.mapId === m.id).length : 0,
+    };
+  }
+
   mindmaps(): MindMapSummary[] {
     return this.store
       .all("MindMap")
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
-      .map((m) => ({ id: m.id, title: m.title, nodeCount: this.store.where("MindNode", (n) => n.mapId === m.id).length, createdAt: m.createdAt, updatedAt: m.updatedAt }));
+      .map((m) => ({ id: m.id, title: m.title, nodeCount: this.store.where("MindNode", (n) => n.mapId === m.id).length, createdAt: m.createdAt, updatedAt: m.updatedAt, ...this.mapSharing(m) }));
   }
 
   mindmap(mapId: string): MindMapDto | null {
@@ -346,7 +365,7 @@ export class LocalModel {
     const nodes = this.store.where("MindNode", (n) => n.mapId === mapId).sort(byOrder);
     const root = nodes.find((n) => !n.parentId);
     if (!root) return null;
-    return { id: m.id, title: m.title, createdAt: m.createdAt, updatedAt: m.updatedAt, rootId: root.id, nodes: nodes.map((n) => this.nodeDto(n)) };
+    return { id: m.id, title: m.title, createdAt: m.createdAt, updatedAt: m.updatedAt, rootId: root.id, nodes: nodes.map((n) => this.nodeDto(n)), ...this.mapSharing(m) };
   }
 
   nodeTasks(nodeId: string): NodeTasksResult {
@@ -391,7 +410,8 @@ export class LocalModel {
             .map((m) => {
               const nodes = this.store.where("MindNode", (n) => n.mapId === m.id);
               const root = nodes.find((n) => !n.parentId);
-              return { ref: `mindmap:${m.id}`, kind: "mindmap" as const, id: m.id, title: m.title, hint: `${nodes.length} nœud${nodes.length > 1 ? "s" : ""}`, hasChildren: nodes.length > 1, hasNotes: hasHtmlContent(root?.notes ?? "") };
+              const shared = m.ownerId !== this.store.meta.user?.id ? ` · partagée par ${m.ownerName ?? this.userName(m.ownerId)}` : "";
+              return { ref: `mindmap:${m.id}`, kind: "mindmap" as const, id: m.id, title: m.title, hint: `${nodes.length} nœud${nodes.length > 1 ? "s" : ""}${shared}`, hasChildren: nodes.length > 1, hasNotes: hasHtmlContent(root?.notes ?? "") };
             });
         }
         if (id === "projects") {
@@ -459,7 +479,7 @@ export class LocalModel {
         const m = this.store.get("MindMap", id);
         if (!m) return null;
         const root = this.store.where("MindNode", (n) => n.mapId === id && !n.parentId)[0];
-        return { ...base, title: m.title, breadcrumb: [crumbMaps], href: `/mindmaps/${id}`, notes: sanitizeNotes(root?.notes ?? ""), updatedAt: root?.updatedAt ?? m.updatedAt };
+        return { ...base, editable: this.mapAccess(id) !== "read", title: m.title, breadcrumb: [crumbMaps], href: `/mindmaps/${id}`, notes: sanitizeNotes(root?.notes ?? ""), updatedAt: root?.updatedAt ?? m.updatedAt };
       }
       case "node": {
         const n = this.store.get("MindNode", id);
@@ -473,7 +493,7 @@ export class LocalModel {
           path.unshift(p.parentId ? { ref: `node:${p.id}`, title: p.title } : { ref: `mindmap:${n.mapId}`, title: map?.title ?? "" });
           cur = p.parentId ?? null;
         }
-        return { ...base, title: n.title, breadcrumb: [crumbMaps, ...path], href: `/mindmaps/${n.mapId}?node=${n.id}`, notes: sanitizeNotes(n.notes ?? ""), updatedAt: n.updatedAt };
+        return { ...base, editable: this.mapAccess(n.mapId) !== "read", title: n.title, breadcrumb: [crumbMaps, ...path], href: `/mindmaps/${n.mapId}?node=${n.id}`, notes: sanitizeNotes(n.notes ?? ""), updatedAt: n.updatedAt };
       }
       case "project": {
         const p = this.store.get("Project", id);

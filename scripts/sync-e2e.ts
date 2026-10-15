@@ -14,7 +14,7 @@
 import { randomBytes } from "node:crypto";
 
 const BASE = (process.env.BASE_URL ?? "http://localhost:3000").replace(/\/$/, "") + "/api/v1";
-const PROTOCOL = "1";
+const PROTOCOL = "2";
 
 let failures = 0;
 let passes = 0;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Brain, CalendarClock, CheckCircle2, FolderKanban, ListTodo, Package, Plus } from "lucide-react";
+import { AlertTriangle, Brain, CalendarClock, CheckCircle2, FolderKanban, ListTodo, Package, Plus, Users } from "lucide-react";
 import type { DashboardDto } from "@/lib/dashboard";
 import type { MindMapSummary } from "@/lib/mindmaps";
 import { StatusDonut } from "@/components/charts/StatusDonut";
@@ -196,7 +196,10 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
               {maps.slice(0, 6).map((m) => (
                 <li key={m.id}>
                   <Link href={`/mindmaps/${m.id}`} className="flex items-center justify-between gap-3 py-2 hover:text-brand-700">
-                    <span className="truncate text-sm font-medium">{m.title}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-sm font-medium">{m.title}</span>
+                      {m.owner && <Users className="h-3.5 w-3.5 shrink-0 text-violet-600" aria-label={`Partagée par ${m.owner.name}`} />}
+                    </span>
                     <span className="shrink-0 text-xs text-muted">{m.nodeCount} nœud{m.nodeCount > 1 ? "s" : ""}</span>
                   </Link>
                 </li>

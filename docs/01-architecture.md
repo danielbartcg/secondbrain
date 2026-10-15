@@ -70,6 +70,18 @@ Docker + Caddy en production.
   (`ProjectMember.userId`). Suppression du projet et gestion de l'équipe :
   propriétaire seulement. Documents et commentaires : supprimables par leur
   auteur ou le propriétaire.
+- **Cartes partagées** (`src/lib/map-access.ts`, `MindMapShare`) : une carte
+  est lisible par son propriétaire et par les personnes avec qui il l'a
+  partagée ; modifiable (nœuds, notes, titre, mise en page, tâches
+  rattachées) par le propriétaire et les partages en écriture ; suppression
+  et gestion des partages (`src/lib/map-shares.ts`) : propriétaire seulement.
+  Toute fonction de carte appelle `requireMapAccess(userId, mapId,
+  "read" | "write" | "owner")` (404 si inaccessible, 403 si droit
+  insuffisant) ; les requêtes de liste utilisent `mapAccessWhere(userId)`
+  (`mapWriteWhere` pour l'écriture) ; `checkNode(…, "read" | "write")` pour
+  les tâches d'un nœud. Les écritures gardent le verrou de ligne (`mutateMap`).
+  Les DTO de carte portent `access`, `owner` et `sharedWith` ; règle pure
+  partagée : `src/lib/shared/map-access.ts`.
 - **Rôles** (`src/lib/roles.ts`, `src/lib/users.ts`) : `User.role` = `USER` ou
   `ADMIN` ; le **super administrateur** est codé en dur
   (`SUPER_ADMIN_EMAIL = daniel.barral@outlook.com`, surchargeable par la
@@ -362,7 +374,24 @@ l'utilisateur : `whoami`, `get_dashboard`, `list_projects`, `get_project`,
 `get_mind_map`, `browse_notes`, `read_note`, `search`, `list_users`
 (administrateurs). Un **administrateur** n'accède aux projets et tâches des
 autres que s'il le demande **explicitement** (`admin_access: true`) ; sans ce
-drapeau, son périmètre est le sien. Protection « DNS rebinding » (en-tête
+drapeau, son périmètre est le sien.
+
+**Écriture** (`src/lib/mcp-write.ts`, clés `canWrite`, défaut à la création) :
+les outils d'écriture appellent l'API REST `/api/v1` **en boucle locale**
+(`INTERNAL_API_URL` ou `http://127.0.0.1:$PORT`) avec une **session
+éphémère** (120 s, supprimée après l'appel) de l'utilisateur : mêmes droits
+(anti-IDOR, `canEdit`), validations zod, notifications et piste d'audit que
+l'interface. Outils dédiés : `create_task`, `update_task`,
+`bulk_update_tasks` (filtre étape / activité / statut / responsable / nom ;
+responsable, superviseur, statut, priorité, complexité, décalage de dates ;
+`dry_run` ; 500 max), `delete_task`, `add_comment`, `create_project`,
+`update_project`, `create_stage`, `save_note`, `create_meeting`,
+`update_meeting`, `decide_meeting`, `upsert_risk`, `edit_mind_map`,
+`send_message` ; les personnes se désignent par id, e-mail ou nom. Pour tout
+le reste : `api_reference` (sert `docs/04-api.md`, copié dans l'image Docker)
+et `api_request` (n'importe quelle route, sauf auth, clés, mot de passe,
+e-mail, sync et mcp). Une clé en lecture seule ne voit pas ces outils et un
+appel est refusé. Protection « DNS rebinding » (en-tête
 `Origin` étranger refusé), 600 requêtes / 15 min / compte. Claude Desktop s'y
 connecte via `mcp-remote` (configuration générée dans les Préférences) ;
 Claude Code via `claude mcp add --transport http`.

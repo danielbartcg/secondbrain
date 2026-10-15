@@ -307,6 +307,12 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
               <div className="notes-document mt-6">
                 <RichTextEditor key={doc.ref} documentKey={doc.ref} initialHtml={doc.notes} onChange={onChange} minHeight={420} placeholder="Écrivez vos notes… Titres, listes, cases à cocher, images collées." />
               </div>
+            ) : doc.kind === "mindmap" || doc.kind === "node" ? (
+              <div className="mt-6">
+                <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">Lecture seule — carte partagée</p>
+                {/* Contenu assaini par sanitizeNotes() (serveur et base locale de l'application). */}
+                <div className="notes-document prose max-w-none" dangerouslySetInnerHTML={{ __html: doc.notes }} />
+              </div>
             ) : (
               <p className="mt-6 text-sm text-muted">Cette rubrique regroupe des éléments ; dépliez-la dans l&apos;arborescence et choisissez un élément pour prendre des notes.</p>
             )}

@@ -48,6 +48,8 @@ model User {
   emailTokens          EmailToken[]
   apiKeys              ApiKey[]
   pins                 Pin[]
+  mapShares            MindMapShare[]            @relation("MapShareUser")
+  mapSharesGiven       MindMapShare[]            @relation("MapShareBy")
   taskEvents           TaskEvent[]               @relation("TaskEventActor")
   meetingsAuthored     Meeting[]                 @relation("MeetingAuthor")
   mindMaps             MindMap[]
@@ -94,9 +96,33 @@ model MindMap {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  nodes MindNode[]
+  nodes  MindNode[]
+  /// Partages : personnes ayant accès en lecture ou en écriture.
+  shares MindMapShare[]
 
   @@index([ownerId])
+}
+
+/// Droit sur une carte partagée.
+enum MapPermission {
+  READ
+  WRITE
+}
+
+/// Partage d'une carte mentale avec un autre utilisateur (le propriétaire seul gère les partages).
+model MindMapShare {
+  mapId      String
+  map        MindMap       @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User          @relation("MapShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  permission MapPermission @default(READ)
+  sharedById String?
+  sharedBy   User?         @relation("MapShareBy", fields: [sharedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@id([mapId, userId])
+  @@index([userId])
 }
 
 /// Statut d'un nœud : à surveiller = mis en évidence ; fermé = hachuré et
@@ -411,6 +437,8 @@ enum NotificationType {
   MEETING_REVIEW
   /// Un validateur a validé ou refusé votre compte-rendu.
   MEETING_DECISION
+  /// Une carte mentale a été partagée avec vous.
+  MAP_SHARED
 }
 
 /// Envoi de la copie e-mail d'une notification (null : pas d'e-mail à envoyer).
@@ -454,6 +482,8 @@ model ApiKey {
   /// Empreinte SHA-256 (hex) de la clé ; la clé en clair n'est montrée qu'une fois.
   tokenHash  String    @unique
   lastUsedAt DateTime?
+  /// Modifications autorisées via le connecteur MCP (sinon lecture seule).
+  canWrite   Boolean   @default(true)
   createdAt  DateTime  @default(now())
 
   @@index([userId])

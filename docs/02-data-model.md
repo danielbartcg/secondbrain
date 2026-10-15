@@ -8,6 +8,7 @@ sont en `SetNull`.
 ```
 User ──< Session
 User ──< MindMap ──< MindNode (arbre par parentId)
+MindMap ──< MindMapShare >── User           partage d'une carte (lecture / écriture)
 User ──< Project (owner)
 User ──< Task (owner : créateur ; seul lecteur d'une tâche sans projet)
 Project ──< ProjectMember (userId? → User)
@@ -39,7 +40,7 @@ Task.prerequisiteIds[] → Task (même projet)  prérequis (Gantt)
 | --- | --- | --- |
 | `User` | `id`, `email` (unique), `passwordHash`, `name` (affiché, = « Prénom Nom »), `firstName`, `lastName`, `avatarUrl?`, `theme` (`light` · `dark` · `sepia` · `ocean` · `forest`), `role` (`USER` · `ADMIN`), `managerId?` (N+1, `SetNull`), `emailVerifiedAt?` (adresse validée, informatif), `emailNotifications` (copies e-mail, vrai par défaut), timestamps | propriétaire des cartes et des projets, auteur des commentaires et dépôts ; `reports` = N-1 directs ; super administrateur codé en dur (e-mail) |
 | `EmailToken` | `id`, `userId`, `kind` (`VERIFY_EMAIL` · `RESET_PASSWORD`), `tokenHash` (unique, SHA-256), `email` (adresse visée), `expiresAt` (7 j / 1 h), `usedAt?`, `createdAt` | lien envoyé par e-mail, **à usage unique** (consommation atomique) ; un nouveau lien invalide les précédents du même usage ; une validation n'est acceptée que si `email` est toujours l'adresse du compte |
-| `ApiKey` | `id`, `userId`, `name`, `prefix` (10 premiers caractères, affichage), `tokenHash` (unique, SHA-256), `lastUsedAt?`, `createdAt` | clé `sb_…` (256 bits) du connecteur MCP, montrée une seule fois ; **lecture seule**, ne vaut pas session (refusée par `/api/v1` hors `/mcp`) ; 10 par compte |
+| `ApiKey` | `id`, `userId`, `name`, `prefix` (10 premiers caractères, affichage), `tokenHash` (unique, SHA-256), `canWrite` (défaut true), `lastUsedAt?`, `createdAt` | clé `sb_…` (256 bits) du connecteur MCP, montrée une seule fois ; lecture seule si `canWrite` faux, ne vaut pas session (refusée par `/api/v1` hors `/mcp`) ; 10 par compte |
 | `Session` | `id`, `token` (unique : **empreinte SHA-256 hex** du jeton de 256 bits), `userId`, `label?`, `expiresAt`, `createdAt` | jeton unique cookie **et** Bearer, jamais stocké en clair (`hashSessionToken()`) ; `label` = client (« Web », « iPhone ») |
 
 ## Cartes mentales
@@ -48,6 +49,14 @@ Task.prerequisiteIds[] → Task (même projet)  prérequis (Gantt)
 | --- | --- | --- |
 | `MindMap` | `id`, `ownerId`, `title`, timestamps | `title` = titre du nœud racine (synchronisés) |
 | `MindNode` | `id`, `mapId`, `parentId?`, `title`, `notes` (HTML), `color?`, `collapsed`, `status` (`OPEN` · `WATCH` · `CLOSED`), `order`, `x?`, `y?` (position manuelle sur le canevas ; null = automatique), timestamps | `parentId = null` ⇔ racine (une par carte) ; `order` renuméroté 0..n-1 parmi les frères ; `WATCH` = mis en évidence, `CLOSED` = hachuré et masqué par défaut avec sa descendance |
+| `MindMapShare` | `mapId` + `userId` (clé), `permission` (`MapPermission` : `READ` · `WRITE`), `sharedById?` (`SetNull`), timestamps | partage d'une carte avec un autre compte ; jamais le propriétaire ; géré par le propriétaire seul (`src/lib/map-shares.ts`) ; le destinataire peut le supprimer (quitter) ; supprimé avec la carte ou le compte ; synchronisé en lecture seule |
+
+**Droits sur une carte** (`src/lib/map-access.ts`, `requireMapAccess`) :
+`owner` (propriétaire : tout, dont supprimer la carte et gérer les partages),
+`write` (partage `WRITE` : nœuds, notes, titre, mise en page, tâches
+rattachées), `read` (partage `READ` : consultation seule). Carte inaccessible
+⇒ 404 ; droit insuffisant ⇒ 403. Lister / lire : `mapAccessWhere(userId)` ;
+écrire : `mapWriteWhere(userId)` ou `requireMapAccess(…, "write")`.
 
 ## Projets
 
@@ -129,7 +138,7 @@ Non synchronisés (en ligne uniquement dans l'application native).
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `Pin` | `userId` + `kind` (`PROJECT` · `MINDMAP`) + `targetId` (clé), `createdAt` | projet accessible ou carte possédée (vérifié à l'épinglage) ; épingles orphelines ignorées et purgées à la lecture ; 30 max par utilisateur (la plus ancienne cède) ; non synchronisé |
+| `Pin` | `userId` + `kind` (`PROJECT` · `MINDMAP`) + `targetId` (clé), `createdAt` | projet accessible ou carte accessible — possédée ou partagée (vérifié à l'épinglage ; supprimée quand le partage est retiré ou quitté) ; épingles orphelines ignorées et purgées à la lecture ; 30 max par utilisateur (la plus ancienne cède) ; non synchronisé |
 
 ## Messagerie
 
@@ -143,7 +152,7 @@ Non synchronisés (en ligne uniquement dans l'application native).
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `SyncLog` | `seq` (BIGSERIAL), `entity`, `entityId`, `field?`, `op` (`UPSERT` · `DELETE`), `projectId?`, `mapId?`, `ownerId?`, `at` | alimenté **uniquement par le déclencheur** `sb_sync_log` sur MindMap, MindNode, MindNodeTask, Project, ProjectMember, Stage, Activity, Task, TaskContributor, WorkSession, TaskComment, Deliverable, Document, Folder. `field` null = création / suppression ; `updatedAt` / `createdAt` ignorés. `entityId` composite « nodeId:taskId » (MindNodeTask) et « taskId:memberId » (TaskContributor). Une tâche qui change de projet produit une suppression pour l'ancienne portée. |
+| `SyncLog` | `seq` (BIGSERIAL), `entity`, `entityId`, `field?`, `op` (`UPSERT` · `DELETE`), `projectId?`, `mapId?`, `ownerId?`, `at` | alimenté **uniquement par le déclencheur** `sb_sync_log` sur MindMap, MindNode, MindNodeTask, MindMapShare, Project, ProjectMember, Stage, Activity, Task, TaskContributor, WorkSession, TaskComment, Deliverable, Document, Folder. `field` null = création / suppression ; `updatedAt` / `createdAt` ignorés. `entityId` composite « nodeId:taskId » (MindNodeTask) et « taskId:memberId » (TaskContributor), « mapId:userId » (MindMapShare, portée = sa carte). Une tâche qui change de projet produit une suppression pour l'ancienne portée. |
 | `AppliedOp` | `userId`, `opId` (clé composite), `result` (JSON), `createdAt` | opérations déjà rejouées : un renvoi renvoie le même résultat sans réappliquer |
 
 Version d'un champ = `max(seq)` de ses lignes `UPSERT` (ou de la création).
@@ -171,6 +180,8 @@ Version d'un champ = `max(seq)` de ses lignes `UPSERT` (ou de la création).
 | `20261014150000_users_profile_roles` | `User.firstName` (reprise : ancien `name`), `lastName`, `avatarUrl`, `theme`, `role` (`UserRole`), `managerId` |
 | `20261014090000_task_supervisor_contributors` | `Task.supervisorId`, `TaskContributor` |
 | `20261013150000_object_notes` | `notes` (HTML) sur `Project`, `Stage`, `Activity`, `Task` |
+| `20261016090000_map_shares_api_key_write` | `MindMapShare` (`MapPermission`), valeur `MAP_SHARED` de `NotificationType` (et droit d'écriture des clés d'API) |
+| `20261016091000_map_share_sync_trigger` | `sb_sync_log()` redéfinie avec la branche `MindMapShare` (identifiant « mapId:userId », portée `mapId`) et déclencheur sur `MindMapShare` |
 | `20261013080000_orphan_tasks_node_links` | `Task.ownerId` / `projectId` (reprise : projet déduit de l'étape, propriétaire du projet), `Task.stageId` nullable, `MindNodeTask` |
 
 Développement : `npx prisma migrate dev`. Production : `npm run prod:deploy`

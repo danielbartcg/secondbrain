@@ -41,10 +41,15 @@ README.
   **hors transaction** (file `emailState`, `mailer.ts`) : ne jamais appeler
   SMTP dans une transaction ; tout texte inséré dans un e-mail passe par
   `escapeHtml()`.
-- **Connecteur MCP** (`src/lib/mcp.ts`) : outils en lecture seule, toujours
-  via les fonctions métier avec `userId` ; l'accès aux données des autres
-  exige `admin_access: true` **et** `isAdmin`. Les clés `sb_…` ne valent pas
-  session.
+- **Connecteur MCP** (`src/lib/mcp.ts`, `src/lib/mcp-write.ts`) : outils de
+  lecture via les fonctions métier avec `userId` ; l'accès aux données des
+  autres exige `admin_access: true` **et** `isAdmin`. Les outils d'écriture
+  (clé `canWrite`) passent **par l'API REST en boucle locale** avec une session
+  éphémère de l'utilisateur : mêmes droits, validations, notifications et
+  audit que l'interface. Jamais d'écriture Prisma directe depuis le MCP.
+  Routes sensibles interdites (`FORBIDDEN` : auth, clés, mot de passe,
+  e-mail, sync, mcp). Les clés `sb_…` ne valent pas session. Une nouvelle
+  route est automatiquement accessible via `api_request` (documentée en 04).
 - **Piste d'audit des tâches** (`src/lib/task-events.ts`) : toute écriture sur
   une tâche (champs, personnes, prérequis, rattachement, commentaires, sessions,
   nœuds, risques) enregistre des `TaskEvent` **dans la même transaction**

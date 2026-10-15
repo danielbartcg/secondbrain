@@ -1,6 +1,6 @@
 import { NetworkError, isForcedOffline, remote, remoteUpload } from "./remote";
 import type { Store } from "./store";
-import { WRITABLE, type ConflictEntry, type Entity, type FieldSeqs, type Op, type OpKind, type Row, type RowRec, type SyncStatus } from "./types";
+import { SYNC_PROTOCOL, WRITABLE, type ConflictEntry, type Entity, type FieldSeqs, type Op, type OpKind, type Row, type RowRec, type SyncStatus } from "./types";
 
 /**
  * Moteur de synchronisation de l'application native (docs/05-offline-sync.md).
@@ -331,7 +331,7 @@ export class SyncEngine {
   }
 
   private async pull(full: boolean) {
-    if (full || !this.store.meta.cursor) {
+    if (full || !this.store.meta.cursor || this.store.meta.protocol !== SYNC_PROTOCOL) {
       const r = await remote<PullResult>("GET", "/sync/pull");
       this.guard(r.status, r.data);
       this.applySnapshot(r.data);
@@ -375,6 +375,7 @@ export class SyncEngine {
     }
     this.store.replaceAll(recs);
     if (p.cursor !== null) this.store.setMeta("cursor", p.cursor);
+    this.store.setMeta("protocol", SYNC_PROTOCOL);
     this.emit({ remoteChanges: this.status.remoteChanges + 1 });
   }
 

@@ -8,7 +8,7 @@ import { ENTITIES, type ConflictEntry, type Entity, type FieldSeqs, type Meta, t
  * (une transaction par tour d'événements).
  */
 
-const DEFAULT_META: Meta = { serverUrl: "", token: null, user: null, cursor: 0, lastSyncAt: null, ranks: [] };
+const DEFAULT_META: Meta = { serverUrl: "", token: null, user: null, cursor: 0, protocol: 0, lastSyncAt: null, ranks: [] };
 
 export class Store {
   tables = new Map<Entity, Map<string, RowRec>>(ENTITIES.map((e) => [e, new Map()]));
@@ -109,6 +109,7 @@ export class Store {
         break;
       case "MindMap":
         for (const n of this.where("MindNode", (r) => r.mapId === id)) this.removeCascade("MindNode", n.id);
+        for (const [key, r] of this.table("MindMapShare")) if (r.data.mapId === id) this.remove("MindMapShare", key);
         break;
       case "MindNode": {
         for (const c of this.where("MindNode", (r) => r.parentId === id)) this.removeCascade("MindNode", c.id);

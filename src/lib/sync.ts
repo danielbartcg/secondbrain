@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError, badRequest, notFound } from "@/lib/api";
 import { projectAccessWhere } from "@/lib/projects";
+import { mapAccessWhere } from "@/lib/map-access";
 import {
   createActivity,
   createProject,
@@ -56,7 +57,7 @@ import { z } from "zod";
  */
 
 /** À incrémenter à chaque changement incompatible du protocole ou des données synchronisées. */
-export const SYNC_PROTOCOL_VERSION = 1;
+export const SYNC_PROTOCOL_VERSION = 2;
 
 export function assertProtocol(version: string | null) {
   if (Number(version) !== SYNC_PROTOCOL_VERSION) {
@@ -68,6 +69,7 @@ export type SyncEntity =
   | "MindMap"
   | "MindNode"
   | "MindNodeTask"
+  | "MindMapShare"
   | "Project"
   | "ProjectMember"
   | "Stage"
@@ -99,7 +101,23 @@ function serialize(entity: SyncEntity, row: Row): Row {
 }
 
 const compositeId = (entity: SyncEntity, row: Row) =>
-  entity === "MindNodeTask" ? `${row.nodeId}:${row.taskId}` : entity === "TaskContributor" ? `${row.taskId}:${row.memberId}` : String(row.id);
+  entity === "MindNodeTask"
+    ? `${row.nodeId}:${row.taskId}`
+    : entity === "TaskContributor"
+      ? `${row.taskId}:${row.memberId}`
+      : entity === "MindMapShare"
+        ? `${row.mapId}:${row.userId}`
+        : String(row.id);
+
+/**
+ * Lignes MindMap enrichies du nom et de la photo du propriétaire
+ * (`ownerName`, `ownerAvatarUrl`, champs dérivés non journalisés) : une
+ * carte partagée affiche « partagée par … » hors ligne.
+ */
+async function mindMapRows(where: Prisma.MindMapWhereInput): Promise<Row[]> {
+  const rows = await prisma.mindMap.findMany({ where, include: { owner: { select: { name: true, avatarUrl: true } } } });
+  return rows.map(({ owner, ...m }) => ({ ...m, ownerName: owner.name, ownerAvatarUrl: owner.avatarUrl }));
+}
 
 /** Lignes courantes d'une entité, par identifiant. */
 async function fetchRows(entity: SyncEntity, ids: string[]): Promise<Map<string, Row>> {
@@ -108,7 +126,10 @@ async function fetchRows(entity: SyncEntity, ids: string[]): Promise<Map<string,
   let rows: Row[] = [];
   switch (entity) {
     case "MindMap":
-      rows = await prisma.mindMap.findMany({ where: { id: { in: ids } } });
+      rows = await mindMapRows({ id: { in: ids } });
+      break;
+    case "MindMapShare":
+      rows = await prisma.mindMapShare.findMany({ where: { OR: ids.map((i) => ({ mapId: i.split(":")[0], userId: i.split(":")[1] })) } });
       break;
     case "MindNode":
       rows = await prisma.mindNode.findMany({ where: { id: { in: ids } } });
@@ -187,7 +208,7 @@ function maxSeq(seqs: FieldSeqs | undefined): number {
 async function scopeOf(userId: string): Promise<SyncScope> {
   const [projects, maps] = await Promise.all([
     prisma.project.findMany({ where: projectAccessWhere(userId), select: { id: true } }),
-    prisma.mindMap.findMany({ where: { ownerId: userId }, select: { id: true } }),
+    prisma.mindMap.findMany({ where: mapAccessWhere(userId), select: { id: true } }),
   ]);
   return { projectIds: projects.map((p) => p.id), mapIds: maps.map((m) => m.id) };
 }
@@ -209,6 +230,13 @@ async function visibleRows(userId: string, scope: SyncScope, entity: SyncEntity,
     const tasks = await prisma.task.findMany({ where: { id: { in: [...rows.values()].map((r) => String(r.taskId)) } }, select: { id: true, projectId: true, ownerId: true } });
     const tOf = new Map(tasks.map((t) => [t.id, t]));
     for (const [id, r] of rows) if (taskVisible(tOf.get(String(r.taskId)))) out.set(id, r);
+    return out;
+  }
+  if (entity === "MindMapShare") {
+    // Le propriétaire voit tous les partages de sa carte ; un destinataire, seulement le sien.
+    const maps = await prisma.mindMap.findMany({ where: { id: { in: [...rows.values()].map((r) => String(r.mapId)) } }, select: { id: true, ownerId: true } });
+    const ownerOf = new Map(maps.map((m) => [m.id, m.ownerId]));
+    for (const [id, r] of rows) if (mids.has(String(r.mapId)) && (ownerOf.get(String(r.mapId)) === userId || r.userId === userId)) out.set(id, r);
     return out;
   }
   if (entity === "MindNodeTask") {
@@ -247,8 +275,9 @@ export async function snapshot(userId: string, only?: { projectId?: string; mapI
   const mids = only ? (only.mapId && scope.mapIds.includes(only.mapId) ? [only.mapId] : []) : scope.mapIds;
   if (only && pids.length === 0 && mids.length === 0) throw notFound("Élément");
 
-  const [maps, nodes, links, projects, members, stages, activities, tasks, deliverables, documents, folders] = await Promise.all([
-    prisma.mindMap.findMany({ where: { id: { in: mids } } }),
+  const [maps, shares, nodes, links, projects, members, stages, activities, tasks, deliverables, documents, folders] = await Promise.all([
+    mindMapRows({ id: { in: mids } }),
+    prisma.mindMapShare.findMany({ where: { mapId: { in: mids }, OR: [{ userId }, { map: { ownerId: userId } }] } }),
     prisma.mindNode.findMany({ where: { mapId: { in: mids } } }),
     prisma.mindNodeTask.findMany({ where: { node: { mapId: { in: mids } } } }),
     prisma.project.findMany({ where: { id: { in: pids } } }),
@@ -269,6 +298,7 @@ export async function snapshot(userId: string, only?: { projectId?: string; mapI
 
   const groups: Array<[SyncEntity, Row[]]> = [
     ["MindMap", maps],
+    ["MindMapShare", shares],
     ["MindNode", nodes],
     ["Project", projects],
     ["ProjectMember", members],

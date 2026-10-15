@@ -10,7 +10,8 @@ out
 .git
 .gitignore
 .claude
-docs
+docs/*
+!docs/04-api.md
 README.md
 CLAUDE.md
 native/release

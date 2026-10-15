@@ -4,12 +4,14 @@
  * renvoyées par GET /api/v1/sync/pull (dates en ISO).
  */
 
-export const SYNC_PROTOCOL = 1;
+export const SYNC_PROTOCOL = 2;
 
 export const ENTITIES = [
   "MindMap",
   "MindNode",
   "MindNodeTask",
+  /** Partages de cartes (lecture seule : droits de l'utilisateur hors ligne). */
+  "MindMapShare",
   "Project",
   "ProjectMember",
   "Stage",
@@ -92,6 +94,8 @@ export type Meta = {
   token: string | null;
   user: Profile | null;
   cursor: number;
+  /** Protocole des données locales : différent de SYNC_PROTOCOL (mise à jour de l'application) ⇒ instantané complet. */
+  protocol: number;
   lastSyncAt: string | null;
   /** Ordre personnel « Mes tâches » (non synchronisé : conservé localement). */
   ranks: string[];

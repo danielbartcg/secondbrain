@@ -19,7 +19,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, LayoutTemplate, ListTodo, PanelRightOpen, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, LayoutTemplate, ListTodo, Lock, PanelRightOpen, Plus, Share2, Trash2, Users, X } from "lucide-react";
 import type { NodeStatus } from "@prisma/client";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
@@ -29,6 +29,7 @@ import { Button, InlineEdit, NODE_STATUS_LABEL, errorMessage, toast } from "@/co
 import { NodeTasksPanel } from "./NodeTasksPanel";
 import { useSearchParams } from "next/navigation";
 import { PinButton } from "@/components/PinButton";
+import { ShareMapDialog } from "./ShareMapDialog";
 
 /**
  * Éditeur de carte mentale.
@@ -47,6 +48,11 @@ import { PinButton } from "@/components/PinButton";
  *    serveur. Les requêtes partent une par une (file d'attente) ; les appels
  *    résolvent l'identifiant réel au moment où ils partent. En cas d'erreur,
  *    la carte est rechargée.
+ *  - Partage (`map.access`) : le propriétaire partage la carte (bouton
+ *    « Partager ») ; en écriture, tout fonctionne sauf la gestion des
+ *    partages ; en **lecture seule**, aucune modification n'est possible
+ *    (création, renommage, glisser, statut, couleur, notes, tâches) — replier
+ *    / déplier reste possible mais n'est pas enregistré.
  */
 
 const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
@@ -202,7 +208,12 @@ function Editor({ initial }: { initial: MindMapDto }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const searchParams = useSearchParams();
+  /** Carte partagée en lecture seule : toute écriture est désactivée. */
+  const readOnly = map.access === "read";
+  const isOwner = map.access === "owner";
+  const closeSharing = useCallback(() => setSharing(false), []);
 
   // Arrivée depuis la recherche (?node=…) : sélectionne et ouvre le nœud (fermés affichés si besoin).
   const initialNode = useRef(searchParams.get("node"));
@@ -286,19 +297,21 @@ function Editor({ initial }: { initial: MindMapDto }) {
 
   const rename = useCallback(
     (id: string, title: string) => {
+      if (readOnly) return;
       patchLocal(id, { title });
       if (id === map.rootId) setMap((m) => ({ ...m, title }));
       void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { title }));
     },
-    [map.id, map.rootId, patchLocal, real, run],
+    [map.id, map.rootId, patchLocal, real, run, readOnly],
   );
 
   const setColor = useCallback(
     (id: string, color: string | null) => {
+      if (readOnly) return;
       patchLocal(id, { color });
       void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { color }));
     },
-    [map.id, patchLocal, real, run],
+    [map.id, patchLocal, real, run, readOnly],
   );
 
   const toggleCollapse = useCallback(
@@ -307,34 +320,37 @@ function Editor({ initial }: { initial: MindMapDto }) {
       if (!n) return;
       const collapsed = !n.collapsed;
       patchLocal(id, { collapsed });
-      void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { collapsed }));
+      // Lecture seule : repli local, non enregistré.
+      if (!readOnly) void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { collapsed }));
     },
-    [byId, map.id, patchLocal, real, run],
+    [byId, map.id, patchLocal, real, run, readOnly],
   );
 
   const setStatus = useCallback(
     (id: string, status: NodeStatus) => {
       const n = byId.get(id);
-      if (!n || n.status === status) return;
+      if (readOnly || !n || n.status === status) return;
       patchLocal(id, { status });
       // Un nœud fermé disparaît (sauf affichage des fermés) : on sélectionne son parent.
       if (status === "CLOSED" && !showClosed && n.parentId) setSelectedId(n.parentId);
       void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { status }));
     },
-    [byId, map.id, patchLocal, real, run, showClosed],
+    [byId, map.id, patchLocal, real, run, showClosed, readOnly],
   );
 
   /** Position manuelle mémorisée (null = reprend la mise en page automatique). */
   const setPosition = useCallback(
     (id: string, x: number | null, y: number | null) => {
+      if (readOnly) return;
       patchLocal(id, { x, y });
       void run(() => api.patch(`/mindmaps/${map.id}/nodes/${real(id)}`, { x, y }));
     },
-    [map.id, patchLocal, real, run],
+    [map.id, patchLocal, real, run, readOnly],
   );
 
   /** « Affichage optimisé » : efface toutes les positions manuelles de la carte. */
   const resetLayout = useCallback(() => {
+    if (readOnly) return;
     if (!confirm("Êtes-vous sûr(e) de vouloir écraser vos personnalisations liées à la position des éléments sur le schéma ?")) return;
     setNodes((ns) => ns.map((n) => ({ ...n, x: null, y: null })));
     void run(async () => {
@@ -342,10 +358,11 @@ function Editor({ initial }: { initial: MindMapDto }) {
       setNodes(mindmap.nodes);
       requestAnimationFrame(() => void fitView({ padding: 0.25, duration: 400, maxZoom: 1.25 }));
     });
-  }, [map.id, run, fitView]);
+  }, [map.id, run, fitView, readOnly]);
 
   const setNotes = useCallback(
     (id: string, notes: string) => {
+      if (readOnly) return;
       patchLocal(id, { notes });
       const timers = notesTimers.current;
       clearTimeout(timers.get(id));
@@ -357,12 +374,13 @@ function Editor({ initial }: { initial: MindMapDto }) {
         }, 600),
       );
     },
-    [map.id, patchLocal, real, run],
+    [map.id, patchLocal, real, run, readOnly],
   );
 
   /** Création optimiste : le nœud apparaît et passe en édition immédiatement. */
   const addChild = useCallback(
     (parentId: string, index?: number) => {
+      if (readOnly) return;
       const tempId = `tmp-${Date.now()}-${tempCounter++}`;
       setNodes((ns) => {
         const next = ns.map((n) => (n.id === parentId ? { ...n, collapsed: false } : n));
@@ -403,7 +421,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
         setEditingId((s) => (s === tempId ? node.id : s));
       });
     },
-    [map.id, real, run],
+    [map.id, real, run, readOnly],
   );
 
   const addSibling = useCallback(
@@ -419,7 +437,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
   const remove = useCallback(
     (id: string) => {
       const n = byId.get(id);
-      if (!n || !n.parentId) return;
+      if (readOnly || !n || !n.parentId) return;
       const ids = subtreeIds(nodes, id);
       if (ids.size > 1) {
         const sub = ids.size - 1;
@@ -434,27 +452,28 @@ function Editor({ initial }: { initial: MindMapDto }) {
       setEditingId(null);
       void run(() => api.delete(`/mindmaps/${map.id}/nodes/${real(id)}`));
     },
-    [byId, map.id, nodes, real, run],
+    [byId, map.id, nodes, real, run, readOnly],
   );
 
   const move = useCallback(
     (id: string, parentId: string) => {
       const n = byId.get(id);
-      if (!n || n.parentId === parentId) return;
+      if (readOnly || !n || n.parentId === parentId) return;
       const count = nodes.filter((x) => x.parentId === parentId).length;
       setNodes((ns) => ns.map((x) => (x.id === id ? { ...x, parentId, order: count } : x.id === parentId ? { ...x, collapsed: false } : x)));
       void run(() => api.post(`/mindmaps/${map.id}/nodes/${real(id)}/move`, { parentId: real(parentId) }));
     },
-    [byId, map.id, nodes, real, run],
+    [byId, map.id, nodes, real, run, readOnly],
   );
 
   const renameMap = useCallback(
     (title: string) => {
+      if (readOnly) return;
       setMap((m) => ({ ...m, title }));
       patchLocal(map.rootId, { title });
       void run(() => api.patch(`/mindmaps/${map.id}`, { title }));
     },
-    [map.id, map.rootId, patchLocal, run],
+    [map.id, map.rootId, patchLocal, run, readOnly],
   );
 
   const expandAll = useCallback(
@@ -464,9 +483,9 @@ function Editor({ initial }: { initial: MindMapDto }) {
       );
       if (targets.length === 0) return;
       setNodes((ns) => ns.map((n) => (targets.some((t) => t.id === n.id) ? { ...n, collapsed } : n)));
-      void run(() => Promise.all(targets.map((t) => api.patch(`/mindmaps/${map.id}/nodes/${real(t.id)}`, { collapsed }))));
+      if (!readOnly) void run(() => Promise.all(targets.map((t) => api.patch(`/mindmaps/${map.id}/nodes/${real(t.id)}`, { collapsed }))));
     },
-    [map.id, nodes, real, run],
+    [map.id, nodes, real, run, readOnly],
   );
 
   // --- Sélection / clavier -----------------------------------------------------
@@ -483,11 +502,11 @@ function Editor({ initial }: { initial: MindMapDto }) {
 
   // Raccourcis au niveau de la fenêtre : ils fonctionnent où que soit le focus,
   // sauf dans un champ de saisie (panneau, éditeur de notes, titre inline).
-  const latest = useRef({ selectedId, editingId, addChild, addSibling, remove, toggleCollapse, select });
-  latest.current = { selectedId, editingId, addChild, addSibling, remove, toggleCollapse, select };
+  const latest = useRef({ selectedId, editingId, addChild, addSibling, remove, toggleCollapse, select, readOnly });
+  latest.current = { selectedId, editingId, addChild, addSibling, remove, toggleCollapse, select, readOnly };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const { selectedId, editingId, addChild, addSibling, remove, toggleCollapse, select } = latest.current;
+      const { selectedId, editingId, addChild, addSibling, remove, toggleCollapse, select, readOnly } = latest.current;
       if (e.key === "Escape" && !isTypingTarget(e.target)) {
         select(null);
         setPanelOpen(false);
@@ -495,6 +514,8 @@ function Editor({ initial }: { initial: MindMapDto }) {
       }
       if (isTypingTarget(e.target) || editingId || !selectedId) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Lecture seule : seul Espace (replier / déplier, non enregistré) reste actif.
+      if (readOnly && e.key !== " ") return;
       switch (e.key) {
         case "Tab":
           e.preventDefault();
@@ -552,7 +573,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
           position: { x: p.x, y: p.y },
           width: p.width,
           height: p.height,
-          draggable: true,
+          draggable: !readOnly,
           selected: p.id === selectedId,
           data: {
             title: n.title,
@@ -574,7 +595,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
         };
       }),
     );
-  }, [positions, byId, closedHidden, selectedId, editingId, rename, stopEditing, toggleCollapse, showClosedNodes, layoutTick]);
+  }, [positions, byId, closedHidden, selectedId, editingId, rename, stopEditing, toggleCollapse, showClosedNodes, layoutTick, readOnly]);
 
   // Le côté des connecteurs suit la position réelle (un nœud déplacé à gauche de
   // son parent se relie par la gauche).
@@ -604,6 +625,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
 
   const onNodeDragStop = useCallback(
     (_e: unknown, dragged: MindNode) => {
+      if (readOnly) return;
       const forbidden = subtreeIds(nodes, dragged.id);
       const cx = dragged.position.x + (dragged.width ?? 0) / 2;
       const cy = dragged.position.y + (dragged.height ?? 0) / 2;
@@ -634,7 +656,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
       }
       setPosition(dragged.id, Math.round(dragged.position.x), Math.round(dragged.position.y));
     },
-    [move, nodes, rfNodes, positions, setPosition, map.rootId],
+    [move, nodes, rfNodes, positions, setPosition, map.rootId, readOnly],
   );
   const manualCount = useMemo(() => nodes.filter((n) => n.x !== null && n.y !== null).length, [nodes]);
 
@@ -676,9 +698,28 @@ function Editor({ initial }: { initial: MindMapDto }) {
         <Link href="/mindmaps" className="shrink-0 rounded-lg p-1.5 text-ink-2 hover:bg-surface-2" title="Retour aux cartes" aria-label="Retour aux cartes">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <InlineEdit value={map.title} onSave={renameMap} as="h1" className="min-w-0 flex-1 truncate text-base font-semibold sm:text-lg" />
+        {readOnly ? (
+          <h1 className="min-w-0 flex-1 truncate text-base font-semibold sm:text-lg" title={map.title}>
+            {map.title}
+          </h1>
+        ) : (
+          <InlineEdit value={map.title} onSave={renameMap} as="h1" className="min-w-0 flex-1 truncate text-base font-semibold sm:text-lg" />
+        )}
         <PinButton kind="MINDMAP" item={{ id: map.id, name: map.title }} className="shrink-0" />
-        <span className="hidden text-xs text-faint lg:block">Tab : enfant · Entrée : frère · Suppr · F2 : renommer · Espace : replier</span>
+        {isOwner && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSharing(true)}
+            title={map.sharedWith ? `Partagée avec ${map.sharedWith} personne${map.sharedWith > 1 ? "s" : ""}` : "Partager la carte"}
+            className="shrink-0"
+          >
+            <Share2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Partager</span>
+            {map.sharedWith > 0 && <span className="rounded-full bg-brand-50 px-1.5 text-[11px] text-brand-700">{map.sharedWith}</span>}
+          </Button>
+        )}
+        {!readOnly && <span className="hidden text-xs text-faint lg:block">Tab : enfant · Entrée : frère · Suppr · F2 : renommer · Espace : replier</span>}
         <span className={`shrink-0 text-xs ${saving ? "text-warn" : "text-faint"}`} role="status" title={saving ? "Enregistrement…" : "Enregistré"}>
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full sm:hidden ${saving ? "bg-warn" : "bg-ok"}`} />
           <span className="sr-only sm:not-sr-only">{saving ? "Enregistrement…" : "Enregistré"}</span>
@@ -699,6 +740,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
           {showClosed ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           {closedCount > 0 && <span className="text-xs">{closedCount}</span>}
         </Button>
+        {!readOnly && (
         <Button
           variant="ghost"
           size="sm"
@@ -709,10 +751,18 @@ function Editor({ initial }: { initial: MindMapDto }) {
           <LayoutTemplate className="h-4 w-4" />
           <span className="hidden lg:inline">Affichage optimisé</span>
         </Button>
+        )}
         <Button variant="ghost" size="sm" onClick={() => fitView({ padding: 0.2, duration: 300 })} title="Recentrer">
           <Focus className="h-4 w-4" />
         </Button>
       </div>
+
+      {map.owner && (
+        <div role="note" className={`flex items-center gap-2 border-b border-line px-3 py-1.5 text-xs ${readOnly ? "bg-amber-50 text-amber-900" : "bg-brand-50 text-brand-700"}`}>
+          {readOnly ? <Lock className="h-3.5 w-3.5 shrink-0" /> : <Users className="h-3.5 w-3.5 shrink-0" />}
+          <span className="min-w-0 truncate">{readOnly ? `Lecture seule — carte partagée par ${map.owner.name}` : `Carte partagée par ${map.owner.name} (écriture)`}</span>
+        </div>
+      )}
 
       <div className="relative flex min-h-0 flex-1">
         {/* Canevas */}
@@ -725,11 +775,12 @@ function Editor({ initial }: { initial: MindMapDto }) {
             onNodeClick={(_, n) => select(n.id)}
             onNodeDoubleClick={(_, n) => {
               setSelectedId(n.id);
-              setEditingId(n.id);
+              if (!readOnly) setEditingId(n.id);
             }}
             onNodeDragStop={onNodeDragStop}
             onPaneClick={() => select(null)}
             nodesConnectable={false}
+            nodesDraggable={!readOnly}
             nodesFocusable={false}
             elementsSelectable
             selectNodesOnDrag={false}
@@ -748,23 +799,27 @@ function Editor({ initial }: { initial: MindMapDto }) {
           {/* Barre d'actions du nœud sélectionné */}
           {selected && !editingId && (
             <div className="pointer-events-auto absolute inset-x-2 top-2 flex flex-wrap items-center gap-1 rounded-xl border border-line bg-surface/95 p-1.5 shadow-sm backdrop-blur sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2">
-              <Button size="sm" variant="outline" onClick={() => addChild(selected.id)} title="Ajouter un sous-nœud (Tab)">
-                <GitBranchPlus className="h-4 w-4" /> Enfant
-              </Button>
-              {selected.parentId && (
-                <Button size="sm" variant="outline" onClick={() => addSibling(selected.id)} title="Ajouter un nœud frère (Entrée)">
-                  <CornerDownRight className="h-4 w-4" /> Frère
-                </Button>
+              {!readOnly && (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => addChild(selected.id)} title="Ajouter un sous-nœud (Tab)">
+                    <GitBranchPlus className="h-4 w-4" /> Enfant
+                  </Button>
+                  {selected.parentId && (
+                    <Button size="sm" variant="outline" onClick={() => addSibling(selected.id)} title="Ajouter un nœud frère (Entrée)">
+                      <CornerDownRight className="h-4 w-4" /> Frère
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => setEditingId(selected.id)} title="Renommer (F2)">
+                    Renommer
+                  </Button>
+                </>
               )}
-              <Button size="sm" variant="outline" onClick={() => setEditingId(selected.id)} title="Renommer (F2)">
-                Renommer
-              </Button>
               {nodes.some((n) => n.parentId === selected.id) && (
                 <Button size="sm" variant="outline" onClick={() => toggleCollapse(selected.id)} title="Replier / déplier (Espace)">
                   {selected.collapsed ? "Déplier" : "Replier"}
                 </Button>
               )}
-              {selected.parentId && (
+              {selected.parentId && !readOnly && (
                 <div className="flex items-center overflow-hidden rounded-lg border border-line-strong">
                   {(["OPEN", "WATCH", "CLOSED"] as const).map((st) => (
                     <button
@@ -793,7 +848,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
                   <PanelRightOpen className="h-4 w-4" /> Notes
                 </Button>
               )}
-              {selected.parentId && (
+              {selected.parentId && !readOnly && (
                 <Button size="sm" variant="danger" onClick={() => remove(selected.id)} title="Supprimer (Suppr)">
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -801,7 +856,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
             </div>
           )}
 
-          {nodes.length === 1 && !selected && (
+          {nodes.length === 1 && !selected && !readOnly && (
             <div className="pointer-events-none absolute inset-x-0 bottom-6 text-center text-sm text-muted">
               Cliquez sur l&apos;idée centrale puis <kbd className="rounded border border-line-strong bg-surface px-1">Tab</kbd> pour ajouter une branche.
             </div>
@@ -818,6 +873,10 @@ function Editor({ initial }: { initial: MindMapDto }) {
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {readOnly ? (
+                <ReadOnlyDetails node={selected} />
+              ) : (
+              <>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted">Titre</span>
                 <input
@@ -886,11 +945,14 @@ function Editor({ initial }: { initial: MindMapDto }) {
                   <p className="mt-1.5 text-[11px] text-faint">À surveiller : mis en évidence. Fermé : hachuré et masqué par défaut (avec ses sous-nœuds).</p>
                 </div>
               )}
+              </>
+              )}
 
               {selected.parentId && !selected.id.startsWith("tmp-") && (
                 <NodeTasksPanel
                   mapId={map.id}
                   nodeId={selected.id}
+                  readOnly={readOnly}
                   onCounts={(nodeId, counts) => patchLocal(nodeId, counts)}
                 />
               )}
@@ -902,15 +964,25 @@ function Editor({ initial }: { initial: MindMapDto }) {
                     Ouvrir dans Prise de notes
                   </Link>
                 </div>
-                <RichTextEditor
-                  key={real(selected.id)}
-                  documentKey={real(selected.id)}
-                  initialHtml={selected.notes}
-                  onChange={(html) => setNotes(selected.id, html)}
-                  minHeight={220}
-                />
+                {readOnly ? (
+                  isBlankNotes(selected.notes) ? (
+                    <p className="text-sm text-muted">Aucune note.</p>
+                  ) : (
+                    // Contenu assaini par sanitizeNotes() (serveur et base locale de l'application).
+                    <div className="prose prose-sm max-w-none rounded-lg border border-line bg-surface-2/40 p-3 text-ink-2" dangerouslySetInnerHTML={{ __html: selected.notes }} />
+                  )
+                ) : (
+                  <RichTextEditor
+                    key={real(selected.id)}
+                    documentKey={real(selected.id)}
+                    initialHtml={selected.notes}
+                    onChange={(html) => setNotes(selected.id, html)}
+                    minHeight={220}
+                  />
+                )}
               </div>
 
+              {!readOnly && (
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => addChild(selected.id)}>
                   <Plus className="h-4 w-4" /> Sous-nœud
@@ -921,10 +993,37 @@ function Editor({ initial }: { initial: MindMapDto }) {
                   </Button>
                 )}
               </div>
+              )}
             </div>
           </aside>
         )}
       </div>
+
+      {sharing && isOwner && (
+        <ShareMapDialog mapId={map.id} mapTitle={map.title} onClose={closeSharing} onCount={(sharedWith) => setMap((m) => ({ ...m, sharedWith }))} />
+      )}
+    </div>
+  );
+}
+
+function isBlankNotes(html: string): boolean {
+  return !html.includes("<img") && html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim().length === 0;
+}
+
+/** Détails d'un nœud en lecture seule (carte partagée en lecture). */
+function ReadOnlyDetails({ node }: { node: MindNodeDto }) {
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium text-muted">Titre</span>
+      <p className="flex items-center gap-2 text-sm font-medium">
+        {node.color && <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: node.color }} aria-hidden />}
+        {node.title}
+      </p>
+      {node.parentId && (
+        <p className="mt-3 text-xs text-muted">
+          Statut : <span className="font-medium text-ink-2">{NODE_STATUS_LABEL[node.status]}</span>
+        </p>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { getDashboard } from "@/lib/dashboard";
 import { search } from "@/lib/search";
 import { listUsersAdmin, reportIdsOf } from "@/lib/users";
 import type { ProjectDto, TaskDto } from "@/lib/projects";
+import { WRITE_TOOLS } from "@/lib/mcp-write";
 
 /**
  * Serveur MCP (Model Context Protocol) de Second Brain : Claude Desktop (ou
@@ -33,7 +34,9 @@ export const MCP_SERVER_INFO = { name: "second-brain", title: "Second Brain", ve
 
 export const MCP_INSTRUCTIONS =
   "Second Brain : gestion de projets (projets › étapes › activités › tâches, livrables, équipe), cartes mentales et prise de notes. " +
-  "Outils en lecture seule. Commencez par list_projects / list_my_tasks / search, puis get_project, get_task, get_mind_map ou read_note. " +
+  "Lecture : commencez par list_projects / list_my_tasks / search, puis get_project, get_task, get_mind_map ou read_note. " +
+  "Écriture (clé autorisée) : create_task, update_task, bulk_update_tasks (ex. assigner toutes les tâches d'un projet), delete_task, add_comment, create_project, update_project, create_stage, save_note, create_meeting, update_meeting (compte-rendu), decide_meeting, upsert_risk, edit_mind_map, send_message ; " +
+  "pour tout le reste, api_request appelle n'importe quelle route de l'API (consultez api_reference). Les personnes se désignent par nom, e-mail ou id. Confirmez avec l'utilisateur avant une suppression ou une modification en masse. " +
   "Les dates sont au format ISO. Statuts de tâche : TODO (à faire), IN_PROGRESS (en cours), DONE (terminée), CLOSED (clôturée). " +
   "Un administrateur peut analyser les projets des autres en passant admin_access: true (à n'utiliser que si l'utilisateur le demande explicitement).";
 
@@ -394,14 +397,25 @@ export const TOOLS: Tool[] = [
   },
 ];
 
-export function toolsFor(user: User) {
-  return TOOLS.filter((t) => !t.adminOnly || isAdmin(user)).map((t) => ({
+export function toolsFor(user: User, canWrite = false) {
+  const read = TOOLS.filter((t) => !t.adminOnly || isAdmin(user)).map((t) => ({
     name: t.name,
     title: t.title,
     description: t.description,
     inputSchema: t.inputSchema,
     annotations: { readOnlyHint: true, openWorldHint: false },
   }));
+  if (!canWrite) return read;
+  return [
+    ...read,
+    ...WRITE_TOOLS.map((t) => ({
+      name: t.name,
+      title: t.title,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      annotations: { readOnlyHint: t.name === "api_reference", destructiveHint: !!t.destructive, openWorldHint: false },
+    })),
+  ];
 }
 
 // --- JSON-RPC ---------------------------------------------------------------------------------------
@@ -412,7 +426,7 @@ type RpcResponse = { jsonrpc: "2.0"; id: string | number | null; result?: unknow
 const rpcError = (id: RpcRequest["id"], code: number, message: string): RpcResponse => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
 /** Traite un message JSON-RPC ; null pour une notification (pas de réponse). */
-export async function handleRpc(user: User, msg: RpcRequest): Promise<RpcResponse | null> {
+export async function handleRpc(user: User, msg: RpcRequest, canWrite = false): Promise<RpcResponse | null> {
   if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") return rpcError(msg?.id, -32600, "Requête JSON-RPC invalide.");
   const isNotification = msg.id === undefined || msg.id === null;
   if (isNotification) return null;
@@ -428,15 +442,19 @@ export async function handleRpc(user: User, msg: RpcRequest): Promise<RpcRespons
     case "ping":
       return { jsonrpc: "2.0", id, result: {} };
     case "tools/list":
-      return { jsonrpc: "2.0", id, result: { tools: toolsFor(user) } };
+      return { jsonrpc: "2.0", id, result: { tools: toolsFor(user, canWrite) } };
     case "resources/list":
       return { jsonrpc: "2.0", id, result: { resources: [] } };
     case "prompts/list":
       return { jsonrpc: "2.0", id, result: { prompts: [] } };
     case "tools/call": {
       const name = typeof params.name === "string" ? params.name : "";
-      const tool = TOOLS.find((t) => t.name === name && (!t.adminOnly || isAdmin(user)));
-      if (!tool) return rpcError(id, -32602, `Outil inconnu : ${name}`);
+      const tool: { run: (user: User, args: Record<string, unknown>) => Promise<unknown> } | undefined =
+        TOOLS.find((t) => t.name === name && (!t.adminOnly || isAdmin(user))) ?? (canWrite ? WRITE_TOOLS.find((t) => t.name === name) : undefined);
+      if (!tool) {
+        if (!canWrite && WRITE_TOOLS.some((t) => t.name === name)) return rpcError(id, -32602, "Cette clé d'accès est en lecture seule (Préférences → Connecteur Claude).");
+        return rpcError(id, -32602, `Outil inconnu : ${name}`);
+      }
       const args = params.arguments && typeof params.arguments === "object" ? (params.arguments as Record<string, unknown>) : {};
       try {
         const result = await tool.run(user, args);

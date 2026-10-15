@@ -50,8 +50,9 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    message précis, suppression, emoji) ; **notifications par e-mail**
    (SMTP et activation par type dans l'administration, préférence
    personnelle) ; mot de passe oublié et validation d'adresse ;
-   **connecteur MCP** pour interroger ses projets, cartes et notes depuis
-   Claude Desktop (clés d'accès dans les Préférences).
+   **connecteur MCP** pour interroger **et modifier** ses projets, tâches,
+   réunions, risques, cartes et notes depuis Claude Desktop (clés d'accès en
+   lecture seule ou en écriture dans les Préférences).
    **Recherche globale** avec auto-complétion sur la page d'accueil (projets,
    tâches, nœuds, cartes).
    **Notifications in-app** (cloche) : tâche assignée, réponse à un
@@ -107,6 +108,9 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run desktop:smoke` | test de démarrage de l'application desktop (profil jetable ; connexion réelle avec `SB_SMOKE_SERVER`, `SB_SMOKE_EMAIL`, `SB_SMOKE_PASSWORD`) |
 | `npm run desktop:build` / `desktop:publish` | installateur Windows (`native/release/`) / publication sur le serveur (page `/app`) |
 | `npm run ios:sync` / `ios:open` | application iPhone : build de l'interface + mise à jour du projet Xcode `native/ios` / ouverture dans Xcode (Mac) ; envoi TestFlight par le workflow GitHub « iOS TestFlight » |
+| `npm run test:map-shares` | tests de bout en bout du partage des cartes mentales (lecture / écriture, notifications, notes, épingles, recherche, synchro) — serveur de dev lancé, `BASE_URL` facultatif |
+| `npm run perf:seed` | jeu de données volumineux **conservé** pour les tests de performance (200 comptes, ~20 000 tâches, cartes de 5 000 nœuds, messages, notifications ; `--reset`, `--drop`, `SCALE=`) — base locale uniquement ; connexion `perf-000@perf.local` / `PerfTest!2026` |
+| `npm run perf:bench` | mesures de réactivité (médiane, p95, taille) de 32 routes et pages sur ce jeu — serveur lancé, de préférence `npm run build && npm start` |
 | `npm run test:sync` | tests de bout en bout de la synchro hors ligne (serveur de dev lancé, `BASE_URL` facultatif) |
 | `npm run prod:setup` | provisionner / mettre à jour l'infrastructure serveur (idempotent) |
 | `npm run prod:deploy` | mettre en production (push préalable obligatoire) |

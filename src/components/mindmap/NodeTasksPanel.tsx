@@ -14,15 +14,18 @@ import { Button, PriorityFlag, TASK_STATUS_LABEL, errorMessage, inputClass, toas
  * rattachées (statut cliquable, lien vers la fiche, détachement), création
  * d'une nouvelle tâche (sans projet, rattachée au nœud) ou rattachement d'une
  * tâche existante via une recherche. Remonte les compteurs au parent pour
- * l'indicateur visuel du nœud.
+ * l'indicateur visuel du nœud. En lecture seule (carte partagée en lecture),
+ * la liste est consultable mais on ne rattache ni ne détache rien.
  */
 export function NodeTasksPanel({
   mapId,
   nodeId,
   onCounts,
+  readOnly = false,
 }: {
   mapId: string;
   nodeId: string;
+  readOnly?: boolean;
   onCounts: (nodeId: string, counts: { taskCount: number; openTaskCount: number }) => void;
 }) {
   const [data, setData] = useState<NodeTasksResult | null>(null);
@@ -117,14 +120,14 @@ export function NodeTasksPanel({
           <ListTodo className="h-3.5 w-3.5" /> Tâches
         </span>
         {data && data.openTaskCount > 0 && <span className="rounded-full bg-brand-50 px-1.5 text-[11px] font-medium text-brand-700">{data.openTaskCount} ouverte{data.openTaskCount > 1 ? "s" : ""}</span>}
-        <div className="ml-auto flex gap-1">
+        {!readOnly && <div className="ml-auto flex gap-1">
           <Button size="sm" variant={mode === "create" ? "primary" : "outline"} onClick={() => setMode(mode === "create" ? "none" : "create")} title="Créer une tâche rattachée à ce nœud">
             <Plus className="h-3.5 w-3.5" /> Nouvelle
           </Button>
           <Button size="sm" variant={mode === "link" ? "primary" : "outline"} onClick={() => setMode(mode === "link" ? "none" : "link")} title="Rattacher une tâche existante">
             <Link2 className="h-3.5 w-3.5" /> Existante
           </Button>
-        </div>
+        </div>}
       </div>
 
       {mode === "create" && (
@@ -192,9 +195,9 @@ export function NodeTasksPanel({
                 <Link href={`/tasks/${t.id}`} className="rounded p-2 text-muted hover:bg-surface-2 md:p-1" title="Ouvrir la fiche" aria-label="Ouvrir la fiche tâche">
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
-                <button type="button" onClick={() => unlink(t.id)} className="rounded p-2 text-faint hover:bg-red-50 hover:text-danger md:p-1" title="Détacher du nœud (la tâche est conservée)" aria-label={`Détacher « ${t.name} » du nœud`}>
+                {!readOnly && <button type="button" onClick={() => unlink(t.id)} className="rounded p-2 text-faint hover:bg-red-50 hover:text-danger md:p-1" title="Détacher du nœud (la tâche est conservée)" aria-label={`Détacher « ${t.name} » du nœud`}>
                   <Unlink className="h-3.5 w-3.5" />
-                </button>
+                </button>}
               </li>
             );
           })}

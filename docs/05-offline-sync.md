@@ -57,7 +57,7 @@
 
 | Synchronisé hors ligne (lecture + écriture) | Lecture seule hors ligne | Relayé au serveur (en ligne seulement) |
 | --- | --- | --- |
-| Cartes, nœuds (titre, notes, statut, couleur, position, repli), liens nœud ↔ tâche ; projets, étapes, activités, tâches (tous champs, contributeurs, sessions de travail), notes des objets, commentaires (ajout / suppression) | Équipe des projets, livrables, liste des documents et dossiers | Gestion d'équipe, livrables, documents (dépôt, téléchargement), profil et mot de passe, notifications (liste vide hors ligne), administration, « Mon équipe » |
+| Cartes (les miennes et celles partagées avec moi en écriture), nœuds (titre, notes, statut, couleur, position, repli), liens nœud ↔ tâche ; projets, étapes, activités, tâches (tous champs, contributeurs, sessions de travail), notes des objets, commentaires (ajout / suppression) | Équipe des projets, livrables, liste des documents et dossiers, **partages de cartes** (`MindMapShare`), cartes partagées avec moi en lecture | Gestion d'équipe, livrables, documents (dépôt, téléchargement), **gestion des partages de cartes et « Quitter »**, profil et mot de passe, notifications (liste vide hors ligne), administration, « Mon équipe » |
 
 Recherche, tableau de bord, « Mes tâches » et arborescence « Prise de notes »
 sont calculés localement. L'ordre personnel « Mes tâches » est gardé
@@ -66,7 +66,7 @@ localement et envoyé au serveur quand c'est possible.
 ## 3. Côté serveur (`src/lib/sync.ts`)
 
 - **Journal `SyncLog`** alimenté par le déclencheur PostgreSQL `sb_sync_log`
-  sur les 14 tables (création, champ modifié, suppression ; portée projet /
+  sur les 15 tables (création, champ modifié, suppression ; portée projet /
   carte / propriétaire). Toute écriture — web ou application — est journalisée
   sans code applicatif. `seq` = curseur de synchro et **version par champ**.
 - **`GET /sync/pull`** : instantané complet (premier lancement), puis
@@ -191,6 +191,34 @@ politique de confidentialité obligatoires.
 4. **Simplicité** : si l'application n'est plus compatible avec l'API
    (version de protocole), elle demande une mise à jour ; aucune
    compatibilité ascendante.
+
+## 8 bis. Cartes partagées (16/10/2026, protocole 2)
+
+- **Périmètre** : `scope.mapIds` = cartes dont je suis propriétaire **ou**
+  avec qui elles sont partagées (`mapAccessWhere`), en lecture comme en
+  écriture : leurs `MindMap` / `MindNode` / `MindNodeTask` sont tirés. Un
+  partage ajouté fait entrer la carte dans le périmètre (instantané ciblé
+  `?map=`) ; un partage retiré ou quitté l'en fait sortir (purge locale).
+- **`MindMapShare` synchronisé en lecture seule** (pas dans `WRITABLE`,
+  refusé par `syncPushSchema`) : identifiant `mapId:userId`, portée `mapId`
+  (migration `20261016091000_map_share_sync_trigger`). Le propriétaire reçoit
+  tous les partages de sa carte (compteur « Partagée avec N »), un
+  destinataire seulement le sien (son droit, mis à jour en direct quand le
+  propriétaire le change). Supprimé localement avec sa carte.
+- **Nom du propriétaire** : les lignes `MindMap` envoyées par la synchro
+  portent `ownerName` et `ownerAvatarUrl` (champs dérivés, lus avec la carte,
+  non journalisés) — un renommage du propriétaire n'est vu qu'au prochain
+  instantané de la carte.
+- **Droits hors ligne** : `LocalModel.mapAccess()` (propriétaire ou
+  `MindMapShare` de l'utilisateur) alimente `access` / `owner` /
+  `sharedWith` des DTO ; l'API locale refuse les écritures sur une carte en
+  lecture (403 `READ_ONLY`) et la suppression d'une carte qui n'est pas à
+  moi, comme le serveur. Une opération envoyée malgré tout est `rejected`
+  par les fonctions métier (`requireMapAccess`).
+- **Protocole 2** : nouvelle entité ⇒ `SYNC_PROTOCOL_VERSION = 2` (une
+  application 0.x antérieure reçoit 426 et demande la mise à jour). L'
+  application mémorise le protocole de ses données (`meta.protocol`) :
+  différent ⇒ **instantané complet** au premier pull après la mise à jour.
 
 ## 9. Limites connues
 

@@ -3,11 +3,12 @@ import type { PinKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "@/lib/api";
 import { projectAccessWhere } from "@/lib/projects";
+import { mapAccessWhere } from "@/lib/map-access";
 
 /**
  * Épingles du menu de gauche : projets et cartes mentales, par utilisateur.
  * Une épingle ne vaut que si l'élément est toujours accessible (projet dont
- * je suis propriétaire ou membre, carte dont je suis propriétaire) : les
+ * je suis propriétaire ou membre, carte à moi ou partagée avec moi) : les
  * épingles devenues orphelines sont ignorées à la lecture et purgées.
  */
 
@@ -26,7 +27,7 @@ export async function listPins(userId: string): Promise<PinsDto> {
     projectIds.length
       ? prisma.project.findMany({ where: { id: { in: projectIds }, ...projectAccessWhere(userId) }, select: { id: true, name: true, color: true } })
       : Promise.resolve([]),
-    mapIds.length ? prisma.mindMap.findMany({ where: { id: { in: mapIds }, ownerId: userId }, select: { id: true, title: true } }) : Promise.resolve([]),
+    mapIds.length ? prisma.mindMap.findMany({ where: { AND: [{ id: { in: mapIds } }, mapAccessWhere(userId)] }, select: { id: true, title: true } }) : Promise.resolve([]),
   ]);
   // Purge des épingles qui ne pointent plus vers un élément accessible.
   const stale = pins.filter((p) => (p.kind === "PROJECT" ? !projects.some((x) => x.id === p.targetId) : !maps.some((x) => x.id === p.targetId)));
@@ -46,7 +47,7 @@ export async function setPin(userId: string, kind: PinKind, targetId: string, pi
     const ok =
       kind === "PROJECT"
         ? await prisma.project.findFirst({ where: { id: targetId, ...projectAccessWhere(userId) }, select: { id: true } })
-        : await prisma.mindMap.findFirst({ where: { id: targetId, ownerId: userId }, select: { id: true } });
+        : await prisma.mindMap.findFirst({ where: { AND: [{ id: targetId }, mapAccessWhere(userId)] }, select: { id: true } });
     if (!ok) throw notFound(kind === "PROJECT" ? "Projet" : "Carte mentale");
     if ((await prisma.pin.count({ where: { userId } })) >= MAX_PINS) {
       const oldest = await prisma.pin.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });

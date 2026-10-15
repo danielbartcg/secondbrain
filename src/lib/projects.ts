@@ -8,6 +8,7 @@ import { deleteProjectDocumentsDir } from "@/lib/uploads";
 import { requireAdmin } from "@/lib/users";
 import { prerequisiteError } from "@/lib/shared/prerequisites";
 import { actorDisplayName, diffTaskEvents, recordTaskEvents, taskSnapshot } from "@/lib/task-events";
+import { requireNodeAccess } from "@/lib/map-access";
 import {
   DOCUMENT_INCLUDE,
   MEMBER_INCLUDE,
@@ -468,11 +469,14 @@ function siblingWhere(t: Attachment & { ownerId: string }): Record<string, unkno
   return { ownerId: t.ownerId, projectId: null };
 }
 
-/** Un nœud de carte référencé doit appartenir à l'utilisateur. */
-export async function checkNode(db: Tx | typeof prisma, userId: string, nodeId: string | null | undefined) {
+/**
+ * Un nœud de carte référencé doit être sur une carte accessible : en écriture
+ * (propriétaire ou partage en écriture) pour rattacher / détacher une tâche,
+ * en lecture pour consulter ses tâches.
+ */
+export async function checkNode(db: Tx | typeof prisma, userId: string, nodeId: string | null | undefined, level: "read" | "write" = "write") {
   if (!nodeId) return;
-  const n = await db.mindNode.findFirst({ where: { id: nodeId, map: { ownerId: userId } }, select: { id: true } });
-  if (!n) throw notFound("Nœud");
+  await requireNodeAccess(userId, nodeId, level, db);
 }
 
 /**

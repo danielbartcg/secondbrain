@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ApiError, withPublic } from "@/lib/api";
-import { authenticateApiKey } from "@/lib/api-keys";
+import { authenticateApiKeyScope } from "@/lib/api-keys";
 import { rateLimit } from "@/lib/rate-limit";
 import { handleRpc } from "@/lib/mcp";
 
@@ -35,8 +35,9 @@ export const POST = withPublic(async (req: NextRequest) => {
 
   const auth = req.headers.get("authorization") ?? "";
   const key = /^Bearer\s+(\S+)$/i.exec(auth)?.[1];
-  const user = await authenticateApiKey(key);
-  if (!user) return unauthorized("Clé d'accès manquante ou invalide (Préférences → Connecteur Claude).");
+  const keyAuth = await authenticateApiKeyScope(key);
+  const user = keyAuth?.user;
+  if (!keyAuth || !user) return unauthorized("Clé d'accès manquante ou invalide (Préférences → Connecteur Claude).");
   if (!rateLimit(`mcp:${user.id}`, 600, 15 * 60 * 1000)) {
     return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32002, message: "Trop de requêtes, réessayez dans quelques minutes." } }, { status: 429 });
   }
@@ -54,7 +55,7 @@ export const POST = withPublic(async (req: NextRequest) => {
   const messages = (batch ? (body as unknown[]) : [body]).slice(0, 50) as Parameters<typeof handleRpc>[1][];
   const responses = [];
   for (const m of messages) {
-    const r = await handleRpc(user, m);
+    const r = await handleRpc(user, m, keyAuth.canWrite);
     if (r) responses.push(r);
   }
   // Uniquement des notifications / réponses : 202 sans contenu (spécification Streamable HTTP).

@@ -536,10 +536,66 @@ async function main() {
       const resC = await fetch(`${BASE}/projects/${projB}/export`, { headers: { Authorization: `Bearer ${A.token}` } });
       check("export d'un projet inaccessible : 404", resC.status === 404, resC.status);
     }
+
+    console.log("\n17. Connecteur MCP : écriture");
+    {
+      const kw = await call<{ key: string }>(B, "POST", "/me/api-keys", { name: "Écriture", canWrite: true });
+      const kr = await call<{ key: string }>(B, "POST", "/me/api-keys", { name: "Lecture", canWrite: false });
+      const writeKey = (kw.data as { key: string }).key;
+      const readKey = (kr.data as { key: string }).key;
+      const toolsR = ((await mcp(readKey, "tools/list")).result?.tools as { name: string }[]).map((t) => t.name);
+      const toolsW = ((await mcp(writeKey, "tools/list")).result?.tools as { name: string }[]).map((t) => t.name);
+      check("clé lecture seule : pas d'outils d'écriture", !toolsR.includes("update_task") && !toolsR.includes("api_request"), toolsR);
+      check("clé écriture : outils d'écriture exposés", ["update_task", "bulk_update_tasks", "update_meeting", "api_request", "api_reference"].every((n) => toolsW.includes(n)), toolsW);
+      let m = await mcp(readKey, "tools/call", { name: "update_task", arguments: { task_id: "x", name: "y" } });
+      check("écriture refusée avec une clé lecture seule", !!m.error && /lecture seule/i.test(m.error.message), m);
+
+      // Une tâche du projet de B, et C membre (ajouté à l'étape 13).
+      const created = await mcp(writeKey, "tools/call", { name: "create_task", arguments: { project_id: projB, name: "Tâche MCP", start_date: "2026-12-10", due_date: "2026-12-12", assignee: "Carla" } });
+      check("create_task (responsable désigné par son nom)", created.result?.isError === false, created.result);
+      const proj = await call<{ project: { tasks: { id: string; name: string; assigneeId: string | null }[]; members: { id: string; userId: string | null; name: string }[] } }>(B, "GET", `/projects/${projB}`);
+      const tMcp = proj.data.project.tasks.find((t) => t.name === "Tâche MCP")!;
+      const carla = proj.data.project.members.find((x) => x.userId === C.id)!;
+      check("tâche créée et assignée à Carla", !!tMcp && tMcp.assigneeId === carla.id, tMcp);
+      m = await mcp(writeKey, "tools/call", { name: "update_task", arguments: { task_id: tMcp.id, status: "IN_PROGRESS", due_date: "2026-12-20", priority: "HIGH" } });
+      check("update_task", m.result?.isError === false, m.result);
+      const hist = await call<{ events: { message: string }[] }>(B, "GET", `/tasks/${tMcp.id}/history`);
+      check("modifications MCP tracées dans l'historique", hist.data.events.some((e) => /échéance du 12\/12\/2026 au 20\/12\/2026/.test(e.message)), hist.data.events.map((e) => e.message));
+      m = await mcp(writeKey, "tools/call", { name: "bulk_update_tasks", arguments: { project_id: projB, set: { assignee: "Bob" }, dry_run: true } });
+      const dry = JSON.parse(m.result?.content?.[0]?.text ?? "{}") as { count: number };
+      check("bulk dry_run : liste sans modifier", dry.count >= 2, dry);
+      m = await mcp(writeKey, "tools/call", { name: "bulk_update_tasks", arguments: { project_id: projB, set: { assignee: B.email } } });
+      const bulk = JSON.parse(m.result?.content?.[0]?.text ?? "{}") as { updated: number; failed: unknown[] };
+      const after = await call<{ project: { tasks: { assigneeId: string | null }[]; members: { id: string; userId: string | null }[] } }>(B, "GET", `/projects/${projB}`);
+      const bob = after.data.project.members.find((x) => x.userId === B.id)!;
+      check("assigner toutes les tâches du projet à quelqu'un", bulk.updated >= 2 && bulk.failed.length === 0 && after.data.project.tasks.every((t) => t.assigneeId === bob.id), { bulk, tasks: after.data.project.tasks });
+      m = await mcp(writeKey, "tools/call", { name: "update_task", arguments: { task_id: tMcp.id, assignee: "Inconnu Total" } });
+      check("personne inconnue : erreur claire", m.result?.isError === true && /n'est pas membre/.test(m.result?.content?.[0]?.text ?? ""), m.result);
+      const meet = await mcp(writeKey, "tools/call", { name: "create_meeting", arguments: { project_id: projB, title: "Point MCP", date: "2026-12-01T10:00:00Z", approvers: ["Carla"], minutes_text: "Premier point." } });
+      const meetingId = (JSON.parse(meet.result?.content?.[0]?.text ?? "{}") as { meetings: { id: string; title: string }[] }).meetings.find((x) => x.title === "Point MCP")?.id;
+      check("create_meeting", !!meetingId, meet.result);
+      m = await mcp(writeKey, "tools/call", { name: "update_meeting", arguments: { meeting_id: meetingId, append_text: "Deuxième point ajouté par Claude." } });
+      const mts = await call<{ meetings: { id: string; minutes: string }[] }>(B, "GET", `/projects/${projB}/meetings`);
+      check("update_meeting : compte-rendu complété", m.result?.isError === false && /Premier point\.[\s\S]*Deuxième point ajouté par Claude/.test(mts.data.meetings.find((x) => x.id === meetingId)?.minutes ?? ""), mts.data.meetings.find((x) => x.id === meetingId));
+      m = await mcp(writeKey, "tools/call", { name: "api_request", arguments: { method: "PATCH", path: `/projects/${projB}`, body: { description: "Décrit via l'API générique" } } });
+      const pd = await call<{ project: { description: string } }>(B, "GET", `/projects/${projB}`);
+      check("api_request : n'importe quelle route", m.result?.isError === false && pd.data.project.description === "Décrit via l'API générique", m.result);
+      m = await mcp(writeKey, "tools/call", { name: "api_request", arguments: { method: "GET", path: `/projects/${projA}` } });
+      check("api_request : droits de l'utilisateur respectés (projet d'autrui)", m.result?.isError === true, m.result);
+      m = await mcp(writeKey, "tools/call", { name: "api_request", arguments: { method: "POST", path: "/me/api-keys", body: { name: "évasion" } } });
+      check("api_request : routes sensibles interdites", m.result?.isError === true && /pas accessible/.test(m.result?.content?.[0]?.text ?? ""), m.result);
+      m = await mcp(writeKey, "tools/call", { name: "api_reference", arguments: { section: "Réunions" } });
+      check("api_reference : documentation servie", m.result?.isError === false && /meetings/.test(m.result?.content?.[0]?.text ?? ""), (m.result?.content?.[0]?.text ?? "").slice(0, 200));
+      m = await mcp(writeKey, "tools/call", { name: "save_note", arguments: { ref: `task:${tMcp.id}`, text: "Note écrite par Claude", mode: "append" } });
+      const note = await call<{ document: { notes: string } }>(B, "GET", `/notes/task/${tMcp.id}`);
+      check("save_note (ajout)", /Note écrite par Claude/.test(note.data.document.notes), note.data);
+      const leftover = await prisma.session.count({ where: { userId: B.id, label: "Connecteur MCP (temporaire)" } });
+      check("sessions éphémères supprimées après chaque appel", leftover === 0, leftover);
+    }
     if (projA) await call(A, "DELETE", `/projects/${projA}`);
     if (projB) await call(B, "DELETE", `/projects/${projB}`);
   } finally {
-    console.log("\n16. Nettoyage");
+    console.log("\n18. Nettoyage");
     await prisma.conversation.deleteMany({ where: { id: { in: created.conversations.filter(Boolean) } } });
     await prisma.conversation.deleteMany({ where: { participants: { some: { userId: { in: created.users } } } } });
     await prisma.user.deleteMany({ where: { id: { in: created.users } } });

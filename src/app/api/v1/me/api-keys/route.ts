@@ -10,6 +10,6 @@ export const GET = withUser(async (_req, { user }) => json({ apiKeys: await list
 /** POST /api/v1/me/api-keys — `{ name }` → `{ key, apiKey }` : la clé en clair n'est renvoyée qu'ici. */
 export const POST = withUser(async (req: NextRequest, { user }) => {
   if (!rateLimit(`api-key:${user.id}`, 20, 60 * 60 * 1000)) throw new ApiError(429, "RATE_LIMITED", "Trop de créations de clés, réessayez plus tard.");
-  const { name } = await parseBody(req, createApiKeySchema);
-  return json(await createApiKey(user.id, name), { status: 201 });
+  const { name, canWrite } = await parseBody(req, createApiKeySchema);
+  return json(await createApiKey(user.id, name, canWrite), { status: 201 });
 });

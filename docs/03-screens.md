@@ -7,7 +7,7 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | --- | --- | --- | --- |
 | `/login`, `/register` | — | formulaires | authentification (API `/auth/*`) |
 | `/dashboard` | `dashboard/page.tsx` → `getDashboard` + `listMindMaps` | `dashboard/HomeDashboard` + `GlobalSearch` | tableau de bord personnel, **recherche globale** |
-| `/mindmaps` | `mindmaps/page.tsx` | `mindmap/MindMapList` | liste des cartes |
+| `/mindmaps` | `mindmaps/page.tsx` | `mindmap/MindMapList` | liste des cartes (les miennes et celles partagées avec moi) |
 | `/mindmaps/[id]` | `mindmaps/[id]/page.tsx` | `mindmap/MindMapEditor` | éditeur de carte (plein cadre) |
 | `/projects` | `projects/page.tsx` | `projects/ProjectList` | liste, filtre par statut, création |
 | `/projects/[id]` | `projects/[id]/page.tsx` | `projects/ProjectWorkspace` | espace projet à onglets |
@@ -183,6 +183,38 @@ bleue avec le nombre de tâches **non clôturées** (terminées comprises).
 Arrivée par `?node=<id>` (recherche, fiche tâche) : nœud sélectionné, centré,
 panneau ouvert, nœuds fermés affichés si nécessaire.
 
+## Partage des cartes (`MindMapList`, `MindMapEditor`, `mindmap/ShareMapDialog`)
+
+- **Liste** : une carte partagée avec moi porte une pastille violette
+  (icône `Users`) sur son icône, « Partagée par <Nom> » (avatar) et un badge
+  de droit **Lecture** / **Écriture** ; une carte à moi partagée avec
+  d'autres affiche « Partagée avec N personne(s) ». Corbeille réservée au
+  propriétaire ; sur une carte partagée, bouton **Quitter** (`LogOut`,
+  confirmation) à la place. Renommage en place impossible en lecture.
+  Filtres (onglets défilants, affichés dès qu'une carte m'est partagée) :
+  Toutes · Les miennes · Partagées avec moi (n). Tableau de bord : petite
+  icône `Users` à côté du titre d'une carte partagée.
+- **Bouton « Partager »** (en-tête de l'éditeur, propriétaire seulement,
+  avec le nombre de personnes) → `ShareMapDialog` : fenêtre modale
+  (`role="dialog"`, Échap, clic hors cadre ; tiroir bas sur mobile) —
+  choix des personnes (contacts de la messagerie `GET /messages/contacts`,
+  filtrables, ou adresse e-mail exacte d'un compte via `GET
+  /users/lookup`), droit **Lecture / Écriture**, « Partager » ; puis
+  « Personnes ayant accès » : changement de droit (liste déroulante) et
+  retrait (confirmation).
+- **Bandeau** sous l'en-tête d'une carte partagée avec moi : « Lecture
+  seule — carte partagée par X » (ambré, cadenas) ou « Carte partagée par
+  X (écriture) ».
+- **Lecture seule** (`access = "read"`) : titre non éditable, pas de
+  création / renommage / suppression / glisser-déposer / statut / couleur /
+  « Affichage optimisé » ; raccourcis clavier désactivés sauf Espace
+  (replier / déplier **local**, non enregistré, comme « Tout replier ») ;
+  panneau : titre, couleur et statut en lecture, notes affichées (HTML
+  assaini) au lieu de l'éditeur, tâches listées sans « Nouvelle » /
+  « Existante » / détacher. « Prise de notes » : documents non éditables.
+- **Écriture** (`access = "write"`) : tout comme le propriétaire, sauf
+  supprimer la carte et gérer les partages.
+
 ## Application native (`native/src`)
 
 Mêmes écrans que le site (routeur `native/src/App.tsx`), plus :
@@ -279,7 +311,8 @@ Sections ajoutées (`preferences/AccountSections.tsx`) : **Adresse e-mail**
 (adresse, pastille Validée / Non validée, « Envoyer le lien de validation »
 si l'envoi est configuré, « Changer d'adresse » avec mot de passe actuel,
 interrupteur « Recevoir les notifications par e-mail ») et **Connecteur
-Claude (MCP)** (création de clés nommées, clé affichée une seule fois avec la
+Claude (MCP)** (création de clés nommées, case « Autoriser les modifications »
+cochée par défaut, pastille Lecture et écriture / Lecture seule, clé affichée une seule fois avec la
 configuration Claude Desktop et la commande Claude Code à copier, liste avec
 dernière utilisation, révocation).
 

@@ -312,7 +312,7 @@ export type CreateWorkSessionInput = z.infer<typeof createWorkSessionSchema>;
 export type OrderMyTasksInput = z.infer<typeof orderMyTasksSchema>;
 
 // --- Administration → Notifications --------------------------------------------------------
-const notificationTypeSchema = z.enum(["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE", "MEETING_REVIEW", "MEETING_DECISION"]);
+const notificationTypeSchema = z.enum(["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE", "MEETING_REVIEW", "MEETING_DECISION", "MAP_SHARED"]);
 export const notificationSettingsSchema = z.object({
   smtpHost: z.string().trim().max(253).regex(/^[A-Za-z0-9.-]*$/, "Nom d'hôte SMTP invalide").optional(),
   smtpPort: z.number().int().min(1).max(65_535).optional(),
@@ -351,7 +351,7 @@ export const verifyEmailSchema = z.object({ token: emailToken });
 export const changeEmailSchema = z.object({ email: emailAddress, currentPassword: z.string().min(1, "Mot de passe actuel requis").max(200) });
 
 // --- Clés d'accès (connecteur MCP) ---------------------------------------------------------------
-export const createApiKeySchema = z.object({ name: z.string().trim().min(1, "Nom requis").max(80) });
+export const createApiKeySchema = z.object({ name: z.string().trim().min(1, "Nom requis").max(80), canWrite: z.boolean().default(true) });
 
 // --- Épingles du menu ------------------------------------------------------------------------------
 export const setPinSchema = z.object({ kind: z.enum(["PROJECT", "MINDMAP"]), id: z.string().min(1).max(64), pinned: z.boolean() });

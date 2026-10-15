@@ -12,7 +12,7 @@ import { badRequest } from "@/lib/api";
  * SESSION_SECRET) et n'est jamais renvoyé au navigateur.
  */
 
-export const NOTIFICATION_TYPES = ["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE", "MEETING_REVIEW", "MEETING_DECISION"] as const satisfies readonly NotificationType[];
+export const NOTIFICATION_TYPES = ["ASSIGNED", "TASK_UPDATED", "REPLY", "MENTION", "MESSAGE", "MEETING_REVIEW", "MEETING_DECISION", "MAP_SHARED"] as const satisfies readonly NotificationType[];
 
 export type NotificationSettingsDto = {
   smtpHost: string;

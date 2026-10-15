@@ -6,6 +6,7 @@ import { actorDisplayName, frDate, listTaskEventsRaw, recordTaskEvents, type Tas
 import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { isAdmin } from "@/lib/roles";
+import { mapAccessWhere } from "@/lib/map-access";
 import { MEMBER_INCLUDE, TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { NO_PROJECT_LABEL, dayString, resolveMentions } from "@/lib/shared/task-model";
@@ -134,8 +135,8 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
       project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" }, include: MEMBER_INCLUDE } } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true, avatarUrl: true } } } },
       workSessions: { orderBy: { date: "asc" }, include: SESSION_INCLUDE },
-      // Cartes de l'utilisateur seulement (les cartes sont personnelles).
-      nodes: { where: { node: { map: { ownerId: userId } } }, select: { nodeId: true, node: { select: { id: true, title: true, mapId: true, map: { select: { title: true } } } } } },
+      // Cartes accessibles à l'utilisateur seulement (les siennes et celles qu'on lui a partagées).
+      nodes: { where: { node: { map: mapAccessWhere(userId) } }, select: { nodeId: true, node: { select: { id: true, title: true, mapId: true, map: { select: { title: true } } } } } },
     },
   });
   if (!t) throw notFound("Tâche");
@@ -380,11 +381,11 @@ async function nodeTasksResult(userId: string, nodeId: string): Promise<NodeTask
 }
 
 export async function listNodeTasks(userId: string, nodeId: string): Promise<NodeTasksResult> {
-  await checkNode(prisma, userId, nodeId);
+  await checkNode(prisma, userId, nodeId, "read");
   return nodeTasksResult(userId, nodeId);
 }
 
-/** Rattache une tâche existante (accessible) à un nœud (propre à l'utilisateur). Idempotent. */
+/** Rattache une tâche existante (accessible) à un nœud d'une carte modifiable par l'utilisateur. Idempotent. */
 export async function linkNodeTask(userId: string, nodeId: string, taskId: string): Promise<NodeTasksResult> {
   await checkNode(prisma, userId, nodeId);
   await accessibleTask(userId, taskId);

@@ -30,6 +30,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Documentation de l'API, servie au connecteur MCP (outil api_reference).
+COPY --from=builder /app/docs/04-api.md ./docs/04-api.md
 
 RUN mkdir -p /app/data/uploads /app/data/documents /app/data/downloads && chown -R nextjs:nodejs /app/data
 USER nextjs

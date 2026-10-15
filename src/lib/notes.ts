@@ -4,6 +4,9 @@ import { badRequest, notFound } from "@/lib/api";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { hasHtmlContent, projectAccessWhere, taskAccessWhere, taskHref } from "@/lib/projects";
 import { NO_PROJECT_LABEL } from "@/lib/tasks";
+import { mapAccessWhere, requireMapAccess } from "@/lib/map-access";
+import { mapAccessOf } from "@/lib/shared/map-access";
+import { updateNode } from "@/lib/mindmaps";
 
 /**
  * « Prise de notes » : arborescence façon Notion de tous les objets de
@@ -17,7 +20,9 @@ import { NO_PROJECT_LABEL } from "@/lib/tasks";
  *                           └ section:orphans ─ task:<id> (sans projet)
  *
  * Les notes d'une carte mentale sont celles de son nœud racine ; celles d'un
- * nœud sont la zone « Notes » déjà présente dans l'éditeur de carte.
+ * nœud sont la zone « Notes » déjà présente dans l'éditeur de carte. Les
+ * cartes partagées avec moi y figurent aussi ; en lecture seule, leurs
+ * documents ont `editable: false` et l'enregistrement est refusé (403).
  * Références : `kind:id` ; sections : `section:<name>` ; racine : `root`.
  */
 
@@ -91,16 +96,16 @@ export async function children(userId: string, parentRef: string): Promise<TreeI
       const name = id as SectionName;
       if (name === "mindmaps") {
         const maps = await prisma.mindMap.findMany({
-          where: { ownerId: userId },
+          where: mapAccessWhere(userId),
           orderBy: { updatedAt: "desc" },
-          select: { id: true, title: true, _count: { select: { nodes: true } }, nodes: { where: { parentId: null }, select: { notes: true } } },
+          select: { id: true, title: true, ownerId: true, owner: { select: { name: true } }, _count: { select: { nodes: true } }, nodes: { where: { parentId: null }, select: { notes: true } } },
         });
         return maps.map((m) => ({
           ref: `mindmap:${m.id}`,
           kind: "mindmap",
           id: m.id,
           title: m.title,
-          hint: `${m._count.nodes} nœud${m._count.nodes > 1 ? "s" : ""}`,
+          hint: `${m._count.nodes} nœud${m._count.nodes > 1 ? "s" : ""}${m.ownerId !== userId ? ` · partagée par ${m.owner.name}` : ""}`,
           hasChildren: m._count.nodes > 1,
           hasNotes: hasHtmlContent(m.nodes[0]?.notes ?? ""),
         }));
@@ -131,8 +136,7 @@ export async function children(userId: string, parentRef: string): Promise<TreeI
       return orphans.map(taskItem);
     }
     case "mindmap": {
-      const map = await prisma.mindMap.findFirst({ where: { id, ownerId: userId }, select: { id: true } });
-      if (!map) throw notFound("Carte");
+      await requireMapAccess(userId, id, "read");
       const root = await prisma.mindNode.findFirst({ where: { mapId: id, parentId: null }, select: { id: true } });
       return root ? nodeChildren(userId, root.id) : [];
     }
@@ -180,7 +184,7 @@ export async function children(userId: string, parentRef: string): Promise<TreeI
 }
 
 async function nodeChildren(userId: string, nodeId: string): Promise<TreeItem[]> {
-  const parent = await prisma.mindNode.findFirst({ where: { id: nodeId, map: { ownerId: userId } }, select: { id: true } });
+  const parent = await prisma.mindNode.findFirst({ where: { id: nodeId, map: mapAccessWhere(userId) }, select: { id: true } });
   if (!parent) throw notFound("Nœud");
   const nodes = await prisma.mindNode.findMany({
     where: { parentId: nodeId },
@@ -200,7 +204,10 @@ async function nodeChildren(userId: string, nodeId: string): Promise<TreeItem[]>
 
 /** Nœud de carte avec sa carte et sa chaîne d'ancêtres (fil d'Ariane). */
 async function nodeWithPath(userId: string, nodeId: string) {
-  const n = await prisma.mindNode.findFirst({ where: { id: nodeId, map: { ownerId: userId } }, include: { map: { select: { id: true, title: true } } } });
+  const n = await prisma.mindNode.findFirst({
+    where: { id: nodeId, map: mapAccessWhere(userId) },
+    include: { map: { select: { id: true, title: true, ownerId: true, shares: { where: { userId }, select: { permission: true } } } } },
+  });
   if (!n) throw notFound("Nœud");
   const all = await prisma.mindNode.findMany({ where: { mapId: n.mapId }, select: { id: true, parentId: true, title: true } });
   const byId = new Map(all.map((x) => [x.id, x]));
@@ -225,14 +232,15 @@ export async function getDocument(userId: string, ref: string): Promise<NoteDocu
     case "section":
       return { ...base, title: SECTIONS[id as SectionName], breadcrumb: id === "orphans" ? [SECTION_CRUMB.projects] : [], href: id === "mindmaps" ? "/mindmaps" : id === "projects" ? "/projects" : "/projects/sans-projet", notes: "", editable: false, updatedAt: null };
     case "mindmap": {
-      const map = await prisma.mindMap.findFirst({ where: { id, ownerId: userId }, include: { nodes: { where: { parentId: null }, select: { notes: true, updatedAt: true } } } });
-      if (!map) throw notFound("Carte");
-      return { ...base, title: map.title, breadcrumb: [SECTION_CRUMB.mindmaps], href: `/mindmaps/${map.id}`, notes: sanitizeNotes(map.nodes[0]?.notes ?? ""), updatedAt: (map.nodes[0]?.updatedAt ?? map.updatedAt).toISOString() };
+      const { access } = await requireMapAccess(userId, id, "read");
+      const map = await prisma.mindMap.findUniqueOrThrow({ where: { id }, include: { nodes: { where: { parentId: null }, select: { notes: true, updatedAt: true } } } });
+      return { ...base, editable: access !== "read", title: map.title, breadcrumb: [SECTION_CRUMB.mindmaps], href: `/mindmaps/${map.id}`, notes: sanitizeNotes(map.nodes[0]?.notes ?? ""), updatedAt: (map.nodes[0]?.updatedAt ?? map.updatedAt).toISOString() };
     }
     case "node": {
       const { node, path } = await nodeWithPath(userId, id);
       if (node.parentId === null) return getDocument(userId, `mindmap:${node.mapId}`);
-      return { ...base, title: node.title, breadcrumb: [SECTION_CRUMB.mindmaps, ...path], href: `/mindmaps/${node.mapId}?node=${node.id}`, notes: sanitizeNotes(node.notes), updatedAt: node.updatedAt.toISOString() };
+      const editable = mapAccessOf(node.map.ownerId, userId, node.map.shares[0]?.permission) !== "read";
+      return { ...base, editable, title: node.title, breadcrumb: [SECTION_CRUMB.mindmaps, ...path], href: `/mindmaps/${node.mapId}?node=${node.id}`, notes: sanitizeNotes(node.notes), updatedAt: node.updatedAt.toISOString() };
     }
     case "project": {
       const p = await prisma.project.findFirst({ where: { id, ...projectAccessWhere(userId) }, select: { id: true, name: true, notes: true, updatedAt: true } });
@@ -283,18 +291,18 @@ export async function saveNotes(userId: string, ref: string, html: string): Prom
     case "root":
     case "section":
       throw badRequest("Cet élément ne porte pas de notes.");
+    // Cartes : via updateNode (droit d'écriture + verrou de la carte).
     case "mindmap": {
-      const map = await prisma.mindMap.findFirst({ where: { id, ownerId: userId }, select: { id: true } });
-      if (!map) throw notFound("Carte");
-      await prisma.mindNode.updateMany({ where: { mapId: id, parentId: null }, data: { notes } });
-      await prisma.mindMap.update({ where: { id }, data: { updatedAt: new Date() } });
+      await requireMapAccess(userId, id, "write");
+      const root = await prisma.mindNode.findFirst({ where: { mapId: id, parentId: null }, select: { id: true } });
+      if (!root) throw notFound("Carte");
+      await updateNode(userId, id, root.id, { notes });
       break;
     }
     case "node": {
-      const n = await prisma.mindNode.findFirst({ where: { id, map: { ownerId: userId } }, select: { id: true, mapId: true } });
+      const n = await prisma.mindNode.findFirst({ where: { id, map: mapAccessWhere(userId) }, select: { id: true, mapId: true } });
       if (!n) throw notFound("Nœud");
-      await prisma.mindNode.update({ where: { id }, data: { notes } });
-      await prisma.mindMap.update({ where: { id: n.mapId }, data: { updatedAt: new Date() } });
+      await updateNode(userId, n.mapId, id, { notes });
       break;
     }
     case "project": {

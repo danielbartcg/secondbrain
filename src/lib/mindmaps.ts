@@ -5,10 +5,18 @@ import { badRequest, notFound } from "@/lib/api";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { taskAccessWhere } from "@/lib/projects";
 import type { CreateNodeInput, MoveNodeInput, UpdateNodeInput } from "@/lib/schemas";
+import { mapAccessWhere, requireMapAccess } from "@/lib/map-access";
+import { mapAccessOf, type MapAccess, type MapOwnerRef } from "@/lib/shared/map-access";
+
+export { mapAccessWhere, mapWriteWhere, requireMapAccess } from "@/lib/map-access";
+export type { MapAccess, MapOwnerRef } from "@/lib/shared/map-access";
 
 /**
  * Logique métier des cartes mentales. Chaque fonction reçoit l'utilisateur
- * courant et vérifie la propriété de la carte (anti-IDOR) avant d'agir.
+ * courant et vérifie son droit sur la carte (anti-IDOR) avant d'agir :
+ * lecture (propriétaire ou partage), écriture (propriétaire ou partage en
+ * écriture : nœuds, notes, mise en page, titre), propriétaire (supprimer la
+ * carte, gérer les partages — src/lib/map-shares.ts).
  *
  * Toute mutation s'exécute dans une transaction qui verrouille d'abord la
  * ligne de la carte (`SELECT … FOR UPDATE`) : les mutations concurrentes sur
@@ -35,13 +43,23 @@ export type MindNodeDto = {
   updatedAt: string;
 };
 
+/** Champs de partage communs à la liste et à la carte complète. */
+export type MindMapSharing = {
+  /** Mon droit sur la carte. */
+  access: MapAccess;
+  /** Propriétaire (qui me l'a partagée) ; null quand la carte est à moi. */
+  owner: MapOwnerRef | null;
+  /** Nombre de personnes avec qui la carte est partagée (vue propriétaire ; 0 sinon). */
+  sharedWith: number;
+};
+
 export type MindMapSummary = {
   id: string;
   title: string;
   nodeCount: number;
   createdAt: string;
   updatedAt: string;
-};
+} & MindMapSharing;
 
 export type MindMapDto = {
   id: string;
@@ -50,7 +68,7 @@ export type MindMapDto = {
   updatedAt: string;
   rootId: string;
   nodes: MindNodeDto[];
-};
+} & MindMapSharing;
 
 type Tx = Prisma.TransactionClient;
 
@@ -96,15 +114,33 @@ function toNodeDto(n: NodeRow): MindNodeDto {
   };
 }
 
-async function ownedMap(userId: string, mapId: string) {
-  const map = await prisma.mindMap.findFirst({ where: { id: mapId, ownerId: userId } });
-  if (!map) throw notFound("Carte");
-  return map;
+/** Requête des informations de partage d'une carte, vues par `userId`. */
+function sharingInclude(userId: string) {
+  return {
+    owner: { select: { id: true, name: true, avatarUrl: true } },
+    shares: { where: { userId }, select: { permission: true } },
+    _count: { select: { shares: true } },
+  } satisfies Prisma.MindMapInclude;
 }
 
-/** Transaction sérialisée sur la carte : vérifie la propriété puis verrouille la ligne. */
+function toSharing(
+  userId: string,
+  m: { ownerId: string; owner: MapOwnerRef; shares: Array<{ permission: "READ" | "WRITE" }>; _count: { shares: number } },
+): MindMapSharing {
+  const access = mapAccessOf(m.ownerId, userId, m.shares[0]?.permission) ?? "read";
+  return {
+    access,
+    owner: access === "owner" ? null : { id: m.owner.id, name: m.owner.name, avatarUrl: m.owner.avatarUrl },
+    sharedWith: access === "owner" ? m._count.shares : 0,
+  };
+}
+
+/**
+ * Transaction sérialisée sur la carte : vérifie le droit d'écriture puis
+ * verrouille la ligne (toute écriture du contenu passe par ici).
+ */
 async function mutateMap<T>(userId: string, mapId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  await ownedMap(userId, mapId);
+  await requireMapAccess(userId, mapId, "write");
   return prisma.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "MindMap" WHERE "id" = ${mapId} FOR UPDATE`;
@@ -116,11 +152,12 @@ async function mutateMap<T>(userId: string, mapId: string, fn: (tx: Tx) => Promi
   );
 }
 
+/** Mes cartes et celles qu'on m'a partagées (lecture ou écriture), les plus récentes d'abord. */
 export async function listMindMaps(userId: string): Promise<MindMapSummary[]> {
   const maps = await prisma.mindMap.findMany({
-    where: { ownerId: userId },
+    where: mapAccessWhere(userId),
     orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { nodes: true } } },
+    include: { ...sharingInclude(userId), _count: { select: { nodes: true, shares: true } } },
   });
   return maps.map((m) => ({
     id: m.id,
@@ -128,6 +165,7 @@ export async function listMindMaps(userId: string): Promise<MindMapSummary[]> {
     nodeCount: m._count.nodes,
     createdAt: m.createdAt.toISOString(),
     updatedAt: m.updatedAt.toISOString(),
+    ...toSharing(userId, m),
   }));
 }
 
@@ -140,7 +178,8 @@ export async function createMindMap(userId: string, title: string, ids: { id?: s
 }
 
 export async function getMindMap(userId: string, mapId: string): Promise<MindMapDto> {
-  const map = await ownedMap(userId, mapId);
+  await requireMapAccess(userId, mapId, "read");
+  const map = await prisma.mindMap.findUniqueOrThrow({ where: { id: mapId }, include: sharingInclude(userId) });
   const nodes = await prisma.mindNode.findMany({
     where: { mapId },
     orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -159,6 +198,7 @@ export async function getMindMap(userId: string, mapId: string): Promise<MindMap
     updatedAt: map.updatedAt.toISOString(),
     rootId: root.id,
     nodes: nodes.map(toNodeDto),
+    ...toSharing(userId, map),
   };
 }
 
@@ -171,8 +211,9 @@ export async function updateMindMap(userId: string, mapId: string, data: { title
   });
 }
 
+/** Suppression : propriétaire seulement (les partages disparaissent avec la carte). */
 export async function deleteMindMap(userId: string, mapId: string): Promise<void> {
-  await ownedMap(userId, mapId);
+  await requireMapAccess(userId, mapId, "owner");
   await prisma.mindMap.delete({ where: { id: mapId } });
 }
 
