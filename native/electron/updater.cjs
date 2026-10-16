@@ -39,6 +39,31 @@ function compareVersions(a, b) {
 }
 
 /**
+ * Lance l'installateur (silencieux, puis relance de l'application). Un exécutable
+ * fraîchement écrit peut rester verrouillé quelques secondes (analyse antivirus) :
+ * EBUSY / EPERM / EACCES ⇒ nouvel essai, jusqu'à ~15 s.
+ */
+async function launchInstaller(file) {
+  const RETRYABLE = new Set(["EBUSY", "EPERM", "EACCES", "ETXTBSY"]);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await new Promise((res, rej) => {
+        const child = spawn(file, ["/S", "--force-run"], { detached: true, stdio: "ignore" });
+        child.once("error", rej);
+        child.once("spawn", () => {
+          child.unref();
+          res();
+        });
+      });
+      return;
+    } catch (e) {
+      if (!RETRYABLE.has(e && e.code) || attempt >= 15) throw new Error(`Lancement de l'installateur impossible (${(e && e.code) || e}). Vous pouvez l'exécuter vous-même : ${file}`);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+}
+
+/**
  * @param {{ getServerUrl: () => string, getWindow: () => (import("electron").BrowserWindow | null) }} opts
  */
 function createUpdater({ getServerUrl, getWindow }) {
@@ -142,7 +167,13 @@ function createUpdater({ getServerUrl, getWindow }) {
             send("sb:update-progress", { received, total });
           }
         }
-        await new Promise((res, rej) => out.end((err) => (err ? rej(err) : res())));
+        // Attendre la fermeture effective du descripteur (« close »), pas seulement « finish » :
+        // sinon Windows refuse de lancer l'exécutable encore ouvert (EBUSY).
+        await new Promise((res, rej) => {
+          out.once("error", rej);
+          out.once("close", res);
+          out.end();
+        });
       } catch (e) {
         out.destroy();
         fs.rmSync(dest, { force: true });
@@ -154,7 +185,7 @@ function createUpdater({ getServerUrl, getWindow }) {
         throw new Error("Le fichier téléchargé est corrompu (empreinte SHA-256 différente). Mise à jour annulée.");
       }
       // Installation silencieuse puis relance (--force-run) ; l'installateur attend la fermeture de l'application.
-      spawn(dest, ["/S", "--force-run"], { detached: true, stdio: "ignore" }).unref();
+      await launchInstaller(dest);
       setTimeout(() => app.quit(), 500);
       return { ok: true };
     } catch (e) {
