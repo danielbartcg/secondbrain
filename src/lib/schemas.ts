@@ -117,6 +117,11 @@ export const taskPrioritySchema = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
 export const taskComplexitySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 export const deliverableStatusSchema = z.enum(["PLANNED", "IN_PROGRESS", "DELIVERED", "VALIDATED"]);
 
+/** Valeurs de champs personnalisés : { fieldId: texte | id d'option | null (vider) } — fusion. */
+export const customValuesPatchSchema = z
+  .record(z.string().min(1).max(64), z.string().max(500).nullable())
+  .refine((r) => Object.keys(r).length <= 50, "50 champs au plus");
+
 export const createProjectSchema = z.object({
   name: title,
   description: longText,
@@ -124,7 +129,24 @@ export const createProjectSchema = z.object({
   status: projectStatusSchema.optional(),
   startDate: isoDate,
   dueDate: isoDate,
+  customFields: customValuesPatchSchema.optional(),
 });
+
+// --- Champs personnalisés (administration) ----------------------------------------
+const customOption = z.object({ id: z.string().max(64).optional(), label: z.string().trim().min(1, "Valeur vide").max(100) });
+export const customFieldSchema = z.object({
+  label: z.string().trim().min(1, "Libellé requis").max(60),
+  type: z.enum(["TEXT", "LIST"]),
+  options: z.array(customOption).max(500).optional(),
+});
+export const customFieldUpdateSchema = z.object({
+  label: z.string().trim().min(1, "Libellé requis").max(60).optional(),
+  active: z.boolean().optional(),
+  options: z.array(customOption).max(500).optional(),
+  order: z.number().int().min(0).max(1000).optional(),
+});
+export type CustomFieldInput = z.infer<typeof customFieldSchema>;
+export type CustomFieldUpdateInput = z.infer<typeof customFieldUpdateSchema>;
 export const updateProjectSchema = createProjectSchema.partial();
 
 export const createStageSchema = z.object({

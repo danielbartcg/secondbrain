@@ -318,7 +318,16 @@ dernière utilisation, révocation).
 
 ## Administration (`/admin`, `admin/*`)
 
-Onglets Utilisateurs · Tous les projets · Toutes les tâches.
+Onglets Utilisateurs · Tous les projets · Toutes les tâches · Champs personnalisés · Notifications.
+- **Champs personnalisés** (`admin/AdminCustomFields`) : ajout (libellé, liste
+  de valeurs ou texte libre) ; par champ : libellé modifiable, type, nombre de
+  projets renseignés, monter / descendre, archiver / réactiver, supprimer
+  (confirmation avec le nombre de projets touchés) ; liste : valeurs en
+  pastilles renommables en place, déplaçables, retirables, ajout (plusieurs
+  séparées par « ; »). Fiche projet : bloc « Informations » sous les dates
+  (`projects/ProjectCustomFields` : liste déroulante ou texte enregistré à la
+  sortie) ; liste des projets et vue d'administration : pastilles
+  « Libellé : valeur ».
 - **Utilisateurs** : recherche ; par compte, rôle (Utilisateur / Administrateur ;
   « Super administrateur » figé ; pas de modification de son propre rôle),
   manager (N+1) dans une liste, N-1 en avatars, nombre de projets.

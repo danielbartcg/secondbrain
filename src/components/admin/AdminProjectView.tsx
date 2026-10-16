@@ -5,6 +5,7 @@ import { ArrowLeft, Eye, Layers, ListChecks } from "lucide-react";
 import type { ProjectDto, TaskDto } from "@/lib/projects";
 import { STATUS_LABEL } from "@/components/projects/ProjectList";
 import { Avatar, Badge, PriorityFlag, ProgressBar, TASK_STATUS_LABEL, TASK_STATUS_TONE, formatDate } from "@/components/ui";
+import { CustomFieldChips } from "@/components/projects/ProjectCustomFields";
 
 /** Projet quelconque en lecture seule : équipe, étapes › activités › tâches (liens vers les fiches en consultation). */
 export function AdminProjectView({ project }: { project: ProjectDto & { ownerName: string } }) {
@@ -41,6 +42,7 @@ export function AdminProjectView({ project }: { project: ProjectDto & { ownerNam
           <span className="ml-auto text-xs text-muted">Propriétaire : {project.ownerName}</span>
         </div>
         {project.description && <p className="mt-2 whitespace-pre-wrap text-sm text-ink-2">{project.description}</p>}
+        <CustomFieldChips values={project.customFields} max={20} />
         <div className="mt-3 flex items-center gap-3">
           <ProgressBar percent={project.progress.percent} color={project.color} className="h-2.5" />
           <span className="text-sm font-semibold tabular-nums">{project.progress.percent}%</span>

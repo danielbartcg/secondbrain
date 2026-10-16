@@ -14,6 +14,8 @@ import { listUsersAdmin, reportIdsOf } from "@/lib/users";
 import type { ProjectDto, TaskDto } from "@/lib/projects";
 import { WRITE_TOOLS } from "@/lib/mcp-write";
 import { getActivity } from "@/lib/activity";
+import { allCustomFields, listCustomFields } from "@/lib/custom-fields";
+import { customEntries, type CustomFieldDto } from "@/lib/shared/custom-fields";
 import { listMapEvents } from "@/lib/map-events";
 import { ACTIVITY_PRESETS } from "@/lib/shared/activity-period";
 
@@ -103,12 +105,19 @@ function taskForAi(t: TaskDto, members: ProjectDto["members"]) {
   };
 }
 
-function projectForAi(p: ProjectDto & { ownerName?: string }) {
+/** Champs personnalisés lisibles : { « Client » : « ACME » }. */
+function customForAi(fields: CustomFieldDto[], values: Record<string, string>) {
+  const entries = customEntries(fields, values);
+  return entries.length ? Object.fromEntries(entries.map((e) => [e.label, e.value])) : undefined;
+}
+
+function projectForAi(p: ProjectDto & { ownerName?: string }, fields: CustomFieldDto[] = []) {
   const m = p.members;
   return {
     id: p.id,
     name: p.name,
     status: p.status,
+    customFields: customForAi(fields, p.customFields),
     owner: p.ownerName ?? m.find((x) => x.userId === p.ownerId)?.name ?? undefined,
     description: p.description || undefined,
     startDate: p.startDate,
@@ -231,6 +240,13 @@ export const TOOLS: Tool[] = [
       listMapEvents(user.id, String(args.map_id), { nodeId: typeof args.node_id === "string" ? args.node_id : undefined, limit: typeof args.limit === "number" ? args.limit : 200 }),
   },
   {
+    name: "list_custom_fields",
+    title: "Champs personnalisés des projets",
+    description: "Champs personnalisés définis dans l'administration (ex. « Client ») : libellé, type (TEXT texte libre, LIST liste de valeurs) et valeurs possibles.",
+    inputSchema: { type: "object", properties: {} },
+    run: async () => (await listCustomFields()).map((f) => ({ id: f.id, label: f.label, type: f.type, values: f.type === "LIST" ? f.options.map((o) => o.label) : undefined })),
+  },
+  {
     name: "whoami",
     title: "Mon compte",
     description: "Compte connecté : nom, e-mail, administrateur ou non, nombre de N-1 (périmètre de lecture).",
@@ -259,21 +275,30 @@ export const TOOLS: Tool[] = [
       properties: {
         status: { type: "string", enum: ["ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"] },
         query: { type: "string", description: "Filtre sur le nom." },
+        custom_field: { type: "string", description: "Filtre sur un champ personnalisé, « Libellé=valeur » (ex. « Client=ACME »)." },
         ...ADMIN_FLAG,
       },
     },
     run: async (user, args) => {
       const admin = wantsAdmin(user, args);
-      let rows: Array<{ id: string; name: string; status: string; description: string; startDate: string | null; dueDate: string | null; progress: unknown; stageCount: number; memberCount: number; deliverableCount: number; updatedAt: string; ownerName?: string; ownerId: string }> = admin
+      let rows: Array<{ id: string; name: string; status: string; description: string; startDate: string | null; dueDate: string | null; progress: unknown; stageCount: number; memberCount: number; deliverableCount: number; updatedAt: string; ownerName?: string; ownerId: string; customFields: Record<string, string> }> = admin
         ? await listAllProjectsAdmin(user)
         : await listProjects(user.id);
       if (typeof args.status === "string") rows = rows.filter((p) => p.status === args.status);
       const q = str(args, "query", false).toLowerCase();
       if (q) rows = rows.filter((p) => p.name.toLowerCase().includes(q));
+      const fields = await allCustomFields();
+      // Filtre sur un champ personnalisé : « Client=ACME ».
+      const cf = str(args, "custom_field", false);
+      if (cf.includes("=")) {
+        const [label, wanted] = cf.split("=").map((x) => x.trim().toLowerCase());
+        rows = rows.filter((p) => customEntries(fields, p.customFields).some((e) => e.label.toLowerCase() === label && e.value.toLowerCase() === wanted));
+      }
       return rows.map((p) => ({
         id: p.id,
         name: p.name,
         status: p.status,
+        customFields: customForAi(fields, p.customFields),
         owner: p.ownerName ?? (p.ownerId === user.id ? user.name : undefined),
         mine: p.ownerId === user.id,
         description: p.description || undefined,
@@ -296,7 +321,7 @@ export const TOOLS: Tool[] = [
     run: async (user, args) => {
       const id = str(args, "project_id");
       const p = wantsAdmin(user, args) ? await getProjectAdmin(user, id) : await getProject(user.id, id);
-      return projectForAi(p);
+      return projectForAi(p, await allCustomFields());
     },
   },
   {

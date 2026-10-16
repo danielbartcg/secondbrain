@@ -182,7 +182,8 @@ complet recalculé** (`{ project }`).
 | GET | `/projects` | → `{ projects: ProjectSummary[] }` |
 | POST | `/projects` | `{ name, description?, color?, status?, startDate?, dueDate? }` (le créateur devient membre « Chef de projet ») |
 | GET | `/projects/:id` | → `{ project }` |
-| PATCH | `/projects/:id` | champs du POST, optionnels |
+| PATCH | `/projects/:id` | champs du POST, optionnels ; `customFields?: { fieldId: valeur \| null }` (fusion ; liste : id d'option ou libellé exact ; texte ≤ 500 ; 400 si champ inconnu, archivé ou valeur hors liste) |
+| GET | `/custom-fields` | — | `{ fields: { id, label, type, options: { id, label }[], order, active }[] }` (actifs) |
 | DELETE 👑 | `/projects/:id` | → `{ ok: true }` |
 
 ### Équipe
@@ -543,12 +544,16 @@ Réponses : `{ risks: Risk[] }` (liste complète du projet, triée par `order` p
 
 | Méthode | Route | Réponse |
 | --- | --- | --- |
-| GET | `/projects/:id/export` | classeur `.xlsx` (`attachment`) : Synthèse, Tâches, Étapes & activités, Livrables, Risques & opportunités, Matrices, Réunions, Équipe, Documents ; membres du projet (404 sinon) ; 30 / 15 min |
+| GET | `/projects/:id/export` | classeur `.xlsx` (`attachment`) : Synthèse (avec champs personnalisés), Tâches, Planning (Gantt), Étapes & activités, Livrables, Risques & opportunités, Matrices, Réunions, Équipe, Documents ; membres du projet (404 sinon) ; 30 / 15 min |
 
 ## Administration (compléments)
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
+| GET | `/admin/custom-fields` | — | `{ fields (archivés compris), usage: { fieldId: nb de projets } }` |
+| POST | `/admin/custom-fields` | `{ label, type: "TEXT"\|"LIST", options?: { label }[] }` | `201 { fields }` ; 50 champs, 500 valeurs max ; doublons refusés |
+| PATCH | `/admin/custom-fields/:id` | `{ label?, active?, options?: { id?, label }[] (liste complète), order? }` | `{ fields }` ; valeurs retirées effacées des projets |
+| DELETE | `/admin/custom-fields/:id` | — | `{ fields }` ; valeurs effacées de tous les projets |
 | GET | `/admin/settings` | — | `{ registration: { enabled, forcedClosed, open } }` |
 | PATCH | `/admin/settings` | `{ registrationEnabled }` | idem ; ferme / ouvre les inscriptions libres |
 | POST | `/admin/users` | `{ email, firstName, lastName, password (8–72), role?, managerId? }` | 201 `{ users }` ; 409 `EMAIL_TAKEN` (y compris l'adresse du super administrateur) ; 404 manager ; 429 (30 / h / administrateur) ; adresse non validée |

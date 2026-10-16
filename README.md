@@ -111,6 +111,7 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run desktop:smoke` | test de démarrage de l'application desktop (profil jetable ; connexion réelle avec `SB_SMOKE_SERVER`, `SB_SMOKE_EMAIL`, `SB_SMOKE_PASSWORD`) |
 | `npm run desktop:build` / `desktop:publish` | installateur Windows (`native/release/`) / publication sur le serveur (page `/app`) |
 | `npm run ios:sync` / `ios:open` | application iPhone : build de l'interface + mise à jour du projet Xcode `native/ios` / ouverture dans Xcode (Mac) ; envoi TestFlight par le workflow GitHub « iOS TestFlight » |
+| `npm run test:custom-fields` | tests de bout en bout des champs personnalisés des projets (administration, valeurs, renommage / retrait / archivage / suppression, synchro, outils MCP) — serveur de dev lancé |
 | `npm run test:activity` | tests de bout en bout de la piste d'audit des cartes et du rapport d'activité (API, filtres, droits, outils MCP) et des fenêtres de temps — serveur de dev lancé |
 | `npm run test:map-shares` | tests de bout en bout du partage des cartes mentales (lecture / écriture, notifications, notes, épingles, recherche, synchro) — serveur de dev lancé, `BASE_URL` facultatif |
 | `npm run perf:seed` | jeu de données volumineux **conservé** pour les tests de performance (200 comptes, ~20 000 tâches, cartes de 5 000 nœuds, messages, notifications ; `--reset`, `--drop`, `SCALE=`) — base locale uniquement ; connexion `perf-000@perf.local` / `PerfTest!2026` |

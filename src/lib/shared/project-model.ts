@@ -1,5 +1,6 @@
 import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPriority, TaskStatus } from "@prisma/client";
 import { sanitizeNotes } from "@/lib/sanitize";
+import { readCustomValues } from "./custom-fields";
 
 /**
  * Modèle « projets » pur (sans accès base ni 'server-only') : types DTO,
@@ -128,6 +129,8 @@ export type ProjectSummary = {
   stageCount: number;
   memberCount: number;
   deliverableCount: number;
+  /** Champs personnalisés : { fieldId: texte | id d'option } (voir shared/custom-fields). */
+  customFields: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 };
@@ -285,6 +288,7 @@ export function toProjectDto(p: ProjectRow): ProjectDto {
     stageCount: p.stages.length,
     memberCount: p.members.length,
     deliverableCount: p.deliverables.length,
+    customFields: readCustomValues((p as { customFields?: unknown }).customFields),
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     notes: sanitizeNotes(p.notes),

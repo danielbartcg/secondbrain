@@ -36,6 +36,7 @@
     "test:admin-users": "tsx scripts/admin-users-test.ts",
     "test:gantt": "tsx scripts/gantt-model-test.ts",
     "test:activity": "tsx scripts/activity-test.ts",
+    "test:custom-fields": "tsx scripts/custom-fields-test.ts",
     "test:map-shares": "tsx scripts/map-shares-test.ts",
     "perf:seed": "tsx scripts/perf-seed.ts",
     "perf:bench": "tsx scripts/perf-bench.ts"

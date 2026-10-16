@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, FolderKanban, ListTodo, Users } from "lucide-react";
+import { Bell, FolderKanban, ListTodo, SlidersHorizontal, Users } from "lucide-react";
 
 const TABS = [
   { href: "/admin/users", label: "Utilisateurs", icon: Users },
   { href: "/admin/projects", label: "Tous les projets", icon: FolderKanban },
   { href: "/admin/tasks", label: "Toutes les tâches", icon: ListTodo },
+  { href: "/admin/fields", label: "Champs personnalisés", icon: SlidersHorizontal },
   { href: "/admin/notifications", label: "Notifications", icon: Bell },
 ];
 

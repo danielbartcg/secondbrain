@@ -1,4 +1,5 @@
 import "server-only";
+import { allCustomFields } from "@/lib/custom-fields";
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
@@ -333,10 +334,10 @@ export const WRITE_TOOLS: WriteTool[] = [
   {
     name: "update_project",
     title: "Modifier un projet",
-    description: "Modifie un projet : nom, description, statut (ACTIVE, ON_HOLD, DONE, ARCHIVED), dates, notes (texte ou HTML).",
+    description: "Modifie un projet : nom, description, statut (ACTIVE, ON_HOLD, DONE, ARCHIVED), dates, notes (texte ou HTML), champs personnalisés (custom_fields : { « Libellé » : valeur } ; pour une liste, le libellé d'une valeur existante — voir list_custom_fields ; null ou \"\" pour vider).",
     inputSchema: {
       type: "object",
-      properties: { project_id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, status: { type: "string", enum: ["ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"] }, start_date: { type: ["string", "null"] }, due_date: { type: ["string", "null"] }, notes_text: { type: "string" }, notes_html: { type: "string" } },
+      properties: { project_id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, status: { type: "string", enum: ["ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"] }, start_date: { type: ["string", "null"] }, due_date: { type: ["string", "null"] }, notes_text: { type: "string" }, notes_html: { type: "string" }, custom_fields: { type: "object", additionalProperties: { type: ["string", "null"] } } },
       required: ["project_id"],
     },
     run: async (user, args) => {
@@ -347,6 +348,17 @@ export const WRITE_TOOLS: WriteTool[] = [
       if (has(args, "status")) body.status = args.status;
       if (has(args, "start_date")) body.startDate = args.start_date || null;
       if (has(args, "due_date")) body.dueDate = args.due_date || null;
+      if (args.custom_fields && typeof args.custom_fields === "object") {
+        // Libellés (ou identifiants) de champs → identifiants ; les valeurs de liste sont acceptées par libellé.
+        const fields = await allCustomFields();
+        const patch: Record<string, string | null> = {};
+        for (const [k, v] of Object.entries(args.custom_fields as Record<string, unknown>)) {
+          const f = fields.find((x) => x.id === k) ?? fields.find((x) => x.label.toLowerCase() === k.trim().toLowerCase());
+          if (!f) throw new ApiError(400, "BAD_ARGUMENT", `Champ personnalisé inconnu : « ${k} » (${fields.map((x) => x.label).join(", ") || "aucun champ défini"}).`);
+          patch[f.id] = typeof v === "string" && v.trim() ? v.trim() : null;
+        }
+        body.customFields = patch;
+      }
       if (Object.keys(body).length) await callApi(user, "PATCH", `/projects/${encodeURIComponent(id)}`, body);
       const notes = richContent(args, "notes_html", "notes_text");
       if (notes !== undefined) await callApi(user, "PATCH", `/notes/project/${encodeURIComponent(id)}`, { notes });

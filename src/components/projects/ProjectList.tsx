@@ -8,6 +8,7 @@ import { api } from "@/lib/client";
 import type { ProjectDto, ProjectSummary } from "@/lib/projects";
 import { Button, EmptyState, PageHeader, ProgressBar, errorMessage, formatDate } from "@/components/ui";
 import { PinButton } from "@/components/PinButton";
+import { CustomFieldChips } from "./ProjectCustomFields";
 
 export const STATUS_LABEL: Record<ProjectSummary["status"], string> = {
   ACTIVE: "Actif",
@@ -181,6 +182,7 @@ export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initi
                 )}
               </div>
               {p.description && <p className="mt-3 line-clamp-2 text-sm text-ink-2">{p.description}</p>}
+              <CustomFieldChips values={p.customFields} />
               <div className="mt-3 flex items-center gap-3">
                 <ProgressBar percent={p.progress.percent} color={p.color} />
                 <span className="shrink-0 text-xs font-medium tabular-nums text-ink-2">{p.progress.percent}%</span>

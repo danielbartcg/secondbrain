@@ -18,6 +18,7 @@ import { DeliverablesTab } from "./DeliverablesTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { NotesPreview } from "@/components/notes/NotesPreview";
 import { PinButton } from "@/components/PinButton";
+import { ProjectCustomFields } from "./ProjectCustomFields";
 
 /**
  * Espace projet : en-tête commun + onglets (tableau de bord, plan, livrables,
@@ -160,6 +161,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
             {project.deliverableCount > 1 ? "s" : ""}
           </span>
         </div>
+        <ProjectCustomFields values={project.customFields} onChange={(customFields) => patchProject({ customFields })} />
         <div className="mt-4 flex items-center gap-3">
           <ProgressBar percent={project.progress.percent} color={project.color} className="h-3" />
           <span className="shrink-0 text-sm font-semibold tabular-nums">{project.progress.percent}%</span>

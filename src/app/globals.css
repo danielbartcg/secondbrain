@@ -305,6 +305,10 @@ body {
   border-style: dashed;
   color: var(--color-muted);
 }
+/* Le titre garde toujours quelques caractères visibles, même à côté de pastilles. */
+.mind-node .mind-title {
+  min-width: 3em;
+}
 .mind-node.is-closed .mind-title {
   text-decoration: line-through;
 }

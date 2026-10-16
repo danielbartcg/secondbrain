@@ -577,7 +577,25 @@ function Editor({ initial }: { initial: MindMapDto }) {
   }, []);
 
   // --- Mise en page → React Flow ------------------------------------------------
-  const { positions, edges: layoutEdges } = useMemo(() => layoutMindMap(visibleNodes, map.rootId), [visibleNodes, map.rootId]);
+  // Place des pastilles à côté du titre (statut, notes, tâches, nœuds masqués) :
+  // ajoutée à la largeur du texte pour que le titre ne soit pas tronqué.
+  const withChildren = useMemo(() => new Set(nodes.map((n) => n.parentId).filter(Boolean) as string[]), [nodes]);
+  const layoutNodes = useMemo(
+    () =>
+      visibleNodes.map((n) => {
+        const digits = (v: number) => String(v).length * 6;
+        let extra = 0;
+        if (n.status === "WATCH") extra += 20;
+        if (n.notes.replace(/<[^>]+>/g, "").trim().length > 0 || n.notes.includes("<img")) extra += 20;
+        if (n.openTaskCount > 0) extra += 28 + digits(n.openTaskCount);
+        const ch = closedHidden.get(n.id) ?? 0;
+        if (ch > 0) extra += 26 + digits(ch);
+        if (n.collapsed && withChildren.has(n.id)) extra += 34;
+        return extra ? { ...n, extra } : n;
+      }),
+    [visibleNodes, closedHidden, withChildren],
+  );
+  const { positions, edges: layoutEdges } = useMemo(() => layoutMindMap(layoutNodes, map.rootId), [layoutNodes, map.rootId]);
   const showClosedNodes = useCallback(() => setShowClosed(true), []);
 
   const [rfNodes, setRfNodes] = useState<MindNode[]>([]);

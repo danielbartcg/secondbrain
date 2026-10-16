@@ -229,19 +229,22 @@ enum DeliverableStatus {
 }
 
 model Project {
-  id          String        @id @default(cuid())
-  ownerId     String
-  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  name        String
-  description String        @default("")
+  id           String        @id @default(cuid())
+  ownerId      String
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name         String
+  description  String        @default("")
   /// Notes riches (HTML assaini) prises depuis « Prise de notes ».
-  notes       String        @default("")
-  color       String?
-  status      ProjectStatus @default(ACTIVE)
-  startDate   DateTime?
-  dueDate     DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  notes        String        @default("")
+  color        String?
+  status       ProjectStatus @default(ACTIVE)
+  startDate    DateTime?
+  dueDate      DateTime?
+  /// Champs personnalisés (Administration → Champs personnalisés) :
+  /// { [customFieldId]: valeur } — texte, ou identifiant d'option pour une liste.
+  customFields Json          @default("{}")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   stages       Stage[]
   members      ProjectMember[]
@@ -257,6 +260,27 @@ model Project {
 
 /// Membre de l'équipe projet : soit un compte de l'application (`userId`),
 /// soit un simple nom saisi en dur. Les tâches et livrables lui sont affectés.
+/// Type d'un champ personnalisé.
+enum CustomFieldType {
+  TEXT
+  LIST
+}
+
+/// Champ personnalisé des projets, défini dans l'administration (ex. « Client »).
+/// `options` (liste) : [{ id, label }] — les projets stockent l'identifiant :
+/// renommer une valeur la renomme partout.
+model CustomField {
+  id        String          @id @default(cuid())
+  label     String
+  type      CustomFieldType @default(TEXT)
+  options   Json            @default("[]")
+  order     Int             @default(0)
+  /// Archivé : masqué des fiches projet, valeurs conservées.
+  active    Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
 model ProjectMember {
   id        String   @id @default(cuid())
   projectId String

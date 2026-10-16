@@ -134,7 +134,11 @@ Docker + Caddy en production.
   (`src/lib/sanitize.ts`). Images autorisées uniquement en `/media/…` ou
   `http(s)://`.
 - Mise en page côté client, `src/lib/mindmap-layout.ts` (d3-hierarchy, sans
-  React) — réutilisable dans l'application mobile. Rendu React Flow.
+  React) — réutilisable dans l'application mobile. Rendu React Flow. Largeur
+  d'un nœud = texte (estimé, 260 px max) **+ place des pastilles** (`extra` :
+  œil « à surveiller », notes, tâches ouvertes, nœuds fermés masqués, nœuds
+  repliés) : le titre n'est jamais mangé par les icônes ; le titre garde au
+  moins 3 em visibles.
 - **Positions libres** : un nœud déposé **sur** un autre s'y rattache ;
   déposé ailleurs, sa position est mémorisée (`MindNode.x/y`). Dans la mise en
   page, un nœud positionné manuellement entraîne sa descendance non
@@ -451,6 +455,24 @@ de notes d'un même auteur sur un même nœud sont regroupés (séance de 10 min
 Lecture : `GET /mindmaps/:id/history?nodeId=` (droit de lecture sur la carte),
 panneau « Historique » de l'éditeur, outil MCP `get_map_history`.
 
+## Champs personnalisés des projets (`src/lib/custom-fields.ts`)
+
+Définis globalement par les administrateurs (Administration → Champs
+personnalisés) : libellé, type **texte libre** ou **liste de valeurs**
+(gérée là), ordre, archivage. Valeurs dans `Project.customFields` (JSON
+`{ fieldId: texte | id d'option }`) : renommer une valeur la renomme partout ;
+retirer une valeur ou supprimer un champ l'efface des projets (même
+transaction) ; archiver masque le champ en gardant les valeurs. Validation
+pure partagée (`src/lib/shared/custom-fields.ts`, `applyCustomPatch` :
+une valeur de liste peut être donnée par identifiant ou libellé exact)
+appliquée par `createProject` / `updateProject` (fusion : `null` vide) et
+par l'application hors ligne (définitions en cache). Colonne synchronisée
+comme les autres. Affichage : bloc « Informations » de la fiche projet,
+pastilles de la liste des projets et de la vue d'administration, export
+Excel, connecteur MCP (`list_custom_fields`, `customFields` lisibles dans
+`get_project` / `list_projects` — filtre « Libellé=valeur » —,
+`update_project` `custom_fields`).
+
 ## Rapport d'activité (`src/lib/activity.ts`)
 
 « Qu'est-ce qui a évolué » sur une fenêtre libre : périodes prédéfinies
@@ -490,11 +512,21 @@ Règles pures partagées : `src/lib/shared/risks.ts`. Verrou de ligne du projet.
 ## Export Excel (`src/lib/project-export.ts`)
 
 `GET /projects/:id/export` (exceljs, rendu côté serveur, paquet externe) :
-classeur avec Synthèse, Tâches (références T1…, prérequis, risques liés,
-notes en texte), Étapes & activités, Livrables, Risques & opportunités
-(couleurs de niveau), Matrices 5 × 5, Réunions (comptes-rendus en texte,
-décisions), Équipe, Documents. En-têtes figés, filtres, dates et pourcentages
-typés. 30 exports / 15 min / utilisateur. Dans l'application desktop, la
+classeur mis en forme comme un livrable (couleur du projet, défaut
+#4F5FF0) : **Synthèse** (bandeau, indicateurs en cartes, barre d'avancement,
+répartitions par statut / priorité / niveau de risque / statut de livrable
+avec barres, avancement par étape, champs personnalisés « Informations »,
+sommaire avec liens, description et notes), **Tâches** (références T1…,
+pastilles de statut / priorité / complexité, retards en rouge, prérequis,
+risques liés, notes en texte), **Planning** (Gantt par semaines — par mois au-
+delà de 78 semaines — dessiné par mise en forme conditionnelle, rapide à
+4 000 tâches, semaine courante surlignée), Étapes & activités (étapes en
+lignes de groupe), Livrables, Risques & opportunités (couleurs de niveau,
+stratégie), Matrices 5 × 5 en tuiles, Réunions (comptes-rendus, validations
+colorées), Équipe, Documents. Chaque feuille : titre, sous-titre, en-tête
+coloré, lignes alternées, volets figés, filtres, formats typés, impression A4
+paysage ajustée en largeur avec pied de page. `renderProjectWorkbook(data)`
+construit le classeur sans base (testable). 30 exports / 15 min / utilisateur. Dans l'application desktop, la
 coque relaie cette route avec le jeton (liste blanche).
 
 ## Inscriptions et comptes

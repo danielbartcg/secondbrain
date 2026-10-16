@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { AdminCustomFields } from "@/components/admin/AdminCustomFields";
+import type { CustomFieldDto } from "@/lib/shared/custom-fields";
 import { ActivityView } from "@/components/activity/ActivityView";
 import type { ActivityReport } from "@/lib/activity";
 import { toast } from "@/components/ui";
@@ -219,6 +221,7 @@ function AdminScreen({ path, userId, userEmail }: { path: string; userId: string
     const id = r[1];
     body = <Loaded load={() => api.get<{ project: ProjectDto & { ownerName: string } }>(`/admin/projects/${id}`)} render={(d) => <AdminProjectView project={d.project} />} />;
   } else if (path === "/admin/notifications") body = <Loaded load={() => api.get<{ settings: NotificationSettingsDto }>("/admin/notifications")} render={(d) => <AdminNotifications initial={d.settings} adminEmail={userEmail} />} />;
+  else if (path === "/admin/fields") body = <Loaded load={() => api.get<{ fields: CustomFieldDto[]; usage: Record<string, number> }>("/admin/custom-fields")} render={(d) => <AdminCustomFields initial={d.fields} usage={d.usage} />} />;
   else if (path === "/admin/tasks") body = <Loaded load={() => api.get<{ tasks: OverviewTask[] }>("/admin/tasks")} render={(d) => <TaskOverviewTable tasks={d.tasks} />} />;
   else body = <Message title="Page introuvable" />;
   return (

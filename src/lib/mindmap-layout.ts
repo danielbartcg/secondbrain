@@ -23,6 +23,9 @@ export type LayoutNode = {
    *  sa descendance non positionnée manuellement du même décalage. */
   x?: number | null;
   y?: number | null;
+  /** Largeur (px) des pastilles affichées à côté du titre (notes, tâches, statut…) :
+   *  ajoutée à celle du texte pour que le titre reste lisible. */
+  extra?: number;
 };
 
 export type Side = "left" | "right" | "root";
@@ -46,10 +49,10 @@ export const ROOT_H = 56;
 const GAP_X = 72;
 const GAP_Y = 16;
 
-export function estimateWidth(title: string, isRoot: boolean): number {
+export function estimateWidth(title: string, isRoot: boolean, extra = 0): number {
   const chars = Math.max(4, title.length);
   const w = Math.min(260, chars * 7.4 + 36);
-  return isRoot ? Math.min(300, w + 24) : w;
+  return (isRoot ? Math.min(300, w + 24) : w) + Math.max(0, extra);
 }
 
 type H = { id: string; kids: H[] };
@@ -77,7 +80,7 @@ export function layoutMindMap(nodes: LayoutNode[], rootId: string): { positions:
   const root = byId.get(rootId);
   if (!root) return { positions, edges };
 
-  const rootW = estimateWidth(root.title, true);
+  const rootW = estimateWidth(root.title, true, root.extra);
   positions.set(rootId, {
     id: rootId,
     x: -rootW / 2,
@@ -105,7 +108,8 @@ export function layoutMindMap(nodes: LayoutNode[], rootId: string): { positions:
     const maxW = new Map<number, number>();
     h.each((d) => {
       if (d.depth === 0) return;
-      const w = estimateWidth(byId.get(d.data.id)?.title ?? "", false);
+      const dn = byId.get(d.data.id);
+      const w = estimateWidth(dn?.title ?? "", false, dn?.extra);
       maxW.set(d.depth, Math.max(maxW.get(d.depth) ?? 0, w));
     });
     const colX: number[] = [rootW / 2];
@@ -116,7 +120,7 @@ export function layoutMindMap(nodes: LayoutNode[], rootId: string): { positions:
     h.each((d) => {
       if (d.depth === 0) return;
       const n = byId.get(d.data.id)!;
-      const width = estimateWidth(n.title, false);
+      const width = estimateWidth(n.title, false, n.extra);
       const xStart = colX[d.depth];
       positions.set(n.id, {
         id: n.id,

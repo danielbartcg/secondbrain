@@ -264,6 +264,26 @@ async function main() {
     const after = await http<Any>("GET", `/tasks/${nt.task.id}`, A.token);
     check("étape supprimée : prérequis nettoyés (local et serveur)", rt.model.task(nt.task.id)!.prerequisiteIds.length === 0 && after.data.task.prerequisiteIds.length === 0, { local: rt.model.task(nt.task.id)!.prerequisiteIds, server: after.data.task.prerequisiteIds });
 
+    // Champs personnalisés : définitions en cache, valeur saisie hors ligne puis synchronisée.
+    const { PrismaClient } = await import("@prisma/client");
+    const db = new PrismaClient();
+    const field = await db.customField.create({ data: { label: "Client test natif", type: "LIST", options: [{ id: "oacme", label: "ACME" }] } });
+    try {
+      await api("GET", "/custom-fields");
+      setForcedOffline(true);
+      const bad = await api("PATCH", `/projects/${npId}`, { customFields: { [field.id]: "Inconnu" } }).then(() => null, (e: Any) => e);
+      check("champ personnalisé : valeur hors liste refusée hors ligne", bad?.status === 400, bad?.message);
+      const cfp = await api("PATCH", `/projects/${npId}`, { customFields: { [field.id]: "ACME" } });
+      check("champ personnalisé : valeur appliquée localement (identifiant d'option)", cfp.project.customFields[field.id] === "oacme", cfp.project.customFields);
+      setForcedOffline(false);
+      await rt.sync.syncNow();
+      const srvCf = await http<Any>("GET", `/projects/${npId}`, A.token);
+      check("champ personnalisé : synchronisé au serveur", srvCf.data.project.customFields?.[field.id] === "oacme", srvCf.data.project.customFields);
+    } finally {
+      await db.customField.delete({ where: { id: field.id } });
+      await db.$disconnect();
+    }
+
     await http("DELETE", `/projects/${npId}`, A.token);
     await http("DELETE", `/projects/${sid}`, B.token);
     await rt.sync.syncNow();

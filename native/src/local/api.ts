@@ -28,6 +28,7 @@ import { byOrder, type LocalModel } from "./model";
 import { NetworkError, remote, remoteForm, remoteUpload } from "./remote";
 import type { Store } from "./store";
 import { prerequisiteError } from "@/lib/shared/prerequisites";
+import { applyCustomPatch, readCustomValues } from "@/lib/shared/custom-fields";
 import { labelOf, newId, type SyncEngine } from "./sync";
 import type { Entity, Profile, Row } from "./types";
 
@@ -260,26 +261,48 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   }
 
   // --- Projets, étapes, activités ----------------------------------------------------------
+  /**
+   * Champs personnalisés : validés contre les dernières définitions connues
+   * (sinon acceptés, le serveur valide à la synchro). Renvoie les valeurs
+   * locales et l'état complet à envoyer (null = vider) pour une fusion exacte.
+   */
+  function customValues(current: Record<string, string>, patch: Record<string, string | null>) {
+    let values: Record<string, string>;
+    if (store.meta.customFields) {
+      const r = applyCustomPatch(store.meta.customFields, current, patch);
+      if ("error" in r) throw badRequest(r.error);
+      values = r.values;
+    } else {
+      values = { ...current };
+      for (const [k, v] of Object.entries(patch)) if (v && v.trim()) values[k] = v.trim(); else delete values[k];
+    }
+    const send: Record<string, string | null> = Object.fromEntries(Object.keys(current).map((k) => [k, null]));
+    Object.assign(send, values);
+    return { values, send };
+  }
+
   function createProject(body: unknown) {
     const input = parse(createProjectSchema, body);
+    const custom = input.customFields ? customValues({}, input.customFields) : null;
     const id = newId();
     const t = now();
     const u = me();
-    store.put("Project", id, { id, ownerId: u.id, name: input.name, description: input.description, notes: "", color: input.color ?? null, status: input.status ?? "ACTIVE", startDate: toDay(input.startDate) ?? null, dueDate: toDay(input.dueDate) ?? null, createdAt: t, updatedAt: t });
+    store.put("Project", id, { id, ownerId: u.id, name: input.name, description: input.description, notes: "", customFields: custom?.values ?? {}, color: input.color ?? null, status: input.status ?? "ACTIVE", startDate: toDay(input.startDate) ?? null, dueDate: toDay(input.dueDate) ?? null, createdAt: t, updatedAt: t });
     // Membre provisoire (le serveur crée le vrai à la synchro) : on peut s'affecter des tâches tout de suite.
     // Fiche membre « moi » : le serveur la crée avec le même identifiant (ownerMemberId),
     // si bien que les tâches affectées hors ligne restent valides à la synchronisation.
     const mid = newId("pm");
     store.put("ProjectMember", mid, { id: mid, projectId: id, userId: u.id, name: u.name, email: u.email, role: "Chef de projet", color: null, createdAt: t });
-    sync.enqueue("Project", id, "create", defined({ name: input.name, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate, ownerMemberId: mid }), input.name);
+    sync.enqueue("Project", id, "create", defined({ name: input.name, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate, ownerMemberId: mid, customFields: custom?.values }), input.name);
     return projectResp(id);
   }
 
   function updateProject(pid: string, body: unknown) {
     const input = parse(updateProjectSchema, body);
-    must("Project", pid, "Projet");
-    const fields = defined({ name: input.name, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate });
-    store.patch("Project", pid, { ...fields, ...defined({ startDate: toDay(input.startDate), dueDate: toDay(input.dueDate) }) });
+    const p = must("Project", pid, "Projet");
+    const custom = input.customFields ? customValues(readCustomValues(p.customFields), input.customFields) : null;
+    const fields = defined({ name: input.name, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate, customFields: custom?.send });
+    store.patch("Project", pid, { ...fields, ...defined({ startDate: toDay(input.startDate), dueDate: toDay(input.dueDate), customFields: custom?.values }) });
     if (Object.keys(fields).length) enqueue("Project", pid, "update", fields);
     return projectResp(pid);
   }
@@ -772,6 +795,17 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     ["POST", /^\/uploads$/, ({ body }) => upload(body)],
     // Notifications : serveur si possible, sinon liste vide.
     ["GET", /^\/notifications$/, ({ query }) => notifications("/notifications", query)],
+    // Champs personnalisés : serveur, dernière liste connue hors ligne.
+    ["GET", /^\/custom-fields$/, async () => {
+      try {
+        const r = (await online("GET", "/custom-fields")) as { fields: NonNullable<typeof store.meta.customFields> };
+        store.setMeta("customFields", r.fields);
+        return r;
+      } catch (e) {
+        if (e instanceof ApiClientError && e.status === 503) return { fields: store.meta.customFields ?? [] };
+        throw e;
+      }
+    }],
     // Épingles : serveur (source de vérité), dernière liste connue hors ligne.
     ["GET", /^\/me\/pins$/, async () => {
       try {

@@ -1,4 +1,6 @@
 import "server-only";
+import { allCustomFields } from "@/lib/custom-fields";
+import { applyCustomPatch, readCustomValues } from "@/lib/shared/custom-fields";
 import { recordMapEvents } from "@/lib/map-events";
 import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPriority, TaskStatus, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -238,6 +240,7 @@ async function projectSummaries(where: Prisma.ProjectWhereInput): Promise<Projec
       status: true,
       startDate: true,
       dueDate: true,
+      customFields: true,
       createdAt: true,
       updatedAt: true,
       _count: { select: { stages: true, members: true, deliverables: true } },
@@ -267,6 +270,7 @@ async function projectSummaries(where: Prisma.ProjectWhereInput): Promise<Projec
       stageCount: p._count.stages,
       memberCount: p._count.members,
       deliverableCount: p._count.deliverables,
+      customFields: readCustomValues(p.customFields),
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     };
@@ -312,6 +316,7 @@ export async function getProject(userId: string, projectId: string): Promise<Pro
  */
 export async function createProject(userId: string, input: CreateProjectInput, id?: string, ownerMemberId?: string): Promise<ProjectDto> {
   const owner = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, email: true } });
+  const customFields = input.customFields ? await checkedCustomValues({}, input.customFields) : {};
   const p = await prisma.project.create({
     data: {
       id,
@@ -322,6 +327,7 @@ export async function createProject(userId: string, input: CreateProjectInput, i
       status: input.status ?? "ACTIVE",
       startDate: toDate(input.startDate) ?? null,
       dueDate: toDate(input.dueDate) ?? null,
+      customFields,
       // Le créateur fait d'office partie de l'équipe : il peut s'affecter des tâches.
       members: { create: { id: ownerMemberId, userId, name: owner.name, email: owner.email, role: "Chef de projet" } },
     },
@@ -329,9 +335,21 @@ export async function createProject(userId: string, input: CreateProjectInput, i
   return getProject(userId, p.id);
 }
 
+/** Valeurs de champs personnalisés validées contre les définitions (400 sinon). */
+async function checkedCustomValues(current: Record<string, string>, patch: Record<string, string | null>, db: Tx | typeof prisma = prisma): Promise<Record<string, string>> {
+  const r = applyCustomPatch(await allCustomFields(db), current, patch);
+  if ("error" in r) throw badRequest(r.error);
+  return r.values;
+}
+
 export async function updateProject(userId: string, projectId: string, input: UpdateProjectInput): Promise<ProjectDto> {
   await requireProjectAccess(userId, projectId);
   return mutateProject(projectId, async (tx) => {
+    let customFields: Record<string, string> | undefined;
+    if (input.customFields) {
+      const current = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { customFields: true } });
+      customFields = await checkedCustomValues(readCustomValues(current.customFields), input.customFields, tx);
+    }
     await tx.project.update({
       where: { id: projectId },
       data: {
@@ -341,6 +359,7 @@ export async function updateProject(userId: string, projectId: string, input: Up
         status: input.status,
         startDate: toDate(input.startDate),
         dueDate: toDate(input.dueDate),
+        customFields,
       },
     });
   });

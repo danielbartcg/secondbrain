@@ -104,6 +104,8 @@ export type Meta = {
   /** Version du format des lignes locales : différente de LOCAL_DATA_VERSION ⇒ instantané complet. */
   dataVersion: number;
   /** Dernières épingles connues (menu de gauche hors ligne). */
+  /** Définitions des champs personnalisés (dernière liste connue, affichage hors ligne). */
+  customFields: import("@/lib/shared/custom-fields").CustomFieldDto[] | null;
   pins: { projects: { id: string; name: string; color: string | null }[]; mindmaps: { id: string; title: string }[] } | null;
 };
 

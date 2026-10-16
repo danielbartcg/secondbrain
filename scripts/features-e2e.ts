@@ -528,11 +528,15 @@ async function main() {
       const names = wbx.worksheets.map((w) => w.name);
       check("feuilles attendues", ["Synthèse", "Tâches", "Étapes & activités", "Livrables", "Risques & opportunités", "Matrices", "Réunions", "Équipe", "Documents"].every((n) => names.includes(n)), names);
       const ws = wbx.getWorksheet("Tâches")!;
-      const header = (ws.getRow(1).values as unknown[]).slice(1);
+      // Ligne d'en-tête : sous le titre et le sous-titre de la feuille (mise en forme).
+      const headerRow = [1, 2, 3, 4, 5, 6].map((i) => (ws.getRow(i).values as unknown[]).slice(1)).find((v) => v.includes("Responsable")) ?? [];
+      const header = headerRow;
       check("colonnes des tâches (dont prérequis et risques)", header.includes("Prérequis") && header.includes("Risques liés") && header.includes("Responsable"), header);
       check("une ligne par tâche", ws.rowCount - 1 >= 2, ws.rowCount);
       const meetingsWs = wbx.getWorksheet("Réunions")!;
-      check("réunion exportée avec son compte-rendu", String(meetingsWs.getRow(2).getCell(8).value ?? "").includes("budget"), meetingsWs.getRow(2).getCell(8).value);
+      const meetingCells: string[] = [];
+      meetingsWs.eachRow((row) => row.eachCell((c) => void meetingCells.push(String(c.value ?? ""))));
+      check("réunion exportée avec son compte-rendu", meetingCells.some((v) => v.includes("budget")), meetingCells.slice(0, 20));
       const resC = await fetch(`${BASE}/projects/${projB}/export`, { headers: { Authorization: `Bearer ${A.token}` } });
       check("export d'un projet inaccessible : 404", resC.status === 404, resC.status);
     }

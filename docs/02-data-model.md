@@ -62,7 +62,8 @@ rattachées), `read` (partage `READ` : consultation seule). Carte inaccessible
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `Project` | `id`, `ownerId`, `name`, `description`, `notes` (HTML, « Prise de notes »), `color?`, `status` (`ACTIVE` · `ON_HOLD` · `DONE` · `ARCHIVED`), `startDate?`, `dueDate?`, timestamps | |
+| `Project` | `id`, `ownerId`, `name`, `description`, `notes` (HTML, « Prise de notes »), `color?`, `status` (`ACTIVE` · `ON_HOLD` · `DONE` · `ARCHIVED`), `startDate?`, `dueDate?`, `customFields` (JSON `{ fieldId: texte | id d'option }`, défaut `{}`), timestamps | |
+| `CustomField` | `id`, `label`, `type` (`TEXT` · `LIST`), `options` (JSON `[{ id, label }]`), `order`, `active`, timestamps | champ personnalisé des projets, global (administration) ; migration `20261016150000_custom_fields` |
 | `ProjectMember` | `id`, `projectId`, `userId?`, `name`, `email?`, `role?`, `color?`, `createdAt` | **équipe projet** : compte de l'application (`userId`) ou nom libre. `@@unique([projectId, userId])`. Le propriétaire est créé membre (« Chef de projet ») à la création du projet |
 | `Stage` | `id`, `projectId`, `name`, `description`, `notes` (HTML), `order`, `startDate?`, `dueDate?`, timestamps | étape |
 | `Activity` | `id`, `stageId`, `name`, `description`, `notes` (HTML), `order`, timestamps | niveau intermédiaire **facultatif** |
