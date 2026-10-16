@@ -523,6 +523,16 @@ enum RiskStatus {
   CLOSED
 }
 
+/// Stratégie : libellés selon la nature (docs/02) — risque : accepter et
+/// surveiller · atténuer · transférer · éliminer ; opportunité : accepter et
+/// surveiller · améliorer · partager · exploiter.
+enum RiskStrategy {
+  ACCEPT
+  MITIGATE
+  TRANSFER
+  ELIMINATE
+}
+
 model Risk {
   id          String         @id @default(cuid())
   projectId   String
@@ -541,7 +551,8 @@ model Risk {
   owner       ProjectMember? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   /// Plan de traitement (risque) ou d'exploitation (opportunité).
   response    String         @default("")
-  dueDate     DateTime?
+  /// Stratégie de gestion (risque) ou de maximisation (opportunité) ; null = non définie.
+  strategy    RiskStrategy?
   order       Int            @default(0)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

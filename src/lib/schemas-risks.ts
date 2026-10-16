@@ -10,14 +10,10 @@ const shortId = z.string().min(1).max(64);
 const title = z.string().trim().min(1, "Titre requis").max(200);
 const longText = z.string().max(20_000);
 const level = z.number().int().min(1).max(5);
-const day = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date au format AAAA-MM-JJ")
-  .refine((v) => !Number.isNaN(new Date(`${v}T00:00:00.000Z`).getTime()), "Date invalide")
-  .nullable();
 
 export const riskKindSchema = z.enum(["RISK", "OPPORTUNITY"]);
 export const riskStatusSchema = z.enum(["OPEN", "MONITORING", "TREATED", "CLOSED"]);
+export const riskStrategySchema = z.enum(["ACCEPT", "MITIGATE", "TRANSFER", "ELIMINATE"]);
 
 export const createRiskSchema = z.object({
   kind: riskKindSchema.default("RISK"),
@@ -30,7 +26,7 @@ export const createRiskSchema = z.object({
   /** Responsable : membre (ProjectMember) du même projet. */
   ownerId: shortId.nullable().optional(),
   response: longText.default(""),
-  dueDate: day.optional(),
+  strategy: riskStrategySchema.nullable().optional(),
 });
 
 export const updateRiskSchema = z.object({
@@ -43,7 +39,7 @@ export const updateRiskSchema = z.object({
   status: riskStatusSchema.optional(),
   ownerId: shortId.nullable().optional(),
   response: longText.optional(),
-  dueDate: day.optional(),
+  strategy: riskStrategySchema.nullable().optional(),
   order: z.number().int().min(0).max(100_000).optional(),
 });
 

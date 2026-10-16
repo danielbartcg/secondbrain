@@ -74,7 +74,7 @@ type Risk = {
   status: string;
   ownerId: string | null;
   ownerName: string | null;
-  dueDate: string | null;
+  strategy: string | null;
   taskIds: string[];
   tasks: { id: string; name: string; status: string }[];
   order: number;
@@ -133,19 +133,20 @@ async function main() {
     check("titre vide → 400", bad1.status === 400, bad1);
     const bad2 = await call(alice, "POST", `/projects/${projectId}/risks`, { title: "X", probability: 6 });
     check("probabilité 6 → 400", bad2.status === 400, bad2);
-    const bad3 = await call(alice, "PATCH", `/risks/${r1.id}`, { dueDate: "15/10/2026" });
-    check("date mal formée → 400", bad3.status === 400, bad3);
+    const bad3 = await call(alice, "PATCH", `/risks/${r1.id}`, { strategy: "IGNORER" });
+    check("stratégie inconnue → 400", bad3.status === 400, bad3);
     const bad4 = await call(alice, "PATCH", `/risks/${r1.id}`, { ownerId: "inexistant" });
     check("responsable hors projet → 400", bad4.status === 400, bad4);
 
     console.log("Modification");
-    const u1 = await call<RisksResp>(alice, "PATCH", `/risks/${r1.id}`, { impact: 3, status: "MONITORING", ownerId: bobMember!.id, dueDate: "2026-12-01", response: "Second fournisseur" });
+    const u1 = await call<RisksResp>(alice, "PATCH", `/risks/${r1.id}`, { impact: 3, status: "MONITORING", ownerId: bobMember!.id, strategy: "MITIGATE", response: "Second fournisseur" });
     const r1b = u1.data.risks.find((r) => r.id === r1.id)!;
     check("PATCH → 200", u1.status === 200, u1);
     check("score recalculé 12 → élevé", r1b.score === 12 && r1b.level === "high" && r1b.levelLabel === "Élevé", r1b);
-    check("responsable et échéance", r1b.ownerId === bobMember!.id && r1b.ownerName === bob.name && r1b.dueDate === "2026-12-01", r1b);
-    const u2 = await call<RisksResp>(alice, "PATCH", `/risks/${r1.id}`, { dueDate: null });
-    check("échéance effacée", u2.data.risks.find((r) => r.id === r1.id)?.dueDate === null);
+    check("responsable et stratégie", r1b.ownerId === bobMember!.id && r1b.ownerName === bob.name && r1b.strategy === "MITIGATE", r1b);
+    const u2 = await call<RisksResp>(alice, "PATCH", `/risks/${r1.id}`, { strategy: null });
+    check("stratégie effacée", u2.data.risks.find((r) => r.id === r1.id)?.strategy === null);
+    check("plus de date d'échéance", !("dueDate" in (u2.data.risks[0] as object)));
 
     console.log("Liens de tâches");
     const l1 = await call<RisksResp>(alice, "PUT", `/risks/${r1.id}/tasks`, { taskIds: [task1, task2] });

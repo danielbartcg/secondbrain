@@ -38,6 +38,18 @@ export const RISK_STATUS_LABEL: Record<RiskStatusValue, string> = {
 };
 export const RISK_STATUSES: readonly RiskStatusValue[] = ["OPEN", "MONITORING", "TREATED", "CLOSED"];
 
+/** Stratégie de gestion (risque) / de maximisation (opportunité) : valeurs miroirs. */
+export type RiskStrategyValue = "ACCEPT" | "MITIGATE" | "TRANSFER" | "ELIMINATE";
+export const RISK_STRATEGIES: readonly RiskStrategyValue[] = ["ACCEPT", "MITIGATE", "TRANSFER", "ELIMINATE"];
+export const STRATEGY_LABEL: Record<RiskKindValue, Record<RiskStrategyValue, string>> = {
+  RISK: { ACCEPT: "Accepter et surveiller", MITIGATE: "Atténuer", TRANSFER: "Transférer", ELIMINATE: "Éliminer" },
+  OPPORTUNITY: { ACCEPT: "Accepter et surveiller", MITIGATE: "Améliorer", TRANSFER: "Partager", ELIMINATE: "Exploiter" },
+};
+export const STRATEGY_TITLE: Record<RiskKindValue, string> = { RISK: "Stratégie de gestion", OPPORTUNITY: "Stratégie de maximisation" };
+export function strategyLabel(kind: RiskKindValue, strategy: RiskStrategyValue | null): string {
+  return strategy ? STRATEGY_LABEL[kind][strategy] : "";
+}
+
 export const KIND_NOUN: Record<RiskKindValue, { def: string; to: string; indef: string; label: string; prefix: string }> = {
   RISK: { def: "le risque", to: "au risque", indef: "un risque", label: "Risque", prefix: "R" },
   OPPORTUNITY: { def: "l'opportunité", to: "à l'opportunité", indef: "une opportunité", label: "Opportunité", prefix: "O" },

@@ -456,7 +456,7 @@ export const WRITE_TOOLS: WriteTool[] = [
   {
     name: "upsert_risk",
     title: "Créer / modifier un risque ou une opportunité",
-    description: "Sans risk_id : crée (project_id requis). Avec risk_id : modifie. Champs : kind (RISK / OPPORTUNITY), title, description, category, probability 1-5, impact 1-5, status (OPEN, MONITORING, TREATED, CLOSED), owner (nom / e-mail / id de membre), response (plan), due_date, tasks (ids ou noms : remplace les tâches liées).",
+    description: "Sans risk_id : crée (project_id requis). Avec risk_id : modifie. Champs : kind (RISK / OPPORTUNITY), title, description, category, probability 1-5, impact 1-5, status (OPEN, MONITORING, TREATED, CLOSED), owner (nom / e-mail / id de membre), response (plan), strategy (ACCEPT = accepter et surveiller ; MITIGATE = atténuer / améliorer ; TRANSFER = transférer / partager ; ELIMINATE = éliminer / exploiter ; null pour effacer), tasks (ids ou noms : remplace les tâches liées).",
     inputSchema: {
       type: "object",
       properties: {
@@ -471,7 +471,7 @@ export const WRITE_TOOLS: WriteTool[] = [
         status: { type: "string", enum: ["OPEN", "MONITORING", "TREATED", "CLOSED"] },
         owner: { type: ["string", "null"] },
         response: { type: "string" },
-        due_date: { type: ["string", "null"] },
+        strategy: { type: ["string", "null"], enum: ["ACCEPT", "MITIGATE", "TRANSFER", "ELIMINATE", null] },
         tasks: { type: "array", items: { type: "string" } },
       },
     },
@@ -483,7 +483,7 @@ export const WRITE_TOOLS: WriteTool[] = [
       const body: Record<string, unknown> = {};
       for (const k of ["kind", "title", "description", "category", "status", "response"]) if (has(args, k)) body[k] = args[k];
       for (const k of ["probability", "impact"]) if (has(args, k)) body[k] = Number(args[k]);
-      if (has(args, "due_date")) body.dueDate = args.due_date || null;
+      if (has(args, "strategy")) body.strategy = args.strategy || null;
       if (has(args, "owner")) body.ownerId = resolveMember(project, args.owner as string | null);
       let id = riskId;
       if (!id) {

@@ -521,7 +521,7 @@ Toutes les réponses : `{ meetings: Meeting[] }` (liste du projet, plus récente
 ```ts
 type Risk = { id; projectId; kind: "RISK"|"OPPORTUNITY"; title; description; category; probability /* 1–5 */; impact /* 1–5 */;
   score /* p × i */; level: "low"|"medium"|"high"|"critical"; levelLabel; status: "OPEN"|"MONITORING"|"TREATED"|"CLOSED";
-  ownerId; ownerName; response; dueDate /* AAAA-MM-JJ */; order; taskIds; tasks: { id; name; status }[]; createdAt; updatedAt };
+  ownerId; ownerName; response; strategy: "ACCEPT"|"MITIGATE"|"TRANSFER"|"ELIMINATE"|null; order; taskIds; tasks: { id; name; status }[]; createdAt; updatedAt };
 ```
 
 Réponses : `{ risks: Risk[] }` (liste complète du projet, triée par `order` puis création).
@@ -529,8 +529,8 @@ Réponses : `{ risks: Risk[] }` (liste complète du projet, triée par `order` p
 | Méthode | Route | Corps | Notes |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/risks` | — | membre, propriétaire ou administrateur (lecture) |
-| POST | `/projects/:id/risks` | `{ title, kind?, description?, category?, probability?, impact?, status?, ownerId?, response?, dueDate? }` | 201 ; responsable = membre du projet |
-| PATCH | `/risks/:riskId` | mêmes champs + `order?` | `dueDate: null` efface |
+| POST | `/projects/:id/risks` | `{ title, kind?, description?, category?, probability?, impact?, status?, ownerId?, response?, strategy? }` | 201 ; responsable = membre du projet |
+| PATCH | `/risks/:riskId` | mêmes champs + `order?` | `strategy: null` efface ; `strategy` ∈ `ACCEPT` · `MITIGATE` · `TRANSFER` · `ELIMINATE` |
 | DELETE | `/risks/:riskId` | — | trace sur les tâches liées |
 | PUT | `/risks/:riskId/tasks` | `{ taskIds (≤ 500) }` | remplace les tâches liées (même projet, 400 sinon) ; tracé dans l'historique des tâches |
 

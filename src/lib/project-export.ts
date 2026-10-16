@@ -5,7 +5,7 @@ import { listRisks, type RiskDto } from "@/lib/risks";
 import { listMeetings, type MeetingDto } from "@/lib/meetings";
 import { htmlToText } from "@/lib/sanitize";
 import { prisma } from "@/lib/prisma";
-import { RISK_STATUS_LABEL, PROBABILITY_LABELS, SEVERITY_LABELS, BENEFIT_LABELS, riskLevel, levelLabel } from "@/lib/shared/risks";
+import { strategyLabel, RISK_STATUS_LABEL, PROBABILITY_LABELS, SEVERITY_LABELS, BENEFIT_LABELS, riskLevel, levelLabel } from "@/lib/shared/risks";
 
 /**
  * Export Excel complet d'un projet (bouton « Export Excel » de la fiche
@@ -246,7 +246,7 @@ export async function buildProjectWorkbook(userId: string, projectId: string): P
       { header: "Niveau", key: "level", width: 11 },
       { header: "Statut", key: "status", width: 16 },
       { header: "Responsable", key: "owner", width: 20 },
-      { header: "Échéance", key: "due", width: 12, numFmt: "dd/mm/yyyy" },
+      { header: "Stratégie", key: "strategy", width: 22 },
       { header: "Plan de traitement / d'exploitation", key: "response", width: 44, wrap: true },
       { header: "Tâches liées", key: "tasks", width: 34, wrap: true },
       { header: "Description", key: "description", width: 40, wrap: true },
@@ -262,7 +262,7 @@ export async function buildProjectWorkbook(userId: string, projectId: string): P
       level: k.levelLabel,
       status: RISK_STATUS_LABEL[k.status],
       owner: k.ownerName ?? "",
-      due: day(k.dueDate),
+      strategy: strategyLabel(k.kind, k.strategy),
       response: k.response,
       tasks: k.tasks.map((t) => `${taskRef.get(t.id) ?? ""} ${t.name}`.trim()).join(", "),
       description: k.description,

@@ -5,13 +5,16 @@ import { AlertTriangle, ChevronDown, ChevronRight, Link2, Plus, ShieldAlert, Spa
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import type { RiskDto } from "@/lib/risks";
-import { Avatar, Badge, Button, EmptyState, InlineEdit, TASK_STATUS_COLOR, Toggle, errorMessage, inputClass, selectClassXs, toInputDate, toast, todayYmd } from "@/components/ui";
+import { Avatar, Badge, Button, EmptyState, InlineEdit, TASK_STATUS_COLOR, Toggle, errorMessage, inputClass, selectClassXs, toast } from "@/components/ui";
 import {
   BENEFIT_LABELS,
   KIND_NOUN,
   PROBABILITY_LABELS,
   RISK_LEVELS,
   RISK_STATUSES,
+  RISK_STRATEGIES,
+  STRATEGY_LABEL,
+  STRATEGY_TITLE,
   RISK_STATUS_LABEL,
   SEVERITY_LABELS,
   levelLabel,
@@ -19,6 +22,7 @@ import {
   riskScore,
   type RiskKindValue,
   type RiskStatusValue,
+  type RiskStrategyValue,
 } from "@/lib/shared/risks";
 import { LEVEL_COLORS, LevelBadge, RiskMatrix, type MatrixCell } from "./risks/RiskMatrix";
 import { TaskLinkPicker, type PickableTask } from "./risks/TaskLinkPicker";
@@ -26,7 +30,7 @@ import { TaskLinkPicker, type PickableTask } from "./risks/TaskLinkPicker";
 /**
  * Onglet « Risques » d'un projet : registre déclaratif des risques et des
  * opportunités (probabilité × gravité / bénéfice, statut, responsable,
- * échéance, plan de traitement, tâches liées) et restitution en matrice 5 × 5.
+ * stratégie de gestion / de maximisation, plan de traitement, tâches liées) et restitution en matrice 5 × 5.
  *
  * Données : GET /projects/:id/risks ; chaque mutation renvoie la liste
  * complète. Modifications optimistes (retour arrière + message en cas
@@ -34,8 +38,8 @@ import { TaskLinkPicker, type PickableTask } from "./risks/TaskLinkPicker";
  */
 
 type Resp = { risks: RiskDto[] };
-type Patch = Partial<Pick<RiskDto, "kind" | "title" | "description" | "category" | "probability" | "impact" | "status" | "ownerId" | "response" | "dueDate">>;
-type SortKey = "score" | "ref" | "due";
+type Patch = Partial<Pick<RiskDto, "kind" | "title" | "description" | "category" | "probability" | "impact" | "status" | "ownerId" | "response" | "strategy">>;
+type SortKey = "score" | "ref";
 
 const STATUS_TONE: Record<RiskStatusValue, "danger" | "warn" | "ok" | "neutral"> = { OPEN: "danger", MONITORING: "warn", TREATED: "ok", CLOSED: "neutral" };
 
@@ -118,7 +122,6 @@ export function ProjectRisksTab({ project, canEdit }: { project: ProjectDto; can
     const refNum = (r: RiskDto) => Number((refs.get(r.id) ?? "0").slice(1));
     const sorted = [...list];
     if (sort === "score") sorted.sort((a, b) => b.score - a.score || refNum(a) - refNum(b));
-    else if (sort === "due") sorted.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") || b.score - a.score);
     else sorted.sort((a, b) => refNum(a) - refNum(b));
     return sorted;
   }, [ofKind, hideClosed, cell, sort, refs]);
@@ -204,8 +207,7 @@ export function ProjectRisksTab({ project, canEdit }: { project: ProjectDto; can
   const noun = KIND_NOUN[kind];
   const isOpp = kind === "OPPORTUNITY";
   const openOfKind = ofKind.filter((r) => r.status !== "CLOSED");
-  const today = todayYmd();
-  const overdue = openOfKind.filter((r) => r.status !== "TREATED" && r.dueDate && r.dueDate < today).length;
+  const noStrategy = openOfKind.filter((r) => !r.strategy).length;
   const ctx: RowCtx = {
     project,
     canEdit,
@@ -213,7 +215,6 @@ export function ProjectRisksTab({ project, canEdit }: { project: ProjectDto; can
     refs,
     expanded,
     highlight,
-    today,
     toggleExpanded,
     patch: (r, d) => void patch(r, d),
     remove,
@@ -282,8 +283,8 @@ export function ProjectRisksTab({ project, canEdit }: { project: ProjectDto; can
               </div>
             ))}
             <div className="flex items-center justify-between gap-2">
-              <dt className="text-muted">Échéance dépassée</dt>
-              <dd className={`font-medium tabular-nums ${overdue > 0 ? "text-danger" : ""}`}>{overdue}</dd>
+              <dt className="text-muted">Sans stratégie</dt>
+              <dd className={`font-medium tabular-nums ${noStrategy > 0 ? "text-warn" : ""}`}>{noStrategy}</dd>
             </div>
             <div className="flex items-center justify-between gap-2">
               <dt className="text-muted">Sans responsable</dt>
@@ -318,7 +319,6 @@ export function ProjectRisksTab({ project, canEdit }: { project: ProjectDto; can
           <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className={selectClassXs}>
             <option value="score">Criticité</option>
             <option value="ref">Référence</option>
-            <option value="due">Échéance</option>
           </select>
         </label>
       </div>
@@ -433,7 +433,6 @@ type RowCtx = {
   refs: Map<string, string>;
   expanded: Set<string>;
   highlight: string | null;
-  today: string;
   toggleExpanded: (id: string) => void;
   patch: (r: RiskDto, data: Patch) => void;
   remove: (r: RiskDto) => void;
@@ -484,21 +483,6 @@ function OwnerSelect({ r, ctx, className = "" }: { r: RiskDto; ctx: RowCtx; clas
         </option>
       ))}
     </select>
-  );
-}
-
-function DueInput({ r, ctx, className = "" }: { r: RiskDto; ctx: RowCtx; className?: string }) {
-  const late = r.dueDate && r.dueDate < ctx.today && r.status !== "CLOSED" && r.status !== "TREATED";
-  return (
-    <input
-      type="date"
-      value={toInputDate(r.dueDate)}
-      disabled={!ctx.canEdit}
-      onChange={(e) => ctx.patch(r, { dueDate: e.target.value || null })}
-      aria-label="Échéance"
-      title={late ? "Échéance dépassée" : "Échéance"}
-      className={`${selectClassXs} ${late ? "border-danger text-danger" : ""} ${className}`}
-    />
   );
 }
 
@@ -607,6 +591,22 @@ function RiskDetails({ r, ctx }: { r: RiskDto; ctx: RowCtx }) {
           <option value="OPPORTUNITY">Opportunité</option>
         </select>
       </label>
+      <label className="flex flex-col gap-1 text-xs text-muted md:col-span-2">
+        {STRATEGY_TITLE[r.kind]}
+        <select
+          value={r.strategy ?? ""}
+          disabled={!ctx.canEdit}
+          onChange={(e) => ctx.patch(r, { strategy: (e.target.value || null) as RiskStrategyValue | null })}
+          className={`${selectClassXs} py-2 md:max-w-xs`}
+        >
+          <option value="">— Non définie —</option>
+          {RISK_STRATEGIES.map((v) => (
+            <option key={v} value={v}>
+              {STRATEGY_LABEL[r.kind][v]}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="flex flex-col gap-1 text-xs text-muted">
         Description
         <BlurText value={r.description} onSave={(description) => ctx.patch(r, { description })} disabled={!ctx.canEdit} multiline maxLength={20_000} placeholder="Cause, événement, conséquences…" label="Description" />
@@ -661,7 +661,6 @@ function RiskTable({ rows, kind, ctx }: { rows: RiskDto[]; kind: RiskKindValue; 
             <th className="px-2 py-2">Criticité</th>
             <th className="px-2 py-2">Statut</th>
             <th className="px-2 py-2">Responsable</th>
-            <th className="px-2 py-2">Échéance</th>
             <th className="px-2 py-2">Tâches liées</th>
             <th className="w-10 px-2 py-2" />
           </tr>
@@ -700,9 +699,6 @@ function RiskTable({ rows, kind, ctx }: { rows: RiskDto[]; kind: RiskKindValue; 
                       <OwnerSelect r={r} ctx={ctx} className="w-36" />
                     </div>
                   </td>
-                  <td className="px-2 py-2">
-                    <DueInput r={r} ctx={ctx} />
-                  </td>
                   <td className="max-w-[16rem] px-2 py-2">
                     <TaskChips r={r} ctx={ctx} max={2} />
                   </td>
@@ -713,7 +709,7 @@ function RiskTable({ rows, kind, ctx }: { rows: RiskDto[]; kind: RiskKindValue; 
                 {open && (
                   <tr className="border-b border-line bg-surface-2/50">
                     <td />
-                    <td colSpan={10} className="px-2 pb-4 pt-1">
+                    <td colSpan={9} className="px-2 pb-4 pt-1">
                       <RiskDetails r={r} ctx={ctx} />
                     </td>
                   </tr>
@@ -758,10 +754,6 @@ function RiskCard({ r, ctx }: { r: RiskDto; ctx: RowCtx }) {
           <StatusSelect r={r} ctx={ctx} className="w-full" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted">
-          Échéance
-          <DueInput r={r} ctx={ctx} className="w-full" />
-        </label>
-        <label className="col-span-2 flex flex-col gap-1 text-xs text-muted">
           Responsable
           <OwnerSelect r={r} ctx={ctx} className="w-full" />
         </label>

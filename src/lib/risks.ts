@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma, RiskKind, RiskStatus, TaskStatus } from "@prisma/client";
+import type { Prisma, RiskKind, RiskStatus, RiskStrategy, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, notFound } from "@/lib/api";
 import { projectAccessWhere, requireProjectAccess } from "@/lib/projects";
@@ -42,7 +42,8 @@ export type RiskDto = {
   ownerId: string | null;
   ownerName: string | null;
   response: string;
-  dueDate: string | null;
+  /** Stratégie de gestion / de maximisation ; null = non définie. */
+  strategy: RiskStrategy | null;
   order: number;
   taskIds: string[];
   tasks: RiskTaskRef[];
@@ -77,7 +78,7 @@ function toRiskDto(r: RiskRow): RiskDto {
     ownerId: r.ownerId,
     ownerName: r.owner?.name ?? null,
     response: r.response,
-    dueDate: r.dueDate ? r.dueDate.toISOString().slice(0, 10) : null,
+    strategy: r.strategy,
     order: r.order,
     taskIds: tasks.map((t) => t.id),
     tasks,
@@ -90,9 +91,6 @@ async function fetchRisks(db: Tx | typeof prisma, projectId: string): Promise<Ri
   const rows = await db.risk.findMany({ where: { projectId }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], include: RISK_INCLUDE });
   return rows.map(toRiskDto);
 }
-
-const toDay = (v: string | null | undefined): Date | null | undefined =>
-  v === undefined ? undefined : v === null ? null : new Date(`${v}T00:00:00.000Z`);
 
 /** Transaction verrouillant la ligne du projet, puis liste recalculée. */
 async function mutateRisks(projectId: string, fn: (tx: Tx) => Promise<void>): Promise<RiskDto[]> {
@@ -157,7 +155,7 @@ export async function createRisk(userId: string, projectId: string, input: Creat
         status: input.status,
         ownerId: input.ownerId ?? null,
         response: input.response,
-        dueDate: toDay(input.dueDate) ?? null,
+        strategy: input.strategy ?? null,
         order: (last._max.order ?? -1) + 1,
       },
     });
@@ -180,7 +178,7 @@ export async function updateRisk(userId: string, riskId: string, input: UpdateRi
         status: input.status,
         ownerId: input.ownerId,
         response: input.response,
-        dueDate: toDay(input.dueDate),
+        strategy: input.strategy,
         order: input.order,
       },
     });
