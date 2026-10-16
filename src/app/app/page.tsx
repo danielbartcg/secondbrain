@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { Apple, Download, Monitor, RefreshCw, ShieldCheck, WifiOff } from "lucide-react";
+import { Apple, Download, Monitor, RefreshCw, Share, ShieldCheck, SquarePlus, WifiOff } from "lucide-react";
 import { latestDesktop } from "@/lib/downloads";
 
-export const metadata = { title: "Application desktop" };
+export const metadata = { title: "Applications" };
 export const dynamic = "force-dynamic";
 
 /**
@@ -18,8 +18,8 @@ export default function AppDownloadPage() {
       <div className="mb-6 flex items-center gap-3">
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-2xl text-on-brand">🧠</span>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Second Brain sur votre ordinateur</h1>
-          <p className="text-sm text-muted">Vos projets et cartes mentales, même sans connexion.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Second Brain sur vos appareils</h1>
+          <p className="text-sm text-muted">Windows (même sans connexion) et iPhone (écran d&apos;accueil).</p>
         </div>
       </div>
 
@@ -57,7 +57,19 @@ export default function AppDownloadPage() {
         <h2 className="flex items-center gap-2 font-semibold">
           <Apple className="h-5 w-5 text-muted" /> iPhone
         </h2>
-        <p className="mt-1 text-sm text-muted">Bientôt, via TestFlight.</p>
+        <p className="mt-1 text-sm text-muted">
+          Dès aujourd&apos;hui : installez la version web sur l&apos;écran d&apos;accueil, elle s&apos;ouvre en plein écran comme une application (connexion nécessaire).
+        </p>
+        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-2">
+          <li>Ouvrez <b>{process.env.NEXT_PUBLIC_SITE_URL?.replace(/^https?:\/\//, "") || "le site"}</b> dans <b>Safari</b> et connectez-vous.</li>
+          <li>
+            Touchez le bouton <b>Partager</b> <Share className="inline h-4 w-4 align-text-bottom" aria-hidden /> en bas de l&apos;écran.
+          </li>
+          <li>
+            Choisissez <b>« Sur l&apos;écran d&apos;accueil »</b> <SquarePlus className="inline h-4 w-4 align-text-bottom" aria-hidden />, puis <b>Ajouter</b>.
+          </li>
+        </ol>
+        <p className="mt-3 text-xs text-muted">L&apos;application iPhone avec mode hors ligne arrivera ensuite via TestFlight.</p>
       </section>
 
       <p className="mt-6 text-center text-sm text-muted">

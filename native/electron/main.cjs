@@ -151,8 +151,8 @@ async function serveMedia(pathname) {
 }
 
 const DOCUMENT_DOWNLOAD = /^\/api\/v1\/documents\/[A-Za-z0-9_-]+\/download$/;
-/** Export Excel d'un projet (fichier binaire authentifié). */
-const PROJECT_EXPORT = /^\/api\/v1\/projects\/[A-Za-z0-9_-]+\/export$/;
+/** Exports Excel et PowerPoint d'un projet (fichiers binaires authentifiés). */
+const PROJECT_EXPORT = /^\/api\/v1\/projects\/[A-Za-z0-9_-]+\/export(-pptx)?$/;
 
 /** Message affiché par l'interface (toast) : erreurs de téléchargement. */
 function notifyRenderer(message) {

@@ -1,4 +1,5 @@
 import "server-only";
+import { fileTypeLabel } from "@/lib/shared/file-types";
 import { allCustomFields } from "@/lib/custom-fields";
 import { customEntries } from "@/lib/shared/custom-fields";
 import ExcelJS from "exceljs";
@@ -1184,7 +1185,7 @@ export async function renderProjectWorkbook(data: ProjectExportData): Promise<{ 
     [
       { header: "Document", key: "name", width: 38, wrap: true },
       { header: "Dossier", key: "folder", width: 28, wrap: true },
-      { header: "Type", key: "type", width: 24 },
+      { header: "Type", key: "type", width: 22 },
       { header: "Taille (Ko)", key: "size", width: 11, type: "size" },
       { header: "Déposé par", key: "by", width: 20 },
       { header: "Date", key: "date", width: 12, type: "date" },
@@ -1194,7 +1195,7 @@ export async function renderProjectWorkbook(data: ProjectExportData): Promise<{ 
     (d) => ({
       name: d.name,
       folder: pathOf(d.folderId),
-      type: d.mimeType,
+      type: fileTypeLabel(d.mimeType, d.originalName),
       size: Math.round(d.size / 1024),
       by: d.uploadedBy?.name ?? "",
       date: new Date(d.createdAt),

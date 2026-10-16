@@ -71,6 +71,7 @@ export function sendWelcomeEmail(user: Pick<User, "id" | "email" | "name">) {
       "Merci pour votre inscription. Vos projets, cartes mentales et notes vous attendent.\n\nConfirmez votre adresse e-mail avec le bouton ci-dessous (lien valable 7 jours).",
       `/verify-email?token=${token}`,
       "Vous n'êtes pas à l'origine de cette inscription ? Ignorez simplement cet e-mail.",
+      { badge: "👋 Bienvenue", cta: "Confirmer mon adresse" },
     );
   });
 }
@@ -82,7 +83,7 @@ export async function sendVerificationEmail(user: Pick<User, "id" | "email" | "n
   const token = await issueToken(user.id, "VERIFY_EMAIL", user.email, VERIFY_TTL_MS);
   await sendMail(
     await getAppSettings(),
-    renderMail(user.email, "Confirmez votre adresse e-mail", "Cliquez sur le bouton ci-dessous pour confirmer votre adresse (lien valable 7 jours).", `/verify-email?token=${token}`, "Vous n'êtes pas à l'origine de cette demande ? Ignorez cet e-mail."),
+    renderMail(user.email, "Confirmez votre adresse e-mail", "Cliquez sur le bouton ci-dessous pour confirmer votre adresse (lien valable 7 jours).", `/verify-email?token=${token}`, "Vous n'êtes pas à l'origine de cette demande ? Ignorez cet e-mail.", { badge: "✉️ Adresse e-mail", cta: "Confirmer mon adresse" }),
   );
 }
 
@@ -112,6 +113,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
       `Bonjour ${user.name},\n\nUne réinitialisation du mot de passe a été demandée pour votre compte. Le lien ci-dessous est valable 1 heure et ne sert qu'une fois.`,
       `/reset-password?token=${token}`,
       "Vous n'êtes pas à l'origine de cette demande ? Ignorez cet e-mail : votre mot de passe reste inchangé.",
+      { badge: "🔒 Sécurité du compte", cta: "Choisir un nouveau mot de passe" },
     );
   });
 }

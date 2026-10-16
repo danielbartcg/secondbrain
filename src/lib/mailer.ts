@@ -35,20 +35,120 @@ function transport(s: Pick<AppSettings, "smtpHost" | "smtpPort" | "smtpSecure" |
 
 export type MailContent = { to: string; subject: string; text: string; html: string };
 
-/** Mise en forme commune : titre, texte, bouton vers la plateforme. */
-export function renderMail(to: string, title: string, body: string, href: string, footer: string): MailContent {
-  const url = SITE_URL() + (href.startsWith("/") ? href : "/");
+/** Options de mise en forme (notifications : type, citation ; comptes : libellé du bouton). */
+export type MailOptions = {
+  /** Libellé du bouton (défaut : déduit du lien). */
+  cta?: string;
+  /** Pastille au-dessus du titre (ex. « 💬 Mention »). */
+  badge?: string;
+  /** Le texte est un extrait cité (commentaire, message) : affiché en citation. */
+  quote?: boolean;
+  /** Ligne d'aperçu dans la boîte de réception (défaut : début du texte). */
+  preheader?: string;
+};
+
+const BRAND = "#4f5ff0";
+const INK = "#1f2330";
+const MUTED = "#6b6f7b";
+const LINE = "#e6e3dc";
+
+/** Libellé du bouton d'après la destination. */
+function ctaFor(href: string): string {
+  if (href.startsWith("/tasks/")) return "Voir la tâche";
+  if (href.startsWith("/messages")) return "Lire le message";
+  if (href.includes("meeting=") || href.includes("#reunions")) return "Voir le compte-rendu";
+  if (href.startsWith("/mindmaps/")) return "Ouvrir la carte";
+  if (href.startsWith("/projects/")) return "Ouvrir le projet";
+  return "Ouvrir Second Brain";
+}
+
+/** Paragraphes HTML (texte échappé, retours à la ligne conservés). */
+function paragraphs(text: string, style: string): string {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p style="${style}">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+/**
+ * Mise en forme commune des e-mails (HTML soigné + version texte) : bandeau
+ * de marque, pastille facultative, titre, texte ou citation, bouton, pied de
+ * page avec rappel des préférences. Mise en page en tableaux et styles en
+ * ligne (Outlook, Gmail, Apple Mail) ; tout texte variable est échappé.
+ */
+export function renderMail(to: string, title: string, body: string, href: string, footer: string, opts: MailOptions = {}): MailContent {
+  const site = SITE_URL();
+  const url = site + (href.startsWith("/") ? href : "/");
   const subject = title.replace(/[\r\n]+/g, " ").slice(0, 200);
-  const text = `${title}\n\n${body ? body + "\n\n" : ""}Ouvrir : ${url}\n\n— Second Brain\n${footer}`;
-  const html = `<!doctype html><html lang="fr"><body style="margin:0;padding:24px;background:#f6f5f2;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1f2330">
-<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;border:1px solid #e6e3dc">
-<div style="font-size:13px;color:#6b6f7b;margin-bottom:8px">🧠 Second Brain</div>
-<h1 style="font-size:18px;margin:0 0 12px">${escapeHtml(title)}</h1>
-${body ? `<p style="font-size:14px;line-height:1.5;white-space:pre-line;margin:0 0 20px">${escapeHtml(body)}</p>` : ""}
-<a href="${escapeHtml(url)}" style="display:inline-block;background:#3f4ee0;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-size:14px">Ouvrir dans Second Brain</a>
-<p style="font-size:12px;color:#8a8e99;margin:24px 0 0">${escapeHtml(footer)}</p>
-</div></body></html>`;
+  const cta = opts.cta ?? ctaFor(href);
+  const preheader = (opts.preheader ?? body ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
+  const text = `${title}\n\n${body ? (opts.quote ? body.split("\n").map((l) => "> " + l).join("\n") : body) + "\n\n" : ""}${cta} : ${url}\n\n— Second Brain\n${footer}\nPréférences de notification : ${site}/preferences`;
+  const bodyHtml = !body
+    ? ""
+    : opts.quote
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px"><tr><td style="border-left:4px solid ${BRAND};background:#f3f4fe;border-radius:0 8px 8px 0;padding:14px 16px">${paragraphs(body, `margin:0 0 8px;font-size:15px;line-height:1.55;color:${INK};font-style:italic`)}</td></tr></table>`
+      : paragraphs(body, `margin:0 0 16px;font-size:15px;line-height:1.6;color:#3b3f4a`);
+  const html = `<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${escapeHtml(subject)}</title></head>
+<body style="margin:0;padding:0;background:#f4f2ee;-webkit-text-size-adjust:100%">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f2ee"><tr><td align="center" style="padding:32px 12px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+    <tr><td style="padding:0 4px 14px">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td style="width:34px;height:34px;background:${BRAND};border-radius:10px;text-align:center;font-size:18px;line-height:34px">🧠</td>
+        <td style="padding-left:10px;font-size:16px;font-weight:700;color:${INK}">Second Brain</td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="background:#ffffff;border:1px solid ${LINE};border-radius:16px;overflow:hidden">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="height:6px;background:${BRAND};font-size:0;line-height:0">&nbsp;</td></tr>
+        <tr><td style="padding:28px 32px 8px">
+          ${opts.badge ? `<div style="display:inline-block;background:#eef0fe;color:${BRAND};border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600;margin:0 0 14px">${escapeHtml(opts.badge)}</div>` : ""}
+          <h1 style="margin:0 0 18px;font-size:22px;line-height:1.3;color:${INK};font-weight:700">${escapeHtml(title)}</h1>
+          ${bodyHtml}
+        </td></tr>
+        <tr><td style="padding:4px 32px 32px">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:${BRAND}">
+            <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${escapeHtml(url)}" style="height:44px;v-text-anchor:middle;width:240px" arcsize="22%" fillcolor="${BRAND}" stroke="f"><center style="color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:15px;font-weight:bold">${escapeHtml(cta)}</center></v:roundrect><![endif]-->
+            <!--[if !mso]><!--><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px">${escapeHtml(cta)} →</a><!--<![endif]-->
+          </td></tr></table>
+          <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:${MUTED}">Le bouton ne fonctionne pas ? Copiez ce lien : <a href="${escapeHtml(url)}" style="color:${BRAND};word-break:break-all">${escapeHtml(url)}</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:18px 8px 0;text-align:center;font-size:12px;line-height:1.6;color:${MUTED}">
+      ${escapeHtml(footer)}<br>
+      <a href="${escapeHtml(site)}/preferences" style="color:${MUTED};text-decoration:underline">Gérer mes notifications par e-mail</a> · Second Brain
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`;
   return { to, subject, text, html };
+}
+
+/** Pastille d'une notification : pictogramme + type. */
+const NOTIF_ICON: Record<string, string> = {
+  ASSIGNED: "📌",
+  TASK_UPDATED: "✏️",
+  REPLY: "↩️",
+  MENTION: "💬",
+  MESSAGE: "✉️",
+  MEETING_REVIEW: "📝",
+  MEETING_DECISION: "✅",
+  MAP_SHARED: "🧠",
+};
+/** Types dont le texte est un extrait cité (commentaire, message). */
+const QUOTED = new Set(["REPLY", "MENTION", "MESSAGE"]);
+
+/** E-mail d'une notification. */
+export function renderNotificationMail(to: string, n: { type: keyof typeof NOTIFICATION_TYPE_INFO; title: string; body: string; href: string; actorName: string | null }): MailContent {
+  const info = NOTIFICATION_TYPE_INFO[n.type];
+  const quote = QUOTED.has(n.type) || (n.type === "TASK_UPDATED" && /^« /.test(n.body));
+  const footer = `Vous recevez cet e-mail pour la notification « ${info.label} »${n.actorName ? `, déclenchée par ${n.actorName}` : ""}.`;
+  return renderMail(to, n.title, n.body, n.href, footer, { badge: `${NOTIF_ICON[n.type] ?? "🔔"} ${info.label}`, quote });
 }
 
 export async function sendMail(settings: AppSettings, mail: MailContent): Promise<void> {
@@ -59,7 +159,10 @@ export async function sendMail(settings: AppSettings, mail: MailContent): Promis
 export async function sendTestMail(to: string): Promise<void> {
   const s = await getAppSettings();
   if (!s.smtpHost || !s.smtpFrom) throw new Error("Serveur SMTP ou adresse d'expédition manquants.");
-  await sendMail(s, renderMail(to, "E-mail de test", "Les paramètres SMTP de Second Brain fonctionnent.", "/admin/notifications", "Envoyé depuis Administration → Notifications."));
+  await sendMail(
+    s,
+    renderMail(to, "E-mail de test", "Les paramètres SMTP de Second Brain fonctionnent : les notifications par e-mail peuvent partir.", "/admin/notifications", "Envoyé depuis Administration → Notifications.", { badge: "⚙️ Test SMTP", cta: "Retour à l'administration" }),
+  );
 }
 
 // --- Envoyeur en tâche de fond ----------------------------------------------------------------
@@ -89,9 +192,8 @@ export async function processEmailQueue(): Promise<{ sent: number; failed: numbe
     for (const n of pending) {
       const claimed = await prisma.notification.updateMany({ where: { id: n.id, emailState: "PENDING" }, data: { emailState: "SENDING" } });
       if (claimed.count === 0) continue;
-      const footer = `Notification « ${NOTIFICATION_TYPE_INFO[n.type].label} »${n.actorName ? ` — par ${n.actorName}` : ""}.`;
       try {
-        const mail = renderMail(n.user.email, n.title, n.body, n.href, footer);
+        const mail = renderNotificationMail(n.user.email, n);
         await t.sendMail({ from: s.smtpFrom, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
         await prisma.notification.update({ where: { id: n.id }, data: { emailState: "SENT", emailError: null } });
         sent++;

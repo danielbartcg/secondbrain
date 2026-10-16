@@ -117,7 +117,7 @@ export default function LoginPage() {
           </Suspense>
         </div>
         <a href="/app" className="mt-4 flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm text-muted transition-colors hover:bg-surface hover:text-ink">
-          <Monitor className="h-4 w-4" /> Télécharger l&apos;app pour Windows <span aria-hidden>→</span>
+          <Monitor className="h-4 w-4" /> Applications Windows et iPhone <span aria-hidden>→</span>
         </a>
       </div>
     </main>

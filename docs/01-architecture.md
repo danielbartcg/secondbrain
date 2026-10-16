@@ -222,6 +222,17 @@ Les notes sont **visibles sur l'objet** : aperçu `NotesPreview` (projet, fiche
 tâche), icône carnet sur les étapes / activités / tâches du Plan, lien
 « Ouvrir dans Prise de notes » dans le panneau de carte ; DTO `hasNotes`.
 
+## PWA (iPhone, Android)
+
+En attendant l'application iPhone (TestFlight), le site s'installe sur l'écran
+d'accueil : `src/app/manifest.ts` (`display: standalone`, démarrage sur
+`/dashboard`, raccourcis), icônes `public/icons/*` et `src/app/apple-icon.png`
+(issues de l'icône iOS), `appleWebApp` dans `layout.tsx`, marges
+`env(safe-area-inset-*)` (côtés, tiroirs fixés en bas). **Pas de service
+worker** : le site reste strictement en ligne (décision) ; le hors-ligne est
+le rôle des applications desktop et iPhone. Notifications push web possibles
+plus tard (iOS 16.4+, PWA installée).
+
 ## Application native (`native/`)
 
 Application desktop Windows (Electron) qui embarque l'interface du site et
@@ -336,6 +347,17 @@ en attente **toutes les 10 s, hors transaction** (jamais d'appel SMTP dans une
 transaction), 20 par passage, abandon après 24 h. Une notification regroupée
 qui se rafraîchit ne renvoie pas d'e-mail. Le mot de passe SMTP est chiffré
 (AES-256-GCM, clé dérivée de `SESSION_SECRET`) et jamais renvoyé au client.
+
+**Mise en forme** (`renderMail`, `renderNotificationMail`) : chaque e-mail part
+en HTML soigné **et** en texte. Gabarit commun en tableaux et styles en ligne
+(Outlook, Gmail, Apple Mail) : ligne d'aperçu, logo, carte blanche avec
+liseré de marque, pastille (type de notification avec pictogramme, ou
+« Bienvenue », « Sécurité du compte »…), titre, texte en paragraphes — ou
+**citation** pour les commentaires, mentions, réponses et messages —, bouton
+compatible Outlook (VML) au libellé adapté (« Voir la tâche », « Lire le
+message », « Confirmer mon adresse »…), lien de secours, pied de page avec
+la raison de l'envoi et le lien vers les préférences. Tout texte variable
+passe par `escapeHtml()`.
 
 **E-mails de compte** (`src/lib/account-email.ts`, seulement si l'envoi est
 configuré) : bienvenue + lien de validation à l'inscription, validation
@@ -562,6 +584,37 @@ coloré, lignes alternées, volets figés, filtres, formats typés, impression A
 paysage ajustée en largeur avec pied de page. `renderProjectWorkbook(data)`
 construit le classeur sans base (testable). 30 exports / 15 min / utilisateur. Dans l'application desktop, la
 coque relaie cette route avec le jeton (liste blanche).
+
+## Export PowerPoint « état des lieux » (`src/lib/project-pptx.ts`)
+
+`GET /projects/:id/export-pptx` (pptxgenjs 4.0.1, rendu côté serveur, paquet
+externe — `serverExternalPackages` ; seule dépendance chargée : jszip, tracée
+par le build autonome). Présentation 16:9 aux couleurs du projet (défaut
+#4F5FF0), masque commun (filet de couleur, pied de page : projet, « État des
+lieux · export du … », numéro). Diapositives : **Titre** (statut, chef de
+projet, dates, avancement, équipe, champs personnalisés), **Synthèse** (7
+indicateurs en cartes, anneau natif des tâches par statut, fiche projet avec
+étape en cours, prochain jalon, tâches non affectées et champs personnalisés),
+**Avancement par étape** (barres natives + tableau fait / total, dates,
+retards), **Planning des étapes** (frise mensuelle ou trimestrielle dessinée
+en formes : barres avec avancement, contour rouge si échéance dépassée,
+jalons, ligne « Aujourd'hui »), **Points d'attention** (10 tâches les plus en
+retard, compteurs retard / critiques / bloquées par un prérequis ouvert),
+**Risques et opportunités** (registre trié par criticité, stratégie,
+matrice 5 × 5 des risques non clos), **Livrables**, **Réunions et décisions**
+(10 plus récentes, statut de validation), **Équipe et charge** (ouvertes /
+en retard / terminées par membre + barres empilées natives), **Prochaines
+étapes** (échéances de tâches, livrables et étapes à 30 jours). Chaque
+diapositive de contenu porte un **encadré à commenter** (note jaune en
+pointillés « 💬 Commentaire du chef de projet — Cliquez pour commenter : … »)
+qui occupe la place laissée par le contenu. Tableaux paginés (lignes
+plafonnées, pages équilibrées, 3 à 4 pages au plus, puis « + N … — détail
+complet dans l'export Excel ») ; diapositives sans données : message sobre et
+grand encadré. Uniquement des agrégats : ~0,2 s de rendu pour 4 000 tâches
+(≈ 0,8 s requête comprise). Projets types exclus (404). `renderProjectDeck(data)`
+construit la présentation sans base. Même quota que l'export Excel
+(`export:<userId>`, 30 / 15 min) ; relayée par la coque desktop (liste
+blanche `PROJECT_EXPORT`).
 
 ## Inscriptions et comptes
 

@@ -396,3 +396,13 @@ body {
 .ProseMirror th.selectedCell {
   background: color-mix(in srgb, var(--color-brand-500) 15%, transparent);
 }
+
+/* PWA iPhone (plein écran, viewport-fit=cover) : marges de l'encoche en paysage
+   et de la barre d'accueil pour les tiroirs fixés en bas d'écran. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.fixed.bottom-0 {
+  padding-bottom: env(safe-area-inset-bottom);
+}

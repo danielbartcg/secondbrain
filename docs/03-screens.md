@@ -273,6 +273,12 @@ seulement sur le site, sous Windows, masquable définitivement (✕, mémorisé
 dans le navigateur). Également : lien sous le formulaire de connexion,
 section « Application desktop » des Préférences. Jamais dans le menu latéral.
 
+**iPhone (PWA)** : `IosInstallHint` sur le tableau de bord (iPhone / iPad dans
+Safari, site non installé, masquable) : « touchez Partager puis « Sur l'écran
+d'accueil » ». Page `/app` « Second Brain sur vos appareils » : Windows
+(installateur) et iPhone (3 étapes d'installation sur l'écran d'accueil).
+Lien de connexion : « Applications Windows et iPhone ».
+
 ## Épingles (`PinButton`, menu de gauche)
 
 Bouton punaise « Épingler dans le menu » / « Désépingler » : cartes de la
@@ -380,6 +386,7 @@ dossier, construit avec amCharts 4.
 - **Risques** (`ProjectRisksTab`) : Risques | Opportunités (compteurs) ; matrice 5 × 5 (`risks/RiskMatrix.tsx`) probabilité (5 Quasi certain → 1 Rare) × gravité (Négligeable → Critique) ou bénéfice (Faible → Majeur), couleurs fixes vert → rouge (risques) et sarcelle (opportunités), case = criticité, nombre et références R1 / O1 des éléments non clos ; clic case = filtre, clic référence = met la ligne en évidence ; légende. Synthèse (par niveau, statut, sans stratégie, sans responsable). Ajout rapide. Tableau déclaratif (cartes sur mobile) : réf., titre, catégorie, probabilité, gravité / bénéfice, criticité, statut, responsable, tâches liées (« Lier des tâches » : `risks/TaskLinkPicker.tsx`, recherche Étape › Activité › Tâche), suppression ; détail dépliable (catégorie, nature, **stratégie de gestion** — Accepter et surveiller · Atténuer · Transférer · Éliminer — ou **de maximisation** pour une opportunité — Accepter et surveiller · Améliorer · Partager · Exploiter —, description, plan). Tri criticité / réf., « Masquer les clos ». Optimiste avec retour arrière.
 - **Documents** : glisser-déposer des documents (ou de la sélection) et des dossiers sur une tuile de dossier ou un segment du fil d'Ariane (« Documents » = racine) ; sélection multiple (cases, Ctrl/⌘-clic, Maj-clic) ; alternative « Déplacer vers… » arborescente ; la zone de dépôt ne téléverse que des fichiers venant du système. Sur mobile, les listes passent sous le nom.
 - **Export Excel** : bouton en tête de fiche projet (à côté de « Épingler »), télécharge le classeur complet (`/api/v1/projects/:id/export`).
+- **Export PowerPoint** (icône `Presentation`, à côté d'« Export Excel » ; libellés masqués sur mobile, icônes seules) : télécharge la présentation « état des lieux » (`/api/v1/projects/:id/export-pptx`) avec des encadrés jaunes « Cliquez pour commenter » à compléter par le chef de projet. Les deux boutons sont masqués pour un projet type.
 
 ## Modèles (`/admin/templates` — `admin/AdminTemplates`, `templates/TemplatePicker`)
 

@@ -8,6 +8,7 @@ import { StatusDonut } from "@/components/charts/StatusDonut";
 import { ProgressBarsChart } from "@/components/charts/ProgressBarsChart";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { DesktopAppPromo } from "@/components/DesktopAppPromo";
+import { IosInstallHint } from "@/components/IosInstallHint";
 import {
   Badge,
   DELIVERABLE_STATUS_COLOR,
@@ -43,6 +44,8 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
 
       {/* Invitation « Télécharger l'app » (site, Windows, masquable) */}
       <DesktopAppPromo className="mt-4" />
+      {/* iPhone : ajouter à l'écran d'accueil (PWA) */}
+      <IosInstallHint className="mt-4" />
 
       {/* Indicateurs */}
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">

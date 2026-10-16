@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: { default: "Second Brain", template: "%s · Second Brain" },
   description: "Cartes mentales et gestion de projets : votre second cerveau.",
   applicationName: "Second Brain",
+  // PWA : écran d'accueil iPhone en plein écran (barre d'état translucide, marges de l'encoche gérées en CSS).
+  appleWebApp: { capable: true, title: "Second Brain", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 /** Couleur de fond (--color-canvas) de chaque thème, pour la barre du navigateur mobile. */

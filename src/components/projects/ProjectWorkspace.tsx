@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users, LayoutTemplate } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, Presentation, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users, LayoutTemplate } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import { InlineEdit, ProgressBar, errorMessage, toInputDate, toast } from "@/components/ui";
@@ -119,6 +119,16 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
           className="inline-flex items-center gap-1.5 rounded-lg p-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-ink md:p-1.5"
         >
           <FileSpreadsheet className="h-4 w-4" /> <span className="hidden sm:inline">Export Excel</span>
+        </a>
+        )}
+        {!tpl && (
+        <a
+          href={`/api/v1/projects/${project.id}/export-pptx`}
+          download
+          title="Exporter l'état des lieux du projet au format PowerPoint (.pptx), avec des encadrés à commenter"
+          className="inline-flex items-center gap-1.5 rounded-lg p-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-ink md:p-1.5"
+        >
+          <Presentation className="h-4 w-4" /> <span className="hidden sm:inline">Export PowerPoint</span>
         </a>
         )}
         {!tpl && <PinButton kind="PROJECT" item={{ id: project.id, name: project.name, color: project.color }} withLabel />}
