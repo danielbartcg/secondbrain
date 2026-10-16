@@ -7,6 +7,8 @@ import { taskAccessWhere } from "@/lib/projects";
 import type { CreateNodeInput, MoveNodeInput, UpdateNodeInput } from "@/lib/schemas";
 import { mapAccessWhere, requireMapAccess } from "@/lib/map-access";
 import { mapAccessOf, type MapAccess, type MapOwnerRef } from "@/lib/shared/map-access";
+import { NODE_STATUS_LABEL, q, recordMapEvents, type MapEventInput } from "@/lib/map-events";
+import { actorDisplayName } from "@/lib/task-events";
 
 export { mapAccessWhere, mapWriteWhere, requireMapAccess } from "@/lib/map-access";
 export type { MapAccess, MapOwnerRef } from "@/lib/shared/map-access";
@@ -171,8 +173,13 @@ export async function listMindMaps(userId: string): Promise<MindMapSummary[]> {
 
 /** `ids` : identifiants générés hors ligne par une application (carte et nœud racine). */
 export async function createMindMap(userId: string, title: string, ids: { id?: string; rootId?: string } = {}): Promise<MindMapDto> {
-  const map = await prisma.mindMap.create({
-    data: { id: ids.id, ownerId: userId, title, nodes: { create: { id: ids.rootId, title, order: 0 } } },
+  const map = await prisma.$transaction(async (tx) => {
+    const m = await tx.mindMap.create({
+      data: { id: ids.id, ownerId: userId, title, nodes: { create: { id: ids.rootId, title, order: 0 } } },
+    });
+    const actor = await actorDisplayName(tx, userId);
+    await recordMapEvents(tx, [{ mapId: m.id, actorId: userId, actorName: actor, kind: "created", newValue: title, message: `${actor} a créé la carte ${q(title)}` }]);
+    return m;
   });
   return getMindMap(userId, map.id);
 }
@@ -205,8 +212,13 @@ export async function getMindMap(userId: string, mapId: string): Promise<MindMap
 export async function updateMindMap(userId: string, mapId: string, data: { title?: string }): Promise<void> {
   await mutateMap(userId, mapId, async (tx) => {
     if (data.title) {
+      const before = await tx.mindMap.findUniqueOrThrow({ where: { id: mapId }, select: { title: true } });
       await tx.mindMap.update({ where: { id: mapId }, data: { title: data.title } });
       await tx.mindNode.updateMany({ where: { mapId, parentId: null }, data: { title: data.title } });
+      if (before.title !== data.title) {
+        const actor = await actorDisplayName(tx, userId);
+        await recordMapEvents(tx, [{ mapId, actorId: userId, actorName: actor, kind: "renamed", oldValue: before.title, newValue: data.title, message: `${actor} a renommé la carte ${q(before.title)} en ${q(data.title)}` }]);
+      }
     }
   });
 }
@@ -245,6 +257,8 @@ export async function createNode(userId: string, mapId: string, input: CreateNod
     });
     await resequence(tx, mapId, parent.id, created.id, input.index);
     if (parent.collapsed) await tx.mindNode.update({ where: { id: parent.id }, data: { collapsed: false } });
+    const actor = await actorDisplayName(tx, userId);
+    await recordMapEvents(tx, [{ mapId, nodeId: created.id, nodeTitle: created.title, actorId: userId, actorName: actor, kind: "node_created", newValue: created.title, message: `${actor} a ajouté le nœud ${q(created.title)} sous ${q(parent.title)}` }]);
     return tx.mindNode.findUniqueOrThrow({ where: { id: created.id }, include: nodeInclude(userId) });
   });
   return toNodeDto(node);
@@ -271,6 +285,28 @@ export async function updateNode(
     if (node.parentId === null && input.title) {
       await tx.mindMap.update({ where: { id: mapId }, data: { title: input.title } });
     }
+    // Piste d'audit (positions et repli non journalisés).
+    const events: MapEventInput[] = [];
+    let actor: string | null = null;
+    const who = async () => (actor ??= await actorDisplayName(tx, userId));
+    const base = { mapId, nodeId, nodeTitle: row.title, actorId: userId };
+    if (input.title !== undefined && input.title !== node.title) {
+      const a = await who();
+      events.push({ ...base, actorName: a, kind: node.parentId === null ? "renamed" : "node_renamed", oldValue: node.title, newValue: input.title, message: node.parentId === null ? `${a} a renommé la carte ${q(node.title)} en ${q(input.title)}` : `${a} a renommé le nœud ${q(node.title)} en ${q(input.title)}` });
+    }
+    if (input.notes !== undefined && data.notes !== node.notes) {
+      const a = await who();
+      events.push({ ...base, actorName: a, kind: "node_notes", message: `${a} a modifié les notes du nœud ${q(row.title)}` });
+    }
+    if (input.status !== undefined && input.status !== node.status) {
+      const a = await who();
+      events.push({ ...base, actorName: a, kind: "node_status", oldValue: node.status, newValue: input.status, message: `${a} a passé le nœud ${q(row.title)} de « ${NODE_STATUS_LABEL[node.status] ?? node.status} » à « ${NODE_STATUS_LABEL[input.status] ?? input.status} »` });
+    }
+    if (input.color !== undefined && input.color !== node.color) {
+      const a = await who();
+      events.push({ ...base, actorName: a, kind: "node_color", oldValue: node.color, newValue: input.color, message: `${a} a changé la couleur du nœud ${q(row.title)}` });
+    }
+    await recordMapEvents(tx, events);
     return row;
   });
   return toNodeDto(updated);
@@ -280,6 +316,8 @@ export async function updateNode(
 export async function resetLayout(userId: string, mapId: string): Promise<MindMapDto> {
   await mutateMap(userId, mapId, async (tx) => {
     await tx.mindNode.updateMany({ where: { mapId }, data: { x: null, y: null } });
+    const actor = await actorDisplayName(tx, userId);
+    await recordMapEvents(tx, [{ mapId, actorId: userId, actorName: actor, kind: "layout_reset", message: `${actor} a rétabli l'affichage optimisé de la carte` }]);
   });
   return getMindMap(userId, mapId);
 }
@@ -289,6 +327,14 @@ export async function deleteNode(userId: string, mapId: string, nodeId: string):
     const node = await tx.mindNode.findFirst({ where: { id: nodeId, mapId } });
     if (!node) throw notFound("Nœud");
     if (node.parentId === null) throw badRequest("La racine ne peut pas être supprimée.");
+    // Taille de la branche supprimée (pour l'historique).
+    const all = await tx.mindNode.findMany({ where: { mapId }, select: { id: true, parentId: true } });
+    const kids = new Map<string, string[]>();
+    for (const n of all) if (n.parentId) kids.set(n.parentId, [...(kids.get(n.parentId) ?? []), n.id]);
+    let below = 0;
+    for (const stack = [...(kids.get(nodeId) ?? [])]; stack.length; below++) stack.push(...(kids.get(stack.pop()!) ?? []));
+    const actor = await actorDisplayName(tx, userId);
+    await recordMapEvents(tx, [{ mapId, nodeId, nodeTitle: node.title, actorId: userId, actorName: actor, kind: "node_deleted", oldValue: node.title, message: `${actor} a supprimé le nœud ${q(node.title)}${below ? ` et ses ${below} sous-nœud${below > 1 ? "s" : ""}` : ""}` }]);
     await tx.mindNode.delete({ where: { id: nodeId } });
     await resequence(tx, mapId, node.parentId);
   });
@@ -316,6 +362,11 @@ export async function moveNode(
     }
 
     const oldParentId = node.parentId;
+    if (oldParentId !== target.id) {
+      const from = await tx.mindNode.findUnique({ where: { id: oldParentId }, select: { title: true } });
+      const actor = await actorDisplayName(tx, userId);
+      await recordMapEvents(tx, [{ mapId, nodeId, nodeTitle: node.title, actorId: userId, actorName: actor, kind: "node_moved", oldValue: from?.title ?? null, newValue: target.title, message: `${actor} a déplacé le nœud ${q(node.title)} de ${q(from?.title)} vers ${q(target.title)}` }]);
+    }
     await tx.mindNode.update({ where: { id: nodeId }, data: { parentId: target.id, order: 1_000_000 } });
     await resequence(tx, mapId, target.id, nodeId, input.index);
     if (oldParentId !== target.id) await resequence(tx, mapId, oldParentId);

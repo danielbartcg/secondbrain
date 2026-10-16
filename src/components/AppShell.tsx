@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MessagesSquare, Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
+import { Activity, MessagesSquare, Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
 import { Avatar } from "@/components/ui";
 import { api, ApiClientError } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
@@ -17,6 +17,7 @@ const NAV = [
   { href: "/projects", label: "Projets", icon: FolderKanban },
   { href: "/organize", label: "Mes tâches", icon: CalendarCheck2 },
   { href: "/notes", label: "Prise de notes", icon: NotebookPen },
+  { href: "/activity", label: "Activité", icon: Activity },
   { href: "/messages", label: "Messages", icon: MessagesSquare },
 ];
 

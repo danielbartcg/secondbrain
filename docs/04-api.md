@@ -498,6 +498,8 @@ zip, Office (doc/x, xls/x, ppt/x) et OpenDocument. 25 Mo max. Pas de SVG.
 
 | Méthode | Route | Réponse |
 | --- | --- | --- |
+| GET | `/mindmaps/:id/history?nodeId=&limit=` | `{ events: { id, kind, nodeId, nodeTitle, oldValue, newValue, message, actorId, actorName, actorAvatarUrl, createdAt }[] }` (plus récent d'abord, 300 par défaut, 1000 max ; lecture de la carte, 404 sinon) |
+| GET | `/activity?period=&from=&to=&projectId=&mapId=&all=1` | `{ activity: ActivityReport }` — `period` ∈ today, yesterday, 7d, week, last_week, 30d, month, last_month, quarter (défaut 7d) ou `from` / `to` (AAAA-MM-JJ inclus, jours de Paris, 366 j max ; 400 sinon) ; `all=1` administrateurs (403 sinon). `ActivityReport = { from, to, label, scope, totals, people, days: { day, tasks, maps, other }[], projects: { id, name, color, createdInPeriod, total, counts, tasks: { id, name, status, deleted, stageName, events, eventCount }[], stagesCreated, meetings, risks, deliverables, documents }[], maps: { id, title, total, counts, events, nodes }[], truncated }` ; outils MCP `get_activity` (mêmes paramètres, `project_id`, `map_id`, `admin_access`) et `get_map_history` |
 | GET | `/tasks/:id/history` | `{ events: { id, kind, field, oldValue, newValue, message, actorId, actorName, actorAvatarUrl, createdAt }[] }` (plus récent d'abord, 300 max ; mêmes droits que la fiche, 404 sinon) |
 
 ## Réunions

@@ -372,6 +372,29 @@ dossier, construit avec amCharts 4.
 - **Documents** : glisser-déposer des documents (ou de la sélection) et des dossiers sur une tuile de dossier ou un segment du fil d'Ariane (« Documents » = racine) ; sélection multiple (cases, Ctrl/⌘-clic, Maj-clic) ; alternative « Déplacer vers… » arborescente ; la zone de dépôt ne téléverse que des fichiers venant du système. Sur mobile, les listes passent sous le nom.
 - **Export Excel** : bouton en tête de fiche projet (à côté de « Épingler »), télécharge le classeur complet (`/api/v1/projects/:id/export`).
 
+## Activité (`/activity` — `activity/ActivityView`)
+
+Entrée « Activité » du menu. Période : puces (Aujourd'hui, Hier, 7 derniers
+jours, Cette semaine, Semaine dernière, 30 derniers jours, Ce mois-ci, Mois
+dernier, 90 derniers jours) ou « Dates libres » (du / au) ; filtres Projet /
+Carte mentale ; administrateurs : « Toute la plateforme ». Indicateurs
+(tâches créées, terminées / clôturées, replanifications, commentaires,
+nœuds, réunions, risques, livrables / documents), activité par jour
+(`charts/DailyActivityChart`, amCharts, colonnes empilées tâches / cartes /
+autres), personnes actives. Puis une carte par projet (dépliable ; puces de
+compteurs ; tâches avec statut et derniers messages d'audit, « Voir les N
+modifications » ; réunions, risques, livrables, documents ; « Nouveau projet »)
+et par carte mentale (événements de la carte, nœuds — barrés si supprimés —
+avec liens `?node=`). Application : même écran, en ligne.
+
+## Éditeur de carte : historique (`mindmap/MapHistoryPanel`)
+
+Bouton « Historique » de la barre de la carte (lecteurs compris) : panneau
+latéral (tiroir bas sur mobile), portée « Toute la carte » / « Nœud
+sélectionné », filtres Tout · Nœuds · Notes · Tâches · Carte et partages,
+regroupé par jour ; clic sur une entrée = sélection du nœud s'il existe
+encore ; Échap ferme. Rechargé après chaque série d'enregistrements.
+
 ## Fiche tâche : historique (`projects/TaskHistory`)
 
 Section repliable « Historique des modifications » en bas de la fiche :

@@ -1,4 +1,5 @@
 import "server-only";
+import { recordMapEvents } from "@/lib/map-events";
 import type { Prisma, User } from "@prisma/client";
 import { requireAdmin } from "@/lib/users";
 import { prisma } from "@/lib/prisma";
@@ -401,9 +402,11 @@ export async function linkNodeTask(userId: string, nodeId: string, taskId: strin
     if (exists) return;
     await tx.mindNodeTask.create({ data: { nodeId, taskId } });
     await tx.mindNode.update({ where: { id: nodeId }, data: { updatedAt: new Date() } });
-    const node = await tx.mindNode.findUnique({ where: { id: nodeId }, select: { title: true, map: { select: { title: true } } } });
+    const node = await tx.mindNode.findUnique({ where: { id: nodeId }, select: { title: true, mapId: true, map: { select: { title: true } } } });
     const actor = await actorDisplayName(tx, userId);
     await recordTaskEvents(tx, [{ taskId, actorId: userId, actorName: actor, kind: "node", newValue: node?.title ?? null, message: `${actor} a rattaché la tâche au nœud « ${node?.title ?? "?"} » (carte « ${node?.map.title ?? "?"} »)` }]);
+    const task = await tx.task.findUnique({ where: { id: taskId }, select: { name: true } });
+    if (node) await recordMapEvents(tx, [{ mapId: node.mapId, nodeId, nodeTitle: node.title, actorId: userId, actorName: actor, kind: "task_linked", newValue: task?.name ?? null, message: `${actor} a rattaché la tâche « ${task?.name ?? "?"} » au nœud « ${node.title} »` }]);
   });
   return nodeTasksResult(userId, nodeId);
 }
@@ -413,9 +416,11 @@ export async function unlinkNodeTask(userId: string, nodeId: string, taskId: str
   await prisma.$transaction(async (tx) => {
     const removed = await tx.mindNodeTask.deleteMany({ where: { nodeId, taskId } });
     if (removed.count === 0) return;
-    const node = await tx.mindNode.findUnique({ where: { id: nodeId }, select: { title: true } });
+    const node = await tx.mindNode.findUnique({ where: { id: nodeId }, select: { title: true, mapId: true } });
     const actor = await actorDisplayName(tx, userId);
     await recordTaskEvents(tx, [{ taskId, actorId: userId, actorName: actor, kind: "node", oldValue: node?.title ?? null, message: `${actor} a détaché la tâche du nœud « ${node?.title ?? "?"} »` }]);
+    const task = await tx.task.findUnique({ where: { id: taskId }, select: { name: true } });
+    if (node) await recordMapEvents(tx, [{ mapId: node.mapId, nodeId, nodeTitle: node.title, actorId: userId, actorName: actor, kind: "task_unlinked", oldValue: task?.name ?? null, message: `${actor} a détaché la tâche « ${task?.name ?? "?"} » du nœud « ${node.title} »` }]);
   });
   return nodeTasksResult(userId, nodeId);
 }

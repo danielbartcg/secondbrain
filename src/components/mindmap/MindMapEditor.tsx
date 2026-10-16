@@ -19,7 +19,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, LayoutTemplate, ListTodo, Lock, PanelRightOpen, Plus, Share2, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, History, LayoutTemplate, ListTodo, Lock, PanelRightOpen, Plus, Share2, Trash2, Users, X } from "lucide-react";
 import type { NodeStatus } from "@prisma/client";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
@@ -30,6 +30,7 @@ import { NodeTasksPanel } from "./NodeTasksPanel";
 import { useSearchParams } from "next/navigation";
 import { PinButton } from "@/components/PinButton";
 import { ShareMapDialog } from "./ShareMapDialog";
+import { MapHistoryPanel } from "./MapHistoryPanel";
 
 /**
  * Éditeur de carte mentale.
@@ -219,6 +220,8 @@ function Editor({ initial }: { initial: MindMapDto }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const searchParams = useSearchParams();
   /** Carte partagée en lecture seule : toute écriture est désactivée. */
   const readOnly = map.access === "read";
@@ -236,6 +239,11 @@ function Editor({ initial }: { initial: MindMapDto }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [saving, setSaving] = useState(0);
+  // Historique : rechargé après chaque série d'enregistrements.
+  const [savedTick, setSavedTick] = useState(0);
+  useEffect(() => {
+    if (saving === 0) setSavedTick((t) => t + 1);
+  }, [saving]);
   const [layoutTick, setLayoutTick] = useState(0);
   const { fitView, setCenter, getZoom } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -735,6 +743,10 @@ function Editor({ initial }: { initial: MindMapDto }) {
             {map.sharedWith > 0 && <span className="rounded-full bg-brand-50 px-1.5 text-[11px] text-brand-700">{map.sharedWith}</span>}
           </Button>
         )}
+        <Button variant="ghost" size="sm" onClick={() => setHistoryOpen((v) => !v)} title="Historique des modifications" className={`shrink-0 ${historyOpen ? "text-brand-700" : ""}`}>
+          <History className="h-4 w-4" />
+          <span className="hidden xl:inline">Historique</span>
+        </Button>
         {!readOnly && <span className="hidden text-xs text-faint lg:block">Tab : enfant · Entrée : frère · Suppr · F2 : renommer · Espace : replier</span>}
         <span className={`shrink-0 text-xs ${saving ? "text-warn" : "text-faint"}`} role="status" title={saving ? "Enregistrement…" : "Enregistré"}>
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full sm:hidden ${saving ? "bg-warn" : "bg-ok"}`} />
@@ -1016,6 +1028,16 @@ function Editor({ initial }: { initial: MindMapDto }) {
         )}
       </div>
 
+      {historyOpen && (
+        <MapHistoryPanel
+          mapId={map.id}
+          version={String(savedTick)}
+          selectedNode={selected ? { id: selected.id, title: selected.title } : null}
+          nodeExists={(id) => byId.has(id)}
+          onSelectNode={(id) => select(id)}
+          onClose={closeHistory}
+        />
+      )}
       {sharing && isOwner && (
         <ShareMapDialog mapId={map.id} mapTitle={map.title} onClose={closeSharing} onCount={(sharedWith) => setMap((m) => ({ ...m, sharedWith }))} />
       )}

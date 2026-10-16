@@ -51,6 +51,7 @@ model User {
   mapShares            MindMapShare[]            @relation("MapShareUser")
   mapSharesGiven       MindMapShare[]            @relation("MapShareBy")
   taskEvents           TaskEvent[]               @relation("TaskEventActor")
+  mapEvents            MapEvent[]                @relation("MapEventActor")
   meetingsAuthored     Meeting[]                 @relation("MeetingAuthor")
   mindMaps             MindMap[]
   projects             Project[]
@@ -99,8 +100,33 @@ model MindMap {
   nodes  MindNode[]
   /// Partages : personnes ayant accès en lecture ou en écriture.
   shares MindMapShare[]
+  /// Piste d'audit (historique des modifications).
+  events MapEvent[]
 
   @@index([ownerId])
+}
+
+/// Piste d'audit d'une carte mentale : une ligne par modification, message
+/// lisible figé au moment de l'action. `nodeId` sans clé étrangère (le nœud
+/// peut avoir été supprimé) ; `nodeTitle` = titre au moment de l'action.
+model MapEvent {
+  id        String   @id @default(cuid())
+  mapId     String
+  map       MindMap  @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  nodeId    String?
+  nodeTitle String?
+  actorId   String?
+  actor     User?    @relation("MapEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String
+  /// created · renamed · node_created · node_renamed · node_notes · node_status · node_color · node_moved · node_deleted · task_linked · task_unlinked · shared · share_changed · unshared · left · layout_reset
+  kind      String
+  oldValue  String?
+  newValue  String?
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([mapId, createdAt])
+  @@index([createdAt])
 }
 
 /// Droit sur une carte partagée.
@@ -507,6 +533,7 @@ model TaskEvent {
   createdAt DateTime @default(now())
 
   @@index([taskId, createdAt])
+  @@index([createdAt])
 }
 
 /// Gestion des risques du projet : risques (menaces) et opportunités, cotés

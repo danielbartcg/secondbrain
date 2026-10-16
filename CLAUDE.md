@@ -50,6 +50,10 @@ README.
   Routes sensibles interdites (`FORBIDDEN` : auth, clés, mot de passe,
   e-mail, sync, mcp). Les clés `sb_…` ne valent pas session. Une nouvelle
   route est automatiquement accessible via `api_request` (documentée en 04).
+- **Piste d'audit des cartes** (`src/lib/map-events.ts`) : toute écriture sur
+  une carte ou un nœud (sauf positions et repli) enregistre un `MapEvent` dans
+  la même transaction. Le rapport d'activité (`src/lib/activity.ts`) lit les
+  deux pistes : une nouvelle entité « qui évolue » doit y être consolidée.
 - **Piste d'audit des tâches** (`src/lib/task-events.ts`) : toute écriture sur
   une tâche (champs, personnes, prérequis, rattachement, commentaires, sessions,
   nœuds, risques) enregistre des `TaskEvent` **dans la même transaction**

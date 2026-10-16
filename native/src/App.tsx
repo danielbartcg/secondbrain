@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ActivityView } from "@/components/activity/ActivityView";
+import type { ActivityReport } from "@/lib/activity";
 import { toast } from "@/components/ui";
 import { Download, Loader2, RefreshCw, WifiOff } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
@@ -158,6 +160,16 @@ function Screen({ path, runtime }: { path: string; runtime: Runtime }) {
   if (path === "/organize") return <Loaded load={() => api.get<OrganizerDto>("/me/tasks")} render={(d) => <TaskOrganizer initial={d} />} />;
   if (path === "/notes") return <Loaded load={() => api.get<{ children: TreeItem[] }>("/notes/tree?parent=root")} render={(d) => <NotesWorkspace roots={d.children} />} />;
   if (path === "/notifications") return <NotificationsPage />;
+  // Activité : calculée par le serveur (pistes d'audit), en ligne uniquement.
+  if (path === "/activity")
+    return (
+      <Loaded
+        load={() => Promise.all([api.get<{ activity: ActivityReport }>("/activity?period=7d"), api.get<{ projects: ProjectSummary[] }>("/projects"), api.get<{ mindmaps: MindMapSummary[] }>("/mindmaps")])}
+        render={([a, p, m]) => (
+          <ActivityView initial={a.activity} projects={p.projects.map((x) => ({ id: x.id, name: x.name }))} maps={m.mindmaps.map((x) => ({ id: x.id, title: x.title }))} isAdmin={!!runtime.store.meta.user!.isAdmin} />
+        )}
+      />
+    );
   // Messagerie : en ligne uniquement (relayée au serveur).
   if (path === "/messages" || (r = m(/^\/messages\/([^/]+)$/))) {
     const u = runtime.store.meta.user!;

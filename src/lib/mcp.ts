@@ -13,6 +13,9 @@ import { search } from "@/lib/search";
 import { listUsersAdmin, reportIdsOf } from "@/lib/users";
 import type { ProjectDto, TaskDto } from "@/lib/projects";
 import { WRITE_TOOLS } from "@/lib/mcp-write";
+import { getActivity } from "@/lib/activity";
+import { listMapEvents } from "@/lib/map-events";
+import { ACTIVITY_PRESETS } from "@/lib/shared/activity-period";
 
 /**
  * Serveur MCP (Model Context Protocol) de Second Brain : Claude Desktop (ou
@@ -35,6 +38,7 @@ export const MCP_SERVER_INFO = { name: "second-brain", title: "Second Brain", ve
 export const MCP_INSTRUCTIONS =
   "Second Brain : gestion de projets (projets › étapes › activités › tâches, livrables, équipe), cartes mentales et prise de notes. " +
   "Lecture : commencez par list_projects / list_my_tasks / search, puis get_project, get_task, get_mind_map ou read_note. " +
+  "Pour « que s'est-il passé » sur une période (jour, semaine, mois, dates libres), utilisez get_activity : un seul appel consolide tâches, cartes mentales, réunions, risques, livrables et documents ; rédigez ensuite la synthèse. get_map_history donne l'historique détaillé d'une carte. " +
   "Écriture (clé autorisée) : create_task, update_task, bulk_update_tasks (ex. assigner toutes les tâches d'un projet), delete_task, add_comment, create_project, update_project, create_stage, save_note, create_meeting, update_meeting (compte-rendu), decide_meeting, upsert_risk, edit_mind_map, send_message ; " +
   "pour tout le reste, api_request appelle n'importe quelle route de l'API (consultez api_reference). Les personnes se désignent par nom, e-mail ou id. Confirmez avec l'utilisateur avant une suppression ou une modification en masse. " +
   "Les dates sont au format ISO. Statuts de tâche : TODO (à faire), IN_PROGRESS (en cours), DONE (terminée), CLOSED (clôturée). " +
@@ -189,6 +193,43 @@ function limitOf(args: Record<string, unknown>, def = 200) {
 // --- Outils -------------------------------------------------------------------------------------
 
 export const TOOLS: Tool[] = [
+  {
+    name: "get_activity",
+    title: "Rapport d'activité sur une période",
+    description:
+      "Tout ce qui a évolué sur une fenêtre de temps : tâches (créées, terminées, clôturées, rouvertes, replanifiées, affectations, commentaires, autres modifications, avec les messages de la piste d'audit), cartes mentales (nœuds créés, modifiés, supprimés, notes, tâches rattachées, partages), réunions (créées, compte-rendu modifié, validations / refus), risques et opportunités, livrables, documents, étapes et projets créés. " +
+      "Regroupé par projet et par carte, avec totaux, personnes actives et activité par jour. Période : period (" +
+      ACTIVITY_PRESETS.map((p) => `${p.key} = ${p.label}`).join(", ") +
+      ") ou from / to (AAAA-MM-JJ, inclus, heure de Paris ; 366 jours au plus). Défaut : 7 derniers jours.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        period: { type: "string", enum: ACTIVITY_PRESETS.map((p) => p.key) },
+        from: { type: "string", description: "Début inclus (AAAA-MM-JJ)." },
+        to: { type: "string", description: "Fin incluse (AAAA-MM-JJ), aujourd'hui par défaut." },
+        project_id: { type: "string", description: "Limiter à un projet." },
+        map_id: { type: "string", description: "Limiter à une carte mentale." },
+        admin_access: { type: "boolean", description: "Administrateurs : toute la plateforme (sur demande explicite seulement)." },
+      },
+    },
+    run: async (user, args) =>
+      getActivity(user, {
+        period: typeof args.period === "string" ? args.period : null,
+        from: typeof args.from === "string" ? args.from : null,
+        to: typeof args.to === "string" ? args.to : null,
+        projectId: typeof args.project_id === "string" ? args.project_id : null,
+        mapId: typeof args.map_id === "string" ? args.map_id : null,
+        all: wantsAdmin(user, args),
+      }),
+  },
+  {
+    name: "get_map_history",
+    title: "Historique d'une carte mentale",
+    description: "Piste d'audit d'une carte (ou d'un de ses nœuds) : qui a créé, renommé, déplacé, supprimé un nœud, modifié ses notes, son statut, rattaché une tâche, partagé la carte, et quand. Le plus récent d'abord.",
+    inputSchema: { type: "object", properties: { map_id: { type: "string" }, node_id: { type: "string" }, limit: { type: "number", minimum: 1, maximum: 1000 } }, required: ["map_id"] },
+    run: async (user, args) =>
+      listMapEvents(user.id, String(args.map_id), { nodeId: typeof args.node_id === "string" ? args.node_id : undefined, limit: typeof args.limit === "number" ? args.limit : 200 }),
+  },
   {
     name: "whoami",
     title: "Mon compte",

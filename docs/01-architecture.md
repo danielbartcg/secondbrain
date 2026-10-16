@@ -438,6 +438,36 @@ commentaires, sessions de travail, nœuds de carte et risques appellent
 mêmes fonctions : l'application hors ligne est auditée aussi. Lecture :
 `GET /tasks/:id/history` (mêmes droits que la fiche).
 
+## Piste d'audit des cartes mentales (`src/lib/map-events.ts`)
+
+Table `MapEvent`, même principe (message figé, écrit **dans la transaction**) :
+création et renommage de la carte, nœud ajouté (« sous » son parent), renommé,
+déplacé (de … vers …), supprimé (avec la taille de la branche), notes,
+statut, couleur ; tâche rattachée, détachée ou créée depuis un nœud ;
+partage, changement de droit, retrait, départ ; affichage optimisé. Non
+journalisés : positions manuelles et repli. Les enregistrements automatiques
+de notes d'un même auteur sur un même nœud sont regroupés (séance de 10 min).
+`nodeId` sans clé étrangère (le nœud peut être supprimé), `nodeTitle` figé.
+Lecture : `GET /mindmaps/:id/history?nodeId=` (droit de lecture sur la carte),
+panneau « Historique » de l'éditeur, outil MCP `get_map_history`.
+
+## Rapport d'activité (`src/lib/activity.ts`)
+
+« Qu'est-ce qui a évolué » sur une fenêtre libre : périodes prédéfinies
+(aujourd'hui, hier, 7 / 30 / 90 jours, cette semaine, semaine dernière, ce
+mois-ci, mois dernier) ou dates libres (366 jours au plus), jours de Paris
+(`src/lib/shared/activity-period.ts`, pur). Consolide, dans le périmètre de
+l'utilisateur (ou toute la plateforme pour un administrateur qui le demande) :
+pistes d'audit des tâches et des cartes, réunions (créées, compte-rendu
+modifié, validations / refus), risques et opportunités, livrables et
+documents, projets et étapes créés. Regroupé par projet et par carte (tâches
+et nœuds les plus actifs d'abord, 30 derniers messages chacun), compteurs
+(créées, terminées, clôturées, rouvertes, replanifiées, affectations,
+commentaires…), personnes actives, activité par jour. Un seul calcul sert la
+page « Activité » (site et application, en ligne), `GET /api/v1/activity` et
+l'outil MCP `get_activity` : Claude obtient tout en un appel et rédige la
+synthèse. Limite : une tâche supprimée emporte son historique.
+
 ## Réunions de projet (`src/lib/meetings.ts`)
 
 Réunion = titre, date, lieu, rédacteur (créateur), participants et

@@ -1,4 +1,5 @@
 import "server-only";
+import { recordMapEvents } from "@/lib/map-events";
 import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPriority, TaskStatus, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError, badRequest, forbidden, notFound } from "@/lib/api";
@@ -618,6 +619,11 @@ export async function createTask(
     // Piste d'audit : création, puis l'état initial (affectations, dates…) comme des modifications.
     const creator = await actorDisplayName(tx, userId);
     await recordTaskEvents(tx, [{ taskId: created.id, actorId: userId, actorName: creator, kind: "created", message: `${creator} a créé la tâche « ${created.name} »` }]);
+    if (target.nodeId) {
+      // Tâche créée depuis un nœud : aussi dans l'historique de la carte.
+      const node = await tx.mindNode.findUnique({ where: { id: target.nodeId }, select: { title: true, mapId: true } });
+      if (node) await recordMapEvents(tx, [{ mapId: node.mapId, nodeId: target.nodeId, nodeTitle: node.title, actorId: userId, actorName: creator, kind: "task_linked", newValue: created.name, message: `${creator} a créé la tâche « ${created.name} » depuis le nœud « ${node.title} »` }]);
+    }
     const initial = await taskSnapshot(tx, created.id);
     if (initial) {
       const empty = { ...initial, assigneeId: null, supervisorId: null, contributorIds: [], prerequisiteIds: [], startDate: null, dueDate: null, closedAt: initial.closedAt };

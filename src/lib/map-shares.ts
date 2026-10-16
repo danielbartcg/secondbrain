@@ -5,6 +5,7 @@ import { ApiError, badRequest, notFound } from "@/lib/api";
 import { requireMapAccess } from "@/lib/map-access";
 import { notify } from "@/lib/notifications";
 import { MAP_PERMISSION_LABEL } from "@/lib/shared/map-access";
+import { recordMapEvents } from "@/lib/map-events";
 import type { CreateMapShareInput, UpdateMapShareInput } from "@/lib/schemas-map-shares";
 
 /**
@@ -58,8 +59,8 @@ function shareTitle(actor: string, mapTitle: string, permission: MapPermission, 
 export async function shareMap(ownerId: string, mapId: string, input: CreateMapShareInput): Promise<MapSharesDto> {
   const { map } = await requireMapAccess(ownerId, mapId, "owner");
   const target = input.userId
-    ? await prisma.user.findUnique({ where: { id: input.userId }, select: { id: true } })
-    : await prisma.user.findUnique({ where: { email: input.email! }, select: { id: true } });
+    ? await prisma.user.findUnique({ where: { id: input.userId }, select: { id: true, name: true } })
+    : await prisma.user.findUnique({ where: { email: input.email! }, select: { id: true, name: true } });
   if (!target) throw notFound("Utilisateur");
   if (target.id === ownerId) throw badRequest("Vous êtes déjà propriétaire de cette carte.");
 
@@ -76,6 +77,12 @@ export async function shareMap(ownerId: string, mapId: string, input: CreateMapS
       update: { permission: input.permission },
     });
     const actor = (await tx.user.findUnique({ where: { id: ownerId }, select: { name: true } }))?.name ?? "Quelqu'un";
+    const perm = MAP_PERMISSION_LABEL[input.permission].toLowerCase();
+    await recordMapEvents(tx, [
+      existing
+        ? { mapId, actorId: ownerId, actorName: actor, kind: "share_changed", oldValue: existing.permission, newValue: input.permission, message: `${actor} a passé le partage de ${target.name} en ${perm}` }
+        : { mapId, actorId: ownerId, actorName: actor, kind: "shared", newValue: input.permission, message: `${actor} a partagé la carte avec ${target.name} (${perm})` },
+    ]);
     await notify(tx, [
       {
         userId: target.id,
@@ -101,15 +108,27 @@ export async function updateMapShare(ownerId: string, mapId: string, userId: str
 /** Retire l'accès d'une personne (propriétaire seulement). */
 export async function unshareMap(ownerId: string, mapId: string, userId: string): Promise<MapSharesDto> {
   await requireMapAccess(ownerId, mapId, "owner");
-  const removed = await prisma.mindMapShare.deleteMany({ where: { mapId, userId } });
-  if (removed.count === 0) throw notFound("Partage");
+  await prisma.$transaction(async (tx) => {
+    const removed = await tx.mindMapShare.deleteMany({ where: { mapId, userId } });
+    if (removed.count === 0) throw notFound("Partage");
+    const [actor, who] = await Promise.all([
+      tx.user.findUnique({ where: { id: ownerId }, select: { name: true } }),
+      tx.user.findUnique({ where: { id: userId }, select: { name: true } }),
+    ]);
+    const a = actor?.name ?? "Quelqu'un";
+    await recordMapEvents(tx, [{ mapId, actorId: ownerId, actorName: a, kind: "unshared", message: `${a} a retiré l'accès de ${who?.name ?? "quelqu'un"} à la carte` }]);
+  });
   await prisma.pin.deleteMany({ where: { userId, kind: "MINDMAP", targetId: mapId } });
   return listMapShares(ownerId, mapId);
 }
 
 /** Un destinataire quitte une carte qu'on lui a partagée. */
 export async function leaveSharedMap(userId: string, mapId: string): Promise<void> {
-  const removed = await prisma.mindMapShare.deleteMany({ where: { mapId, userId } });
-  if (removed.count === 0) throw notFound("Carte");
+  await prisma.$transaction(async (tx) => {
+    const removed = await tx.mindMapShare.deleteMany({ where: { mapId, userId } });
+    if (removed.count === 0) throw notFound("Carte");
+    const a = (await tx.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name ?? "Quelqu'un";
+    await recordMapEvents(tx, [{ mapId, actorId: userId, actorName: a, kind: "left", message: `${a} a quitté la carte partagée` }]);
+  });
   await prisma.pin.deleteMany({ where: { userId, kind: "MINDMAP", targetId: mapId } });
 }
