@@ -5,8 +5,8 @@ import type { Runtime } from "../local/runtime";
 /**
  * Bandeau de mise à jour de l'application desktop (coque Electron ≥ 0.2.0).
  *
- * Le processus principal vérifie `latest.json` au démarrage puis toutes les
- * 6 h et annonce une nouvelle version (« sb:update-available »). « Mettre à
+ * Le processus principal vérifie `latest.json` au démarrage, toutes les
+ * heures et au retour sur la fenêtre et annonce une nouvelle version (« sb:update-available »). « Mettre à
  * jour » synchronise d'abord (les modifications restantes sont conservées
  * dans IndexedDB, profil non touché par l'installateur), puis télécharge,
  * vérifie et lance l'installateur ; l'application redémarre seule.

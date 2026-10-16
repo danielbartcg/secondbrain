@@ -49,6 +49,27 @@ if (local && remote && local !== remote) {
   }
 }
 
+// --- Application desktop à republier ? ---------------------------------------
+// Les écrans de l'application desktop sont embarqués : toute modification
+// d'écran depuis la dernière version (native/electron/package.json) exige une
+// nouvelle version publiée, sinon l'updater ne voit aucun écart.
+{
+  const bump = git("log", "-1", "--format=%H", "-G\"version\"", "--", "native/electron/package.json");
+  const screens = bump ? git("diff", "--name-only", `${bump}..HEAD`, "--", "src/components", "src/lib/shared", "src/lib/client.ts", "src/app/globals.css", "native/src") : "";
+  if (screens) {
+    console.warn(
+      [
+        "⚠ Écrans modifiés depuis la dernière version de l'application desktop :",
+        ...screens.split("
+").slice(0, 15).map((l) => "   " + l),
+        "  → incrémenter native/electron/package.json, npm run desktop:build puis npm run desktop:publish",
+        "    (sinon l'application installée garde les anciens écrans et ne propose pas de mise à jour).",
+      ].join("
+"),
+    );
+  }
+}
+
 // --- Sauvegarde préalable ----------------------------------------------------
 if (!skipBackup) {
   console.log("=== Sauvegarde préalable ===");

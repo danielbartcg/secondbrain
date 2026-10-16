@@ -124,8 +124,8 @@ Préférences → Connecteur Claude ; l'adresse est
 
 - Publier : incrémenter `native/electron/package.json`, `npm run desktop:build`,
   `npm run desktop:publish`. Les applications ≥ 0.2.0 lisent
-  `GET /downloads/latest.json` (public, `no-cache`) 10 s après le lancement puis
-  toutes les 6 h, ou via Préférences → « Rechercher une mise à jour ».
+  `GET /downloads/latest.json` (public, `no-cache`) 10 s après le lancement, toutes
+  les heures et au retour sur la fenêtre (10 min min.), ou via Préférences → « Rechercher une mise à jour ».
 - L'installateur est vérifié (SHA-256 de `latest.json`) avant d'être lancé en
   silencieux (`/S --force-run`) ; ne jamais modifier l'installateur ni
   `latest.json` à la main sur le serveur.

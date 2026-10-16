@@ -23,7 +23,9 @@ const DEFAULT_SERVER = "https://secondbrain.danielbar-tcg.fr";
 const INSTALLER_RE = /^SecondBrain-Setup-\d+\.\d+\.\d+\.exe$/;
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 const FIRST_CHECK_DELAY_MS = 10_000;
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
+/** Retour sur la fenêtre : nouvelle vérification, au plus toutes les 10 min. */
+const FOCUS_MIN_GAP_MS = 10 * 60 * 1000;
 
 /** Compare deux versions numériques x.y.z : <0, 0 ou >0. */
 function compareVersions(a, b) {
@@ -44,6 +46,7 @@ function createUpdater({ getServerUrl, getWindow }) {
   let latest = null;
   let installing = false;
   let timer = null;
+  let lastCheck = 0;
 
   const server = () => {
     const s = getServerUrl();
@@ -89,6 +92,7 @@ function createUpdater({ getServerUrl, getWindow }) {
   }
 
   async function autoCheck() {
+    lastCheck = Date.now();
     try {
       const res = await check();
       if (res.available) send("sb:update-available", res);
@@ -101,6 +105,9 @@ function createUpdater({ getServerUrl, getWindow }) {
     if (timer || process.platform !== "win32") return;
     setTimeout(() => void autoCheck(), FIRST_CHECK_DELAY_MS);
     timer = setInterval(() => void autoCheck(), CHECK_INTERVAL_MS);
+    app.on("browser-window-focus", () => {
+      if (Date.now() - lastCheck > FOCUS_MIN_GAP_MS) void autoCheck();
+    });
   }
 
   async function install() {

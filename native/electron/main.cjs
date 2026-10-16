@@ -12,8 +12,8 @@
  *   serveur annoncé par « sb:setServer ») ; le jeton Bearer est ajouté ici.
  * - Développement : SB_DEV_URL=http://localhost:5173 charge le serveur Vite.
  *
- * - Mises à jour (updater.cjs) : vérification au démarrage puis toutes les
- *   6 h (« sb:update-available »), installation à la demande de l'interface.
+ * - Mises à jour (updater.cjs) : vérification au démarrage, toutes les
+ *   heures et au retour sur la fenêtre (10 min min.) (« sb:update-available »), installation à la demande de l'interface.
  *
  * Les données (IndexedDB) vivent dans le profil applicatif (userData).
  */

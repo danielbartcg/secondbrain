@@ -133,8 +133,8 @@ Page **Conflits** : votre valeur et la valeur retenue, « Copier ma valeur ».
   `no-cache`). Le bouton « Mise à jour nécessaire » y mène.
 - **Mises à jour (coque ≥ 0.2.0)** : `native/electron/updater.cjs` (sans
   dépendance npm). Le processus principal lit `<serveur de la session>/downloads/latest.json`
-  (à défaut `https://secondbrain.danielbar-tcg.fr`) 10 s après le démarrage puis
-  toutes les 6 h (Windows, pas en `--smoke-test`), compare la version à
+  (à défaut `https://secondbrain.danielbar-tcg.fr`) 10 s après le démarrage, toutes
+  les heures et au retour sur la fenêtre (au plus toutes les 10 min ; Windows, pas en `--smoke-test`), compare la version à
   `app.getVersion()` et l'annonce à l'interface (`sb:update-available`). IPC
   `sb:checkUpdate` / `sb:installUpdate` **sans paramètre** (serveur et fichier
   déterminés par le processus principal). Installation : téléchargement dans

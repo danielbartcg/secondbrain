@@ -150,6 +150,10 @@ d'`addLicense` ailleurs.
 - Après toute évolution touchant projets, tâches ou cartes : `npm run
   test:native` (serveur de dev lancé) en plus de `test:sync` ; pour la coque,
   `npm run desktop:smoke`.
+- **Toute évolution d'écran déployée sur le site doit aussi partir dans une
+  nouvelle version desktop** (les écrans sont embarqués : sans nouvelle
+  version, l'updater ne voit aucun écart). `prod:deploy` avertit si des écrans
+  ont changé depuis la dernière version.
 - Nouvelle version de l'application : incrémenter `native/electron/package.json`,
   `npm run desktop:build` puis `npm run desktop:publish`. iPhone : workflow
   GitHub « iOS TestFlight » (manuel) ; `native/ios` est le projet Xcode généré
