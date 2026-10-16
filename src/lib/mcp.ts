@@ -14,6 +14,7 @@ import { listUsersAdmin, reportIdsOf } from "@/lib/users";
 import type { ProjectDto, TaskDto } from "@/lib/projects";
 import { WRITE_TOOLS } from "@/lib/mcp-write";
 import { getActivity } from "@/lib/activity";
+import { listTemplates } from "@/lib/templates";
 import { allCustomFields, listCustomFields } from "@/lib/custom-fields";
 import { customEntries, type CustomFieldDto } from "@/lib/shared/custom-fields";
 import { listMapEvents } from "@/lib/map-events";
@@ -238,6 +239,13 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: "object", properties: { map_id: { type: "string" }, node_id: { type: "string" }, limit: { type: "number", minimum: 1, maximum: 1000 } }, required: ["map_id"] },
     run: async (user, args) =>
       listMapEvents(user.id, String(args.map_id), { nodeId: typeof args.node_id === "string" ? args.node_id : undefined, limit: typeof args.limit === "number" ? args.limit : 200 }),
+  },
+  {
+    name: "list_templates",
+    title: "Modèles de projets et de cartes",
+    description: "Projets types et cartes types définis dans l'administration (nom, contenu) : utilisables par create_project (template) et edit_mind_map create_map (template).",
+    inputSchema: { type: "object", properties: {} },
+    run: async () => listTemplates(),
   },
   {
     name: "list_custom_fields",

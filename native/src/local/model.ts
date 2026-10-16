@@ -369,7 +369,7 @@ export class LocalModel {
     return this.store
       .all("MindMap")
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
-      .map((m) => ({ id: m.id, title: m.title, nodeCount: this.store.where("MindNode", (n) => n.mapId === m.id).length, createdAt: m.createdAt, updatedAt: m.updatedAt, ...this.mapSharing(m) }));
+      .map((m) => ({ id: m.id, title: m.title, isTemplate: false, nodeCount: this.store.where("MindNode", (n) => n.mapId === m.id).length, createdAt: m.createdAt, updatedAt: m.updatedAt, ...this.mapSharing(m) }));
   }
 
   mindmap(mapId: string): MindMapDto | null {
@@ -378,7 +378,7 @@ export class LocalModel {
     const nodes = this.store.where("MindNode", (n) => n.mapId === mapId).sort(byOrder);
     const root = nodes.find((n) => !n.parentId);
     if (!root) return null;
-    return { id: m.id, title: m.title, createdAt: m.createdAt, updatedAt: m.updatedAt, rootId: root.id, nodes: nodes.map((n) => this.nodeDto(n)), ...this.mapSharing(m) };
+    return { id: m.id, title: m.title, isTemplate: false, createdAt: m.createdAt, updatedAt: m.updatedAt, rootId: root.id, nodes: nodes.map((n) => this.nodeDto(n)), ...this.mapSharing(m) };
   }
 
   nodeTasks(nodeId: string): NodeTasksResult {

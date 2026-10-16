@@ -50,6 +50,12 @@ README.
   Routes sensibles interdites (`FORBIDDEN` : auth, clés, mot de passe,
   e-mail, sync, mcp). Les clés `sb_…` ne valent pas session. Une nouvelle
   route est automatiquement accessible via `api_request` (documentée en 04).
+- **Modèles** (`src/lib/templates.ts`) : `isTemplate` sur Project / MindMap.
+  Lister ou définir un périmètre ⇒ `projectAccessWhere` / `mapAccessWhere`
+  (excluent les modèles) ; ouvrir ou modifier un objet précis ⇒
+  `projectEditWhere` / `taskEditWhere` / `requireMapAccess` (modèles inclus
+  pour les administrateurs). Tout nouvel écran de projet ou de carte doit
+  prévoir le mode modèle (masquer ce qui relève d'une instance).
 - **Piste d'audit des cartes** (`src/lib/map-events.ts`) : toute écriture sur
   une carte ou un nœud (sauf positions et repli) enregistre un `MapEvent` dans
   la même transaction. Le rapport d'activité (`src/lib/activity.ts`) lit les

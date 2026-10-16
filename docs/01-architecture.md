@@ -455,6 +455,40 @@ de notes d'un même auteur sur un même nœud sont regroupés (séance de 10 min
 Lecture : `GET /mindmaps/:id/history?nodeId=` (droit de lecture sur la carte),
 panneau « Historique » de l'éditeur, outil MCP `get_map_history`.
 
+## Modèles : projets types et cartes types (`src/lib/templates.ts`)
+
+Un modèle est un vrai projet / une vraie carte avec `isTemplate = true` :
+mêmes écrans, mêmes fonctions métier. **Accès** : `projectAccessWhere` /
+`mapAccessWhere` excluent les modèles (listes, tableau de bord, recherche,
+« Mes tâches », activité, synchro, MCP en lecture) ; les contrôles d'accès
+unitaires utilisent `projectEditWhere` / `taskEditWhere` (asynchrones) qui
+y ajoutent les modèles pour un **administrateur** (droits de propriétaire) ;
+`requireMapAccess` fait de même pour les cartes types
+(`src/lib/template-access.ts`, `isAdminId`). Règle : une liste / un
+périmètre utilise `projectAccessWhere`, l'ouverture ou la modification d'un
+objet précis `projectEditWhere`.
+**Mode modèle** (écrans) : projet — onglets Plan, Livrables, Risques ; ni
+dates, statut, avancement, équipe, affectations, champs personnalisés,
+export, épingle ; tâches sans statut / avancement / dates / personnes /
+sessions / commentaires / nœuds ; livrables sans statut / responsable / dates
+/ documents ; risques sans statut / responsable. Carte — bandeau « Carte
+type ».
+**Appliquer** (`applyProjectTemplate`, `applyMapTemplate`, dans la
+transaction verrouillant la cible) : à la création (`templateId`) ou ensuite
+sur une cible vide (projet sans étapes, tâches, livrables, risques ni
+dossiers — propriétaire ; carte réduite à sa racine — droit d'écriture ;
+409 sinon). Copie : étapes, activités, tâches (nom, description, notes,
+priorité, complexité, ordre, prérequis remappés ; « à faire », 0 %),
+livrables (« prévu »), risques (« ouvert », stratégie, tâches liées
+remappées), dossiers ; description, notes et couleur si vides ; nœuds de
+carte (titre, notes, couleur, statut, ordre, repli, positions). Jamais :
+dates, équipe, affectations, réunions, documents, liens tâche ↔ nœud.
+Tracé : TaskEvent « (modèle « X ») », MapEvent « a appliqué la carte type ».
+Création d'un modèle vierge ou depuis la structure d'un projet / d'une carte
+(`createProjectTemplate`, `createMapTemplate`). Application desktop : une
+création avec modèle et toute action sur un objet absent de la base locale
+sont relayées au serveur.
+
 ## Champs personnalisés des projets (`src/lib/custom-fields.ts`)
 
 Définis globalement par les administrateurs (Administration → Champs
@@ -518,7 +552,7 @@ répartitions par statut / priorité / niveau de risque / statut de livrable
 avec barres, avancement par étape, champs personnalisés « Informations »,
 sommaire avec liens, description et notes), **Tâches** (références T1…,
 pastilles de statut / priorité / complexité, retards en rouge, prérequis,
-risques liés, notes en texte), **Planning** (Gantt par semaines — par mois au-
+risques liés, notes en texte), **Planning** (hiérarchie étape › activité › tâche : barres de synthèse des étapes et activités, du premier début à la dernière échéance de leurs tâches, colonne d'avancement ; Gantt par semaines — par mois au-
 delà de 78 semaines — dessiné par mise en forme conditionnelle, rapide à
 4 000 tâches, semaine courante surlignée), Étapes & activités (étapes en
 lignes de groupe), Livrables, Risques & opportunités (couleurs de niveau,

@@ -659,8 +659,8 @@ function RiskTable({ rows, kind, ctx }: { rows: RiskDto[]; kind: RiskKindValue; 
             <th className="px-2 py-2">Probabilité</th>
             <th className="px-2 py-2">{isOpp ? "Bénéfice" : "Gravité"}</th>
             <th className="px-2 py-2">Criticité</th>
-            <th className="px-2 py-2">Statut</th>
-            <th className="px-2 py-2">Responsable</th>
+            {!ctx.project.isTemplate && <th className="px-2 py-2">Statut</th>}
+            {!ctx.project.isTemplate && <th className="px-2 py-2">Responsable</th>}
             <th className="px-2 py-2">Tâches liées</th>
             <th className="w-10 px-2 py-2" />
           </tr>
@@ -690,15 +690,20 @@ function RiskTable({ rows, kind, ctx }: { rows: RiskDto[]; kind: RiskKindValue; 
                   <td className="px-2 py-2">
                     <LevelBadge kind={r.kind} score={r.score} level={r.level} label={r.levelLabel} />
                   </td>
-                  <td className="px-2 py-2">
-                    <StatusSelect r={r} ctx={ctx} className="w-36" />
-                  </td>
-                  <td className="px-2 py-2">
-                    <div className="flex items-center gap-1.5">
-                      <OwnerAvatar r={r} ctx={ctx} />
-                      <OwnerSelect r={r} ctx={ctx} className="w-36" />
-                    </div>
-                  </td>
+                  {/* Projet type : ni statut ni responsable (propres à chaque projet). */}
+                  {!ctx.project.isTemplate && (
+                    <td className="px-2 py-2">
+                      <StatusSelect r={r} ctx={ctx} className="w-36" />
+                    </td>
+                  )}
+                  {!ctx.project.isTemplate && (
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <OwnerAvatar r={r} ctx={ctx} />
+                        <OwnerSelect r={r} ctx={ctx} className="w-36" />
+                      </div>
+                    </td>
+                  )}
                   <td className="max-w-[16rem] px-2 py-2">
                     <TaskChips r={r} ctx={ctx} max={2} />
                   </td>
@@ -709,7 +714,7 @@ function RiskTable({ rows, kind, ctx }: { rows: RiskDto[]; kind: RiskKindValue; 
                 {open && (
                   <tr className="border-b border-line bg-surface-2/50">
                     <td />
-                    <td colSpan={9} className="px-2 pb-4 pt-1">
+                    <td colSpan={ctx.project.isTemplate ? 7 : 9} className="px-2 pb-4 pt-1">
                       <RiskDetails r={r} ctx={ctx} />
                     </td>
                   </tr>
@@ -749,14 +754,18 @@ function RiskCard({ r, ctx }: { r: RiskDto; ctx: RowCtx }) {
           {isOpp ? "Bénéfice" : "Gravité"}
           <LevelSelect r={r} field="impact" ctx={ctx} className="w-full" />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted">
-          Statut
-          <StatusSelect r={r} ctx={ctx} className="w-full" />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-muted">
-          Responsable
-          <OwnerSelect r={r} ctx={ctx} className="w-full" />
-        </label>
+        {!ctx.project.isTemplate && (
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            Statut
+            <StatusSelect r={r} ctx={ctx} className="w-full" />
+          </label>
+        )}
+        {!ctx.project.isTemplate && (
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            Responsable
+            <OwnerSelect r={r} ctx={ctx} className="w-full" />
+          </label>
+        )}
       </div>
       {!open && (
         <div className="mt-2">

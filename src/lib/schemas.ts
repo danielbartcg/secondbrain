@@ -83,6 +83,15 @@ export const loginSchema = z.object({
 
 // --- Cartes mentales ---------------------------------------------------------
 export const createMindMapSchema = z.object({ title });
+
+// --- Modèles (projets types, cartes types) ----------------------------------------
+const templateId = z.string().min(1).max(64);
+/** Création à partir d'un modèle (facultatif). */
+export const createProjectFromTemplateSchema = z.object({ templateId: templateId.nullable().optional() });
+export const createMindMapFromTemplateSchema = z.object({ templateId: templateId.nullable().optional() });
+export const applyTemplateSchema = z.object({ templateId });
+export const createProjectTemplateSchema = z.object({ name: z.string().trim().min(1, "Nom requis").max(200), fromProjectId: templateId.nullable().optional() });
+export const createMapTemplateSchema = z.object({ title: z.string().trim().min(1, "Titre requis").max(200), fromMapId: templateId.nullable().optional() });
 export const updateMindMapSchema = z.object({ title: title.optional() });
 
 export const createNodeSchema = z.object({

@@ -1,4 +1,5 @@
 import "server-only";
+import { isAdminId } from "@/lib/template-access";
 import { allCustomFields } from "@/lib/custom-fields";
 import { applyCustomPatch, readCustomValues } from "@/lib/shared/custom-fields";
 import { recordMapEvents } from "@/lib/map-events";
@@ -71,8 +72,23 @@ const toDate = (v: string | null | undefined): Date | null | undefined =>
 // --- Accès et verrouillage ---------------------------------------------------
 
 /** Projets visibles : les miens + ceux dont je suis membre (compte rattaché). */
+/** Périmètre d'un utilisateur : projets dont il est propriétaire ou membre — hors projets types. */
 export function projectAccessWhere(userId: string): Prisma.ProjectWhereInput {
-  return { OR: [{ ownerId: userId }, { members: { some: { userId } } }] };
+  return { isTemplate: false, OR: [{ ownerId: userId }, { members: { some: { userId } } }] };
+}
+
+/**
+ * Projets ouvrables / modifiables par l'utilisateur : son périmètre, plus les
+ * projets types pour un administrateur (Administration → Modèles). Pour les
+ * contrôles d'accès unitaires (jamais pour lister).
+ */
+export async function projectEditWhere(userId: string): Promise<Prisma.ProjectWhereInput> {
+  return (await isAdminId(userId)) ? { OR: [projectAccessWhere(userId), { isTemplate: true }] } : projectAccessWhere(userId);
+}
+
+/** Tâches ouvrables / modifiables (périmètre + tâches des projets types pour un administrateur). */
+export async function taskEditWhere(userId: string): Promise<Prisma.TaskWhereInput> {
+  return { OR: [{ project: await projectEditWhere(userId) }, { projectId: null, ownerId: userId }] };
 }
 
 export type ProjectAccess = { id: string; ownerId: string; isOwner: boolean };
@@ -80,11 +96,12 @@ export type ProjectAccess = { id: string; ownerId: string; isOwner: boolean };
 /** Vérifie l'accès (propriétaire ou membre) ; lève 404 sinon. */
 export async function requireProjectAccess(userId: string, projectId: string): Promise<ProjectAccess> {
   const p = await prisma.project.findFirst({
-    where: { id: projectId, ...projectAccessWhere(userId) },
-    select: { id: true, ownerId: true },
+    where: { id: projectId, ...(await projectEditWhere(userId)) },
+    select: { id: true, ownerId: true, isTemplate: true },
   });
   if (!p) throw notFound("Projet");
-  return { id: p.id, ownerId: p.ownerId, isOwner: p.ownerId === userId };
+  // Projet type : l'administrateur a les droits du propriétaire.
+  return { id: p.id, ownerId: p.ownerId, isOwner: p.ownerId === userId || p.isTemplate };
 }
 
 /** Réservé au propriétaire (suppression, équipe). */
@@ -95,14 +112,14 @@ export async function requireProjectOwner(userId: string, projectId: string): Pr
 }
 
 export async function stageProjectId(userId: string, stageId: string): Promise<string> {
-  const s = await prisma.stage.findFirst({ where: { id: stageId, project: projectAccessWhere(userId) }, select: { projectId: true } });
+  const s = await prisma.stage.findFirst({ where: { id: stageId, project: (await projectEditWhere(userId)) }, select: { projectId: true } });
   if (!s) throw notFound("Étape");
   return s.projectId;
 }
 
 export async function activityProjectId(userId: string, activityId: string): Promise<string> {
   const a = await prisma.activity.findFirst({
-    where: { id: activityId, stage: { project: projectAccessWhere(userId) } },
+    where: { id: activityId, stage: { project: (await projectEditWhere(userId)) } },
     select: { stage: { select: { projectId: true } } },
   });
   if (!a) throw notFound("Activité");
@@ -110,13 +127,13 @@ export async function activityProjectId(userId: string, activityId: string): Pro
 }
 
 export async function memberProjectId(userId: string, memberId: string): Promise<string> {
-  const m = await prisma.projectMember.findFirst({ where: { id: memberId, project: projectAccessWhere(userId) }, select: { projectId: true } });
+  const m = await prisma.projectMember.findFirst({ where: { id: memberId, project: (await projectEditWhere(userId)) }, select: { projectId: true } });
   if (!m) throw notFound("Membre");
   return m.projectId;
 }
 
 export async function deliverableProjectId(userId: string, deliverableId: string): Promise<string> {
-  const d = await prisma.deliverable.findFirst({ where: { id: deliverableId, project: projectAccessWhere(userId) }, select: { projectId: true } });
+  const d = await prisma.deliverable.findFirst({ where: { id: deliverableId, project: (await projectEditWhere(userId)) }, select: { projectId: true } });
   if (!d) throw notFound("Livrable");
   return d.projectId;
 }
@@ -241,6 +258,7 @@ async function projectSummaries(where: Prisma.ProjectWhereInput): Promise<Projec
       startDate: true,
       dueDate: true,
       customFields: true,
+      isTemplate: true,
       createdAt: true,
       updatedAt: true,
       _count: { select: { stages: true, members: true, deliverables: true } },
@@ -271,6 +289,7 @@ async function projectSummaries(where: Prisma.ProjectWhereInput): Promise<Projec
       memberCount: p._count.members,
       deliverableCount: p._count.deliverables,
       customFields: readCustomValues(p.customFields),
+      isTemplate: p.isTemplate,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     };
@@ -305,7 +324,7 @@ export async function getProjectAdmin(admin: Pick<User, "email" | "role">, proje
 }
 
 export async function getProject(userId: string, projectId: string): Promise<ProjectDto> {
-  const p = await prisma.project.findFirst({ where: { id: projectId, ...projectAccessWhere(userId) }, include: PROJECT_INCLUDE });
+  const p = await prisma.project.findFirst({ where: { id: projectId, ...(await projectEditWhere(userId)) }, include: PROJECT_INCLUDE });
   if (!p) throw notFound("Projet");
   return toProjectDto(p);
 }
@@ -506,14 +525,14 @@ async function resolveAttachment(
 ): Promise<Attachment> {
   if (target.activityId) {
     const a = await prisma.activity.findFirst({
-      where: { id: target.activityId, stage: { project: projectAccessWhere(userId) } },
+      where: { id: target.activityId, stage: { project: (await projectEditWhere(userId)) } },
       select: { id: true, stageId: true, stage: { select: { projectId: true } } },
     });
     if (!a) throw notFound("Activité");
     return { projectId: a.stage.projectId, stageId: a.stageId, activityId: a.id };
   }
   if (target.stageId) {
-    const s = await prisma.stage.findFirst({ where: { id: target.stageId, project: projectAccessWhere(userId) }, select: { id: true, projectId: true } });
+    const s = await prisma.stage.findFirst({ where: { id: target.stageId, project: (await projectEditWhere(userId)) }, select: { id: true, projectId: true } });
     if (!s) throw notFound("Étape");
     return { projectId: s.projectId, stageId: s.id, activityId: null };
   }
@@ -564,7 +583,7 @@ async function mutateTask(projectId: string | null, fn: (tx: Tx) => Promise<stri
 }
 
 export async function accessibleTask(userId: string, taskId: string) {
-  const t = await prisma.task.findFirst({ where: { id: taskId, ...taskAccessWhere(userId) } });
+  const t = await prisma.task.findFirst({ where: { id: taskId, ...(await taskEditWhere(userId)) } });
   if (!t) throw notFound("Tâche");
   return t;
 }
@@ -880,7 +899,7 @@ export async function deleteDeliverable(userId: string, deliverableId: string): 
 // --- Dossiers documentaires --------------------------------------------------
 
 export async function folderProjectId(userId: string, folderId: string): Promise<string> {
-  const f = await prisma.folder.findFirst({ where: { id: folderId, project: projectAccessWhere(userId) }, select: { projectId: true } });
+  const f = await prisma.folder.findFirst({ where: { id: folderId, project: (await projectEditWhere(userId)) }, select: { projectId: true } });
   if (!f) throw notFound("Dossier");
   return f.projectId;
 }

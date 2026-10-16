@@ -3,6 +3,7 @@ import type { MindMap, Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError, notFound } from "@/lib/api";
 import { mapAccessOf, mapAllows, type MapAccess } from "@/lib/shared/map-access";
+import { isAdminId } from "@/lib/template-access";
 
 /**
  * Contrôle d'accès aux cartes mentales (anti-IDOR). Une carte est accessible
@@ -16,14 +17,14 @@ export type { MapAccess } from "@/lib/shared/map-access";
 
 type Db = Prisma.TransactionClient | PrismaClient;
 
-/** Cartes que l'utilisateur peut lire (propriétaire ou partage). */
+/** Cartes que l'utilisateur peut lire (propriétaire ou partage) — hors cartes types. */
 export function mapAccessWhere(userId: string): Prisma.MindMapWhereInput {
-  return { OR: [{ ownerId: userId }, { shares: { some: { userId } } }] };
+  return { isTemplate: false, OR: [{ ownerId: userId }, { shares: { some: { userId } } }] };
 }
 
 /** Cartes que l'utilisateur peut modifier (propriétaire ou partage en écriture). */
 export function mapWriteWhere(userId: string): Prisma.MindMapWhereInput {
-  return { OR: [{ ownerId: userId }, { shares: { some: { userId, permission: "WRITE" } } }] };
+  return { isTemplate: false, OR: [{ ownerId: userId }, { shares: { some: { userId, permission: "WRITE" } } }] };
 }
 
 export const readOnlyMap = () => new ApiError(403, "READ_ONLY", "Cette carte vous est partagée en lecture seule.");
@@ -38,7 +39,12 @@ export async function requireMapAccess(userId: string, mapId: string, level: Map
     where: { id: mapId, ...mapAccessWhere(userId) },
     include: { shares: { where: { userId }, select: { permission: true } } },
   });
-  if (!row) throw notFound("Carte");
+  if (!row) {
+    // Carte type : les administrateurs ont tous les droits (Administration → Modèles).
+    const tpl = await db.mindMap.findFirst({ where: { id: mapId, isTemplate: true } });
+    if (tpl && (await isAdminId(userId, db))) return { map: tpl, access: "owner" };
+    throw notFound("Carte");
+  }
   const { shares, ...map } = row;
   const access = mapAccessOf(map.ownerId, userId, shares[0]?.permission) ?? "read";
   if (!mapAllows(access, level)) throw level === "owner" ? ownerOnly() : readOnlyMap();
@@ -47,7 +53,7 @@ export async function requireMapAccess(userId: string, mapId: string, level: Map
 
 /** Accès à la carte d'un nœud (404 si le nœud n'est pas sur une carte accessible). */
 export async function requireNodeAccess(userId: string, nodeId: string, level: MapAccess, db: Db = prisma): Promise<{ mapId: string; access: MapAccess }> {
-  const node = await db.mindNode.findFirst({ where: { id: nodeId, map: mapAccessWhere(userId) }, select: { mapId: true } });
+  const node = await db.mindNode.findFirst({ where: { id: nodeId }, select: { mapId: true } });
   if (!node) throw notFound("Nœud");
   const { access } = await requireMapAccess(userId, node.mapId, level, db);
   return { mapId: node.mapId, access };

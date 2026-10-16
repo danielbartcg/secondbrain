@@ -2,7 +2,7 @@ import "server-only";
 import type { Prisma, RiskKind, RiskStatus, RiskStrategy, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, notFound } from "@/lib/api";
-import { projectAccessWhere, requireProjectAccess } from "@/lib/projects";
+import { projectEditWhere, requireProjectAccess } from "@/lib/projects";
 import { isAdmin } from "@/lib/roles";
 import { actorDisplayName, recordTaskEvents, type TaskEventInput } from "@/lib/task-events";
 import { KIND_NOUN, levelLabel, riskLevel, riskScore, type RiskLevel } from "@/lib/shared/risks";
@@ -113,7 +113,7 @@ async function checkOwner(tx: Tx, projectId: string, ownerId: string | null | un
 
 /** Risque accessible (propriétaire ou membre du projet) ; 404 sinon. */
 async function accessibleRisk(userId: string, riskId: string) {
-  const r = await prisma.risk.findFirst({ where: { id: riskId, project: projectAccessWhere(userId) }, select: { id: true, projectId: true } });
+  const r = await prisma.risk.findFirst({ where: { id: riskId, project: (await projectEditWhere(userId)) }, select: { id: true, projectId: true } });
   if (!r) throw notFound("Risque");
   return r;
 }

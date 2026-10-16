@@ -90,12 +90,14 @@ model Session {
 // ---------------------------------------------------------------------------
 
 model MindMap {
-  id        String   @id @default(cuid())
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  title     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title      String
+  /// Carte type (modèle, Administration → Modèles).
+  isTemplate Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   nodes  MindNode[]
   /// Partages : personnes ayant accès en lecture ou en écriture.
@@ -243,6 +245,9 @@ model Project {
   /// Champs personnalisés (Administration → Champs personnalisés) :
   /// { [customFieldId]: valeur } — texte, ou identifiant d'option pour une liste.
   customFields Json          @default("{}")
+  /// Projet type (modèle, Administration → Modèles) : hors des périmètres
+  /// habituels, modifiable par les administrateurs, copié à la création.
+  isTemplate   Boolean       @default(false)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 

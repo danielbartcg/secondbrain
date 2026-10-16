@@ -13,8 +13,9 @@ import { strategyLabel, RISK_STATUS_LABEL, PROBABILITY_LABELS, SEVERITY_LABELS, 
  * Export Excel complet d'un projet (bouton « Export Excel » de la fiche
  * projet), mis en forme comme un livrable : Synthèse (bandeau aux couleurs du
  * projet, indicateurs en cartes, répartitions, avancement par étape, sommaire
- * avec liens), Tâches, Planning (Gantt hebdomadaire ou mensuel par mise en
- * forme conditionnelle), Étapes & activités, Livrables, Risques &
+ * avec liens), Tâches, Planning (Gantt hiérarchique hebdomadaire ou mensuel
+ * par mise en forme conditionnelle : étapes et activités en barres
+ * récapitulatives au-dessus de leurs tâches), Étapes & activités, Livrables, Risques &
  * opportunités, Matrices, Réunions, Équipe et Documents.
  *
  * Chaque feuille-tableau : titre, sous-titre, en-tête à la couleur du projet,
@@ -317,36 +318,114 @@ function dataSheet<T>(
 
 // --- Planning (Gantt par mise en forme conditionnelle) ------------------------
 
-function planningSheet(ctx: Ctx, tasks: Array<{ task: TaskDto; stage: string }>, taskRef: Map<string, string>, assigneeOf: (t: TaskDto) => string, now: Date) {
+/** Ligne du Gantt : étape / activité (récapitulatives) ou tâche. */
+type PlanRow = {
+  kind: "E" | "A" | "T";
+  ref: string;
+  name: string;
+  stage: string;
+  assignee: string;
+  status: string;
+  progress: number | null;
+  s: Date;
+  e: Date;
+  /** Retrait du libellé (0 étape, 1 activité / tâche d'étape, 2 tâche d'activité). */
+  indent: number;
+};
+type Plan = { rows: PlanRow[]; stages: number; tasks: number };
+
+/**
+ * Lignes du planning dans l'ordre du plan : étape, puis chaque activité suivie
+ * de ses tâches, puis les tâches directes de l'étape ; « Sans étape » en fin.
+ * Une ligne récapitulative couvre min(début) → max(échéance) de ses tâches
+ * datées (à défaut, les dates propres de l'étape) ; sans aucune date, omise.
+ */
+function planRows(p: ProjectDto, taskRef: Map<string, string>, assigneeOf: (t: TaskDto) => string): Plan {
+  const rows: PlanRow[] = [];
+  let stages = 0;
+  let tasks = 0;
+  const taskRows = (list: TaskDto[], stage: string, indent: number): PlanRow[] => {
+    const out: PlanRow[] = [];
+    for (const t of list) {
+      let s = day(t.startDate ?? t.dueDate);
+      let e = day(t.dueDate ?? t.startDate);
+      if (!s || !e) continue;
+      if (s > e) [s, e] = [e, s];
+      out.push({ kind: "T", ref: taskRef.get(t.id) ?? "", name: t.name, stage, assignee: assigneeOf(t), status: STATUS[t.status], progress: t.progress / 100, s, e, indent });
+    }
+    return out;
+  };
+  const span = (list: PlanRow[], own: [Date | null, Date | null] = [null, null]): [Date, Date] | null => {
+    if (!list.length) {
+      const s = own[0] ?? own[1];
+      const e = own[1] ?? own[0];
+      return s && e ? (s > e ? [e, s] : [s, e]) : null;
+    }
+    let a = Infinity;
+    let b = -Infinity;
+    for (const r of list) {
+      if (r.s.getTime() < a) a = r.s.getTime();
+      if (r.e.getTime() > b) b = r.e.getTime();
+    }
+    return [new Date(a), new Date(b)];
+  };
+  const summary = (kind: "E" | "A", ref: string, name: string, stage: string, progress: number, [s, e]: [Date, Date]): PlanRow => ({
+    kind, ref, name, stage, assignee: "", status: "", progress, s, e, indent: kind === "E" ? 0 : 1,
+  });
+
+  p.stages.forEach((st, i) => {
+    const block: PlanRow[] = [];
+    const leaves: PlanRow[] = [];
+    st.activities.forEach((a, j) => {
+      const ts = taskRows(a.tasks, st.name, 2);
+      if (!ts.length) return;
+      leaves.push(...ts);
+      block.push(summary("A", `E${i + 1}.${j + 1}`, a.name, st.name, a.progress.percent / 100, span(ts)!), ...ts);
+    });
+    const direct = taskRows(st.tasks, st.name, 1);
+    leaves.push(...direct);
+    block.push(...direct);
+    const range = span(leaves, [day(st.startDate), day(st.dueDate)]);
+    if (!range) return;
+    stages++;
+    tasks += leaves.length;
+    rows.push(summary("E", `E${i + 1}`, st.name, st.name, st.progress.percent / 100, range), ...block);
+  });
+  const orphans = taskRows(p.tasks, "", 1);
+  if (orphans.length) {
+    const avg = Math.round(p.tasks.reduce((n, t) => n + t.progress, 0) / p.tasks.length) / 100;
+    tasks += orphans.length;
+    rows.push(summary("E", "—", "Sans étape", "", avg, span(orphans)!), ...orphans);
+  }
+  return { rows, stages, tasks };
+}
+
+function planningSheet(ctx: Ctx, plan: Plan, now: Date) {
   const { theme } = ctx;
+  const { rows } = plan;
   const fixed: Col[] = [
     { header: "Réf.", key: "ref", width: 7, type: "ref" },
-    { header: "Tâche", key: "name", width: 38 },
+    { header: "Étape / activité / tâche", key: "name", width: 42 },
     { header: "Étape", key: "stage", width: 18 },
     { header: "Responsable", key: "assignee", width: 16 },
     { header: "Statut", key: "status", width: 11, pill: byLabel(STATUS, STATUS_TONE) },
+    { header: "Avanc.", key: "progress", width: 8, type: "pct" },
     { header: "Début", key: "start", width: 10.5, type: "date" },
     { header: "Échéance", key: "due", width: 10.5, type: "date" },
+    { header: "Niveau", key: "kind", width: 4, type: "center" },
   ];
-  const dated = tasks
-    .map(({ task, stage }) => {
-      let s = day(task.startDate ?? task.dueDate);
-      let e = day(task.dueDate ?? task.startDate);
-      if (s && e && s > e) [s, e] = [e, s];
-      return { task, stage, s, e };
-    })
-    .filter((x): x is { task: TaskDto; stage: string; s: Date; e: Date } => !!x.s && !!x.e);
+  const col = (key: string) => fixed.findIndex((c) => c.key === key) + 1;
 
   // Granularité : semaines (≤ 78) sinon mois (≤ 120).
   let min = Infinity;
   let max = -Infinity;
-  for (const { s, e } of dated) {
+  for (const { s, e } of rows) {
     if (s.getTime() < min) min = s.getTime();
     if (e.getTime() > max) max = e.getTime();
   }
   const buckets: Date[] = [];
   let weekly = true;
-  if (dated.length) {
+  if (rows.length) {
     const first = new Date(min);
     const monday = new Date(min - ((first.getUTCDay() + 6) % 7) * DAY_MS);
     const weeks = Math.floor((max - monday.getTime()) / (7 * DAY_MS)) + 1;
@@ -360,20 +439,53 @@ function planningSheet(ctx: Ctx, tasks: Array<{ task: TaskDto; stage: string }>,
     }
   }
 
+  // Lignes récapitulatives : fond teinté, gras ; libellés en retrait. Styles
+  // dérivés mémoïsés (jamais un style par cellule).
+  const summaryFill = { E: theme.tint, A: theme.band };
+  const memo = new Map<Partial<ExcelJS.Style>, Map<string, Partial<ExcelJS.Style>>>();
+  const derive = (base: Partial<ExcelJS.Style>, key: string, make: () => Partial<ExcelJS.Style>) => {
+    let m = memo.get(base);
+    if (!m) memo.set(base, (m = new Map()));
+    let s = m.get(key);
+    if (!s) m.set(key, (s = { ...base, ...make() }));
+    return s;
+  };
+
   const ws = dataSheet(
     ctx,
     "Planning",
     {
       title: "Planning",
-      info: (n) => `${plural(n, "tâche datée", "tâches datées")} • vue ${weekly ? "hebdomadaire" : "mensuelle"}`,
+      info: () => `${plural(plan.stages, "étape")} • ${plural(plan.tasks, "tâche datée", "tâches datées")} • vue ${weekly ? "hebdomadaire" : "mensuelle"}`,
       xSplit: 2,
+      zebra: false,
     },
     fixed,
-    dated,
-    ({ task, stage, s, e }) => ({ ref: taskRef.get(task.id), name: task.name, stage, assignee: assigneeOf(task), status: STATUS[task.status], start: s, due: e }),
+    rows,
+    (x) => ({ ref: x.ref, name: x.name, stage: x.stage, assignee: x.assignee, status: x.status, progress: x.progress, start: x.s, due: x.e, kind: x.kind }),
+    (cell, x) => {
+      if (x.kind === "T") {
+        const c = cell("name");
+        c.style = derive(c.style, `T${x.indent}`, () => ({ alignment: { ...c.style.alignment, indent: x.indent } }));
+        return;
+      }
+      for (const k of fixed) {
+        const c = cell(k.key);
+        c.style = derive(c.style, `${x.kind}${x.indent}`, () => ({
+          fill: solid(summaryFill[x.kind as "E" | "A"]),
+          font: font(x.kind === "E" ? 10.5 : 10, theme.ink, { bold: true, italic: x.kind === "A" && k.key === "name" }),
+          ...(k.key === "name" ? { alignment: { ...c.style.alignment, indent: x.indent } } : {}),
+          ...(x.kind === "E" ? { border: { ...GRID, top: thin(theme.headLine) } } : {}),
+        }));
+      }
+    },
   );
+  rows.forEach((x, i) => {
+    if (x.kind === "E") ws.getRow(HEAD + 1 + i).height = 21;
+  });
+  ws.getColumn(col("kind")).hidden = true;
   ws.views = [{ state: "frozen", xSplit: 2, ySplit: HEAD, showGridLines: true, zoomScale: 100 }];
-  if (!dated.length) return ws;
+  if (!rows.length) return ws;
 
   const c0 = fixed.length + 1;
   const cN = c0 + buckets.length - 1;
@@ -407,24 +519,31 @@ function planningSheet(ctx: Ctx, tasks: Array<{ task: TaskDto; stage: string }>,
     }
   }
 
-  // Barres : une règle par état, sans écrire les cellules du calendrier.
+  // Barres : une règle par niveau / état, sans écrire les cellules du
+  // calendrier. Colonne masquée « Niveau » : E (étape) et A (activité) =
+  // barres récapitulatives foncées, prioritaires sur les états de tâche.
   const L = (c: number) => ws.getColumn(c).letter;
   const first = `${L(c0)}$${HEAD}`;
   const r = HEAD + 1;
-  const sCol = `$${L(6)}${r}`;
-  const eCol = `$${L(7)}${r}`;
-  const st = `$${L(5)}${r}`;
+  const sCol = `$${L(col("start"))}${r}`;
+  const eCol = `$${L(col("due"))}${r}`;
+  const st = `$${L(col("status"))}${r}`;
+  const kd = `$${L(col("kind"))}${r}`;
   const end = weekly ? `${first}+6` : `EOMONTH(${first},0)`;
   const inBar = `AND(${sCol}<=${end},${eCol}>=${first})`;
   const fill = (h: string): Partial<ExcelJS.Style> => ({ fill: { type: "pattern", pattern: "solid", fgColor: argb(h), bgColor: argb(h) } });
   ws.addConditionalFormatting({
-    ref: `${L(c0)}${r}:${L(cN)}${HEAD + dated.length}`,
+    ref: `${L(c0)}${r}:${L(cN)}${HEAD + rows.length}`,
     rules: [
-      { type: "expression", priority: 1, formulae: [`AND(${inBar},OR(${st}="${STATUS.DONE}",${st}="${STATUS.CLOSED}"))`], style: fill("34B27B") },
-      { type: "expression", priority: 2, formulae: [`AND(${inBar},${eCol}<TODAY())`], style: fill("E5484D") },
-      { type: "expression", priority: 3, formulae: [`AND(${inBar},${st}="${STATUS.IN_PROGRESS}")`], style: fill(theme.brand) },
-      { type: "expression", priority: 4, formulae: [inBar], style: fill(theme.soft) },
-      { type: "expression", priority: 5, formulae: [`AND(TODAY()>=${first},TODAY()<=${end})`], style: fill("FDF0C4") },
+      { type: "expression", priority: 1, formulae: [`AND(${inBar},${kd}="E")`], style: fill(theme.ink) },
+      { type: "expression", priority: 2, formulae: [`AND(${inBar},${kd}="A")`], style: fill(mix(theme.ink, "94A3B8", 0.55)) },
+      { type: "expression", priority: 3, formulae: [`AND(${inBar},OR(${st}="${STATUS.DONE}",${st}="${STATUS.CLOSED}"))`], style: fill("34B27B") },
+      { type: "expression", priority: 4, formulae: [`AND(${inBar},${eCol}<TODAY())`], style: fill("E5484D") },
+      { type: "expression", priority: 5, formulae: [`AND(${inBar},${st}="${STATUS.IN_PROGRESS}")`], style: fill(theme.brand) },
+      { type: "expression", priority: 6, formulae: [inBar], style: fill(theme.soft) },
+      { type: "expression", priority: 7, formulae: [`AND(TODAY()>=${first},TODAY()<=${end})`], style: fill("FDF0C4") },
+      { type: "expression", priority: 8, formulae: [`${kd}="E"`], style: fill(summaryFill.E) },
+      { type: "expression", priority: 9, formulae: [`${kd}="A"`], style: fill(summaryFill.A) },
     ],
   });
   return ws;
@@ -717,7 +836,7 @@ export async function renderProjectWorkbook(data: ProjectExportData): Promise<{ 
     stageRows.push({ stage: s.name, activity: "", start: day(s.startDate), due: day(s.dueDate), progress: s.progress.percent / 100, total: s.progress.total, done: s.progress.done, description: s.description });
     for (const a of s.activities) stageRows.push({ stage: s.name, activity: a.name, start: null, due: null, progress: a.progress.percent / 100, total: a.progress.total, done: a.progress.done, description: a.description });
   }
-  const datedCount = tasks.filter(({ task }) => task.startDate || task.dueDate).length;
+  const plan = planRows(project, taskRef, (t) => memberName(t.assigneeId));
   const nRisks = risks.filter((k) => k.kind === "RISK").length;
 
   // --- Synthèse (créée en premier : première feuille du classeur)
@@ -731,7 +850,7 @@ export async function renderProjectWorkbook(data: ProjectExportData): Promise<{ 
     infos: data.infos,
     contents: [
       { sheet: "Tâches", about: "Liste complète : statut, priorité, dates, personnes, prérequis, notes", count: plural(tasks.length, "tâche") },
-      { sheet: "Planning", about: "Diagramme de Gantt des tâches datées", count: plural(datedCount, "tâche") },
+      { sheet: "Planning", about: "Gantt : étapes et activités récapitulatives, tâches datées", count: `${plural(plan.stages, "étape")} • ${plural(plan.tasks, "tâche")}` },
       { sheet: "Étapes & activités", about: "Structure du projet et avancement par niveau", count: plural(stageRows.length, "ligne") },
       { sheet: "Livrables", about: "Livrables, échéances et documents associés", count: plural(project.deliverables.length, "livrable") },
       { sheet: "Risques & opportunités", about: "Registre : criticité, niveau, stratégie, plan de traitement", count: `${nf.format(nRisks)} R • ${nf.format(risks.length - nRisks)} O` },
@@ -812,7 +931,7 @@ export async function renderProjectWorkbook(data: ProjectExportData): Promise<{ 
   );
 
   // --- Planning
-  planningSheet(ctx, tasks, taskRef, (t) => memberName(t.assigneeId), now);
+  planningSheet(ctx, plan, now);
 
   // --- Étapes & activités (hiérarchie : étapes en bandeau, activités en retrait)
   dataSheet(

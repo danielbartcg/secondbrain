@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users, LayoutTemplate } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import { InlineEdit, ProgressBar, errorMessage, toInputDate, toast } from "@/components/ui";
@@ -19,6 +19,7 @@ import { DocumentsTab } from "./DocumentsTab";
 import { NotesPreview } from "@/components/notes/NotesPreview";
 import { PinButton } from "@/components/PinButton";
 import { ProjectCustomFields } from "./ProjectCustomFields";
+import { ApplyTemplateBanner } from "@/components/templates/TemplatePicker";
 
 /**
  * Espace projet : en-tête commun + onglets (tableau de bord, plan, livrables,
@@ -45,10 +46,15 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> 
   { key: "equipe", label: "Équipe", icon: Users },
 ];
 
-function tabFromHash(): TabKey {
-  if (typeof window === "undefined") return "dashboard";
+/** Projet type : seuls les onglets de structure (pas de dates, d'équipe, de réunions ni de documents). */
+const TEMPLATE_TABS: TabKey[] = ["plan", "livrables", "risques"];
+const tabsFor = (isTemplate: boolean) => (isTemplate ? TABS.filter((t) => TEMPLATE_TABS.includes(t.key)) : TABS);
+
+function tabFromHash(isTemplate = false): TabKey {
+  const fallback: TabKey = isTemplate ? "plan" : "dashboard";
+  if (typeof window === "undefined") return fallback;
   const h = window.location.hash.replace("#", "") as TabKey;
-  return TABS.some((t) => t.key === h) ? h : "dashboard";
+  return tabsFor(isTemplate).some((t) => t.key === h) ? h : fallback;
 }
 
 export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectDto; currentUserId: string }) {
@@ -56,11 +62,13 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
   const [saving, setSaving] = useState(0);
   /** « Enregistré » ne s'affiche qu'après une première sauvegarde. */
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<TabKey>("dashboard");
+  const [tab, setTab] = useState<TabKey>(initial.isTemplate ? "plan" : "dashboard");
+  const tpl = project.isTemplate;
+  const tabs = tabsFor(tpl);
 
   useEffect(() => {
-    setTab(tabFromHash());
-    const onHash = () => setTab(tabFromHash());
+    setTab(tabFromHash(initial.isTemplate));
+    const onHash = () => setTab(tabFromHash(initial.isTemplate));
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -99,10 +107,11 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
       <div className="mb-2 flex items-center gap-2 text-sm text-muted">
-        <Link href="/projects" className="flex items-center gap-1 hover:text-ink">
-          <ArrowLeft className="h-4 w-4" /> Projets
+        <Link href={tpl ? "/admin/templates" : "/projects"} className="flex items-center gap-1 hover:text-ink">
+          <ArrowLeft className="h-4 w-4" /> {tpl ? "Modèles" : "Projets"}
         </Link>
         <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`} role="status">{saving ? "Enregistrement…" : saved ? "Enregistré" : ""}</span>
+        {!tpl && (
         <a
           href={`/api/v1/projects/${project.id}/export`}
           download
@@ -111,8 +120,18 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
         >
           <FileSpreadsheet className="h-4 w-4" /> <span className="hidden sm:inline">Export Excel</span>
         </a>
-        <PinButton kind="PROJECT" item={{ id: project.id, name: project.name, color: project.color }} withLabel />
+        )}
+        {!tpl && <PinButton kind="PROJECT" item={{ id: project.id, name: project.name, color: project.color }} withLabel />}
       </div>
+      {tpl && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+          <LayoutTemplate className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <b>Projet type (modèle).</b> Définissez la structure : étapes, activités, tâches (priorité, complexité, prérequis, notes), livrables et risques. Les dates,
+            l&apos;équipe, les affectations et les statuts se renseignent dans chaque projet créé à partir de ce modèle.
+          </span>
+        </div>
+      )}
 
       {/* En-tête */}
       <div className="rounded-2xl border border-line bg-surface p-5">
@@ -131,6 +150,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
               />
             ))}
           </div>
+          {!tpl && (
           <select
             value={project.status}
             onChange={(e) => patchProject({ status: e.target.value })}
@@ -143,6 +163,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
               </option>
             ))}
           </select>
+          )}
         </div>
         <InlineEdit value={project.name} onSave={(name) => patchProject({ name })} as="h1" className="-mx-1.5 mt-2 block text-2xl font-semibold tracking-tight" />
         <InlineEdit
@@ -153,6 +174,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
           placeholder="Ajouter une description…"
           className="-mx-1.5 mt-1 block whitespace-pre-wrap text-sm text-ink-2"
         />
+        {!tpl && (
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <DateField label="Début" value={project.startDate} onChange={(v) => patchProject({ startDate: v })} />
           <DateField label="Échéance" value={project.dueDate} onChange={(v) => patchProject({ dueDate: v })} />
@@ -161,19 +183,27 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
             {project.deliverableCount > 1 ? "s" : ""}
           </span>
         </div>
-        <ProjectCustomFields values={project.customFields} onChange={(customFields) => patchProject({ customFields })} />
+        )}
+        {!tpl && <ProjectCustomFields values={project.customFields} onChange={(customFields) => patchProject({ customFields })} />}
+        {!tpl && (
         <div className="mt-4 flex items-center gap-3">
           <ProgressBar percent={project.progress.percent} color={project.color} className="h-3" />
           <span className="shrink-0 text-sm font-semibold tabular-nums">{project.progress.percent}%</span>
         </div>
+        )}
       </div>
+
+      {/* Projet encore vide : partir d'un modèle (propriétaire). */}
+      {!tpl && isOwner && project.stages.length === 0 && project.tasks.length === 0 && project.deliverables.length === 0 && project.folders.length === 0 && (
+        <ApplyTemplateBanner kind="project" targetId={project.id} className="mt-4" onApplied={(r) => (r as Resp).project && setProject((r as Resp).project!)} />
+      )}
 
       {/* Notes riches du projet (éditées dans « Prise de notes ») */}
       <NotesPreview html={project.notes} noteRef={`project:${project.id}`} title="Notes du projet" className="mt-4" />
 
       {/* Onglets */}
       <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="Sections du projet">
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             type="button"
@@ -192,7 +222,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
         ))}
       </div>
 
-      <div className="mt-5" role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
+      <div className="mt-5" role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label}>
         {tab === "dashboard" && <ProjectDashboardTab project={project} onGoTo={selectTab} />}
         {tab === "plan" && <ProjectBoard project={project} run={run} />}
         {tab === "gantt" && <ProjectGanttTab project={project} run={run} />}

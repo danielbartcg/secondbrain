@@ -26,6 +26,7 @@ import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
 import { layoutMindMap, subtreeIds, type Side } from "@/lib/mindmap-layout";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Button, InlineEdit, NODE_STATUS_LABEL, errorMessage, toast } from "@/components/ui";
+import { ApplyTemplateBanner } from "@/components/templates/TemplatePicker";
 import { NodeTasksPanel } from "./NodeTasksPanel";
 import { useSearchParams } from "next/navigation";
 import { PinButton } from "@/components/PinButton";
@@ -737,7 +738,7 @@ function Editor({ initial }: { initial: MindMapDto }) {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col md:h-dvh">
       {/* En-tête */}
       <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
-        <Link href="/mindmaps" className="shrink-0 rounded-lg p-1.5 text-ink-2 hover:bg-surface-2" title="Retour aux cartes" aria-label="Retour aux cartes">
+        <Link href={map.isTemplate ? "/admin/templates" : "/mindmaps"} className="shrink-0 rounded-lg p-1.5 text-ink-2 hover:bg-surface-2" title={map.isTemplate ? "Retour aux modèles" : "Retour aux cartes"} aria-label={map.isTemplate ? "Retour aux modèles" : "Retour aux cartes"}>
           <ArrowLeft className="h-5 w-5" />
         </Link>
         {readOnly ? (
@@ -807,6 +808,19 @@ function Editor({ initial }: { initial: MindMapDto }) {
         <div role="note" className={`flex items-center gap-2 border-b border-line px-3 py-1.5 text-xs ${readOnly ? "bg-amber-50 text-amber-900" : "bg-brand-50 text-brand-700"}`}>
           {readOnly ? <Lock className="h-3.5 w-3.5 shrink-0" /> : <Users className="h-3.5 w-3.5 shrink-0" />}
           <span className="min-w-0 truncate">{readOnly ? `Lecture seule — carte partagée par ${map.owner.name}` : `Carte partagée par ${map.owner.name} (écriture)`}</span>
+        </div>
+      )}
+
+      {map.isTemplate && (
+        <div className="flex items-center gap-2 border-b border-violet-200 bg-violet-50 px-4 py-1.5 text-xs text-violet-800">
+          <LayoutTemplate className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 truncate">Carte type (modèle) : ses nœuds sont copiés dans les cartes créées à partir d&apos;elle.</span>
+        </div>
+      )}
+      {/* Carte encore vide (racine seule) : partir d'une carte type. */}
+      {!readOnly && !map.isTemplate && nodes.length === 1 && (
+        <div className="border-b border-line px-4 py-2">
+          <ApplyTemplateBanner kind="map" targetId={map.id} onApplied={() => void reload()} />
         </div>
       )}
 

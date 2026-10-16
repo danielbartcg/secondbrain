@@ -47,7 +47,7 @@ Task.prerequisiteIds[] → Task (même projet)  prérequis (Gantt)
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `MindMap` | `id`, `ownerId`, `title`, timestamps | `title` = titre du nœud racine (synchronisés) |
+| `MindMap` | `id`, `ownerId`, `title`, `isTemplate` (carte type), timestamps | `title` = titre du nœud racine (synchronisés) |
 | `MindNode` | `id`, `mapId`, `parentId?`, `title`, `notes` (HTML), `color?`, `collapsed`, `status` (`OPEN` · `WATCH` · `CLOSED`), `order`, `x?`, `y?` (position manuelle sur le canevas ; null = automatique), timestamps | `parentId = null` ⇔ racine (une par carte) ; `order` renuméroté 0..n-1 parmi les frères ; `WATCH` = mis en évidence, `CLOSED` = hachuré et masqué par défaut avec sa descendance |
 | `MindMapShare` | `mapId` + `userId` (clé), `permission` (`MapPermission` : `READ` · `WRITE`), `sharedById?` (`SetNull`), timestamps | partage d'une carte avec un autre compte ; jamais le propriétaire ; géré par le propriétaire seul (`src/lib/map-shares.ts`) ; le destinataire peut le supprimer (quitter) ; supprimé avec la carte ou le compte ; synchronisé en lecture seule |
 
@@ -62,7 +62,7 @@ rattachées), `read` (partage `READ` : consultation seule). Carte inaccessible
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `Project` | `id`, `ownerId`, `name`, `description`, `notes` (HTML, « Prise de notes »), `color?`, `status` (`ACTIVE` · `ON_HOLD` · `DONE` · `ARCHIVED`), `startDate?`, `dueDate?`, `customFields` (JSON `{ fieldId: texte | id d'option }`, défaut `{}`), timestamps | |
+| `Project` | `id`, `ownerId`, `name`, `description`, `notes` (HTML, « Prise de notes »), `color?`, `status` (`ACTIVE` · `ON_HOLD` · `DONE` · `ARCHIVED`), `startDate?`, `dueDate?`, `customFields` (JSON `{ fieldId: texte | id d'option }`, défaut `{}`), `isTemplate` (projet type : hors périmètres, administrateurs ; migration `20261016170000_templates`), timestamps | |
 | `CustomField` | `id`, `label`, `type` (`TEXT` · `LIST`), `options` (JSON `[{ id, label }]`), `order`, `active`, timestamps | champ personnalisé des projets, global (administration) ; migration `20261016150000_custom_fields` |
 | `ProjectMember` | `id`, `projectId`, `userId?`, `name`, `email?`, `role?`, `color?`, `createdAt` | **équipe projet** : compte de l'application (`userId`) ou nom libre. `@@unique([projectId, userId])`. Le propriétaire est créé membre (« Chef de projet ») à la création du projet |
 | `Stage` | `id`, `projectId`, `name`, `description`, `notes` (HTML), `order`, `startDate?`, `dueDate?`, timestamps | étape |

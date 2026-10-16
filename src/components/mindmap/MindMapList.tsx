@@ -8,6 +8,7 @@ import { api } from "@/lib/client";
 import type { MindMapDto, MindMapSummary } from "@/lib/mindmaps";
 import { Avatar, Badge, Button, EmptyState, InlineEdit, PageHeader, errorMessage, formatDate } from "@/components/ui";
 import { PinButton } from "@/components/PinButton";
+import { TemplateSelect } from "@/components/templates/TemplatePicker";
 
 type Filter = "all" | "mine" | "shared";
 const FILTERS: Array<{ id: Filter; label: string }> = [
@@ -27,6 +28,7 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,7 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
     setBusy(true);
     setError(null);
     try {
-      const { mindmap } = await api.post<{ mindmap: MindMapDto }>("/mindmaps", { title: t });
+      const { mindmap } = await api.post<{ mindmap: MindMapDto }>("/mindmaps", { title: t, ...(templateId ? { templateId } : {}) });
       router.push(`/mindmaps/${mindmap.id}`);
     } catch (err) {
       setError(errorMessage(err, "Création impossible."));
@@ -100,15 +102,16 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
       />
 
       {creating && (
-        <form onSubmit={create} className="mb-6 flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4 sm:flex-row">
+        <form onSubmit={create} className="mb-6 flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:flex-wrap">
           <input
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Titre de la carte (idée centrale)"
             aria-label="Titre de la carte"
-            className="flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
+            className="min-w-[12rem] flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
           />
+          <TemplateSelect kind="map" value={templateId} onChange={setTemplateId} className="sm:max-w-sm" />
           <div className="flex gap-2">
             <Button type="submit" disabled={busy}>
               {busy ? "Création…" : "Créer"}

@@ -1,4 +1,5 @@
 import "server-only";
+import { listTemplates } from "@/lib/templates";
 import { allCustomFields } from "@/lib/custom-fields";
 import fs from "node:fs";
 import path from "node:path";
@@ -180,6 +181,16 @@ const TASK_FIELDS = {
 
 // --- Outils ---------------------------------------------------------------------------------------
 
+/** Modèle désigné par nom (insensible à la casse) ou id ; erreur claire sinon. */
+async function templateIdOf(kind: "project" | "map", ref: string | undefined | null): Promise<string | null> {
+  if (!ref) return null;
+  const t = await listTemplates();
+  const list = kind === "project" ? t.projects.map((p) => ({ id: p.id, name: p.name })) : t.maps.map((m) => ({ id: m.id, name: m.title }));
+  const hit = list.find((x) => x.id === ref) ?? list.find((x) => x.name.toLowerCase() === ref.trim().toLowerCase());
+  if (!hit) throw new ApiError(400, "BAD_ARGUMENT", `Modèle inconnu : « ${ref} » (${list.map((x) => x.name).join(", ") || "aucun modèle"}).`);
+  return hit.id;
+}
+
 export const WRITE_TOOLS: WriteTool[] = [
   {
     name: "api_reference",
@@ -324,10 +335,11 @@ export const WRITE_TOOLS: WriteTool[] = [
   {
     name: "create_project",
     title: "Créer un projet",
-    description: "Crée un projet (vous en devenez propriétaire).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, description: { type: "string" }, start_date: { type: "string" }, due_date: { type: "string" } }, required: ["name"] },
+    description: "Crée un projet (vous en devenez propriétaire). template : nom ou id d'un projet type (voir list_templates) pour reprendre sa structure (étapes, tâches, livrables, risques).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, description: { type: "string" }, start_date: { type: "string" }, due_date: { type: "string" }, template: { type: "string" } }, required: ["name"] },
     run: async (user, args) => {
-      const r = await callApi<{ project: { id: string; name: string } }>(user, "POST", "/projects", { name: s(args, "name", true), description: s(args, "description") ?? "", startDate: s(args, "start_date") ?? null, dueDate: s(args, "due_date") ?? null });
+      const templateId = await templateIdOf("project", s(args, "template"));
+      const r = await callApi<{ project: { id: string; name: string } }>(user, "POST", "/projects", { name: s(args, "name", true), description: s(args, "description") ?? "", startDate: s(args, "start_date") ?? null, dueDate: s(args, "due_date") ?? null, ...(templateId ? { templateId } : {}) });
       return { id: r.project.id, name: r.project.name };
     },
   },
@@ -510,11 +522,12 @@ export const WRITE_TOOLS: WriteTool[] = [
     name: "edit_mind_map",
     title: "Modifier une carte mentale",
     description:
-      "Actions sur les cartes : « create_map » (title), « rename_map » (map_id, title), « add_node » (map_id, parent_id, title), « update_node » (map_id, node_id, title?, status? OPEN/WATCH/CLOSED, notes_text? / notes_html?), « delete_node » (map_id, node_id). Pour les autres actions (déplacer, couleur, lier une tâche), utilisez api_request.",
+      "Actions sur les cartes : « create_map » (title, template? : nom ou id d'une carte type), « rename_map » (map_id, title), « add_node » (map_id, parent_id, title), « update_node » (map_id, node_id, title?, status? OPEN/WATCH/CLOSED, notes_text? / notes_html?), « delete_node » (map_id, node_id). Pour les autres actions (déplacer, couleur, lier une tâche), utilisez api_request.",
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: ["create_map", "rename_map", "add_node", "update_node", "delete_node"] },
+        template: { type: "string" },
         map_id: { type: "string" },
         node_id: { type: "string" },
         parent_id: { type: "string" },
@@ -531,6 +544,11 @@ export const WRITE_TOOLS: WriteTool[] = [
       const enc = encodeURIComponent;
       switch (action) {
         case "create_map": {
+          const templateId = await templateIdOf("map", s(args, "template"));
+          if (templateId) {
+            const r = await callApi<{ mindmap: { id: string; rootId: string } }>(user, "POST", "/mindmaps", { title: s(args, "title", true), templateId });
+            return { ok: true, map_id: r.mindmap.id, root_node_id: r.mindmap.rootId };
+          }
           const r = await callApi<{ mindmap: { id: string; rootId: string } }>(user, "POST", "/mindmaps", { title: s(args, "title", true) });
           return { ok: true, map_id: r.mindmap.id, root_node_id: r.mindmap.rootId };
         }

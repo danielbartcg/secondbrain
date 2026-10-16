@@ -8,7 +8,7 @@ import { badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { isAdmin } from "@/lib/roles";
 import { mapAccessWhere } from "@/lib/map-access";
-import { MEMBER_INCLUDE, TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
+import { MEMBER_INCLUDE, TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskEditWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { NO_PROJECT_LABEL, dayString, resolveMentions } from "@/lib/shared/task-model";
 export { NO_PROJECT_LABEL, dayString, resolveMentions };
@@ -54,7 +54,7 @@ export type TaskNodeRef = { id: string; title: string; mapId: string; mapTitle: 
 
 export type TaskDetailDto = TaskDto & {
   /** null = tâche sans projet. */
-  project: { id: string; name: string; color: string | null; ownerId: string; members: MemberDto[] } | null;
+  project: { id: string; name: string; color: string | null; ownerId: string; isTemplate?: boolean; members: MemberDto[] } | null;
   stage: { id: string; name: string } | null;
   activity: { id: string; name: string } | null;
   assignee: MemberDto | null;
@@ -111,7 +111,7 @@ async function canConsultTask(userId: string, taskId: string): Promise<boolean> 
 
 /** Piste d'audit d'une tâche (mêmes droits de lecture que la fiche). */
 export async function getTaskHistory(userId: string, taskId: string): Promise<TaskEventDto[]> {
-  const canEdit = (await prisma.task.count({ where: { id: taskId, ...taskAccessWhere(userId) } })) > 0;
+  const canEdit = (await prisma.task.count({ where: { id: taskId, ...(await taskEditWhere(userId)) } })) > 0;
   if (!canEdit && !(await canConsultTask(userId, taskId))) throw notFound("Tâche");
   return listTaskEventsRaw(taskId);
 }
@@ -122,7 +122,7 @@ const commentExcerpt = (s: string, n = 120) => {
 };
 
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
-  const canEdit = (await prisma.task.count({ where: { id: taskId, ...taskAccessWhere(userId) } })) > 0;
+  const canEdit = (await prisma.task.count({ where: { id: taskId, ...(await taskEditWhere(userId)) } })) > 0;
   if (!canEdit && !(await canConsultTask(userId, taskId))) throw notFound("Tâche");
   const t = await prisma.task.findFirst({
     where: { id: taskId },
@@ -133,7 +133,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
       contributors: { include: { member: { include: MEMBER_INCLUDE } } },
       activity: { select: { id: true, name: true } },
       stage: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true, color: true, ownerId: true, members: { orderBy: { createdAt: "asc" }, include: MEMBER_INCLUDE } } },
+      project: { select: { id: true, name: true, color: true, ownerId: true, isTemplate: true, members: { orderBy: { createdAt: "asc" }, include: MEMBER_INCLUDE } } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, name: true, avatarUrl: true } } } },
       workSessions: { orderBy: { date: "asc" }, include: SESSION_INCLUDE },
       // Cartes accessibles à l'utilisateur seulement (les siennes et celles qu'on lui a partagées).
@@ -145,7 +145,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
     canEdit,
     ...toTaskDto(t),
     project: t.project
-      ? { id: t.project.id, name: t.project.name, color: t.project.color, ownerId: t.project.ownerId, members: t.project.members.map(toMemberDto) }
+      ? { id: t.project.id, name: t.project.name, color: t.project.color, ownerId: t.project.ownerId, isTemplate: t.project.isTemplate, members: t.project.members.map(toMemberDto) }
       : null,
     stage: t.stage,
     activity: t.activity,
@@ -172,7 +172,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
 
 export async function addComment(userId: string, taskId: string, body: string, parentId?: string | null, id?: string): Promise<TaskDetailDto> {
   const t = await prisma.task.findFirst({
-    where: { id: taskId, ...taskAccessWhere(userId) },
+    where: { id: taskId, ...(await taskEditWhere(userId)) },
     select: { id: true, name: true, projectId: true, assignee: { select: { userId: true } } },
   });
   if (!t) throw notFound("Tâche");
@@ -225,7 +225,7 @@ export async function addComment(userId: string, taskId: string, body: string, p
 
 export async function deleteComment(userId: string, commentId: string): Promise<TaskDetailDto> {
   const c = await prisma.taskComment.findFirst({
-    where: { id: commentId, task: taskAccessWhere(userId) },
+    where: { id: commentId, task: (await taskEditWhere(userId)) },
     select: { id: true, taskId: true, authorId: true, task: { select: { ownerId: true, project: { select: { ownerId: true } } } } },
   });
   if (!c) throw notFound("Commentaire");

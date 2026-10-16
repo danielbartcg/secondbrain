@@ -381,6 +381,18 @@ dossier, construit avec amCharts 4.
 - **Documents** : glisser-déposer des documents (ou de la sélection) et des dossiers sur une tuile de dossier ou un segment du fil d'Ariane (« Documents » = racine) ; sélection multiple (cases, Ctrl/⌘-clic, Maj-clic) ; alternative « Déplacer vers… » arborescente ; la zone de dépôt ne téléverse que des fichiers venant du système. Sur mobile, les listes passent sous le nom.
 - **Export Excel** : bouton en tête de fiche projet (à côté de « Épingler »), télécharge le classeur complet (`/api/v1/projects/:id/export`).
 
+## Modèles (`/admin/templates` — `admin/AdminTemplates`, `templates/TemplatePicker`)
+
+Administration → Modèles : « Projets types » et « Cartes types » (nom,
+contenu résumé, « Modifier » ouvre l'écran habituel en mode modèle,
+suppression) ; création « Vierge » ou « Copier » un projet / une carte /
+un modèle existant. Mode modèle : bandeau violet « Projet type (modèle) » /
+« Carte type », retour vers « Modèles ». Création d'un projet ou d'une carte :
+liste « Partir de » (Feuille blanche ou modèle, avec son contenu) dans le
+formulaire. Projet vide (propriétaire) / carte réduite à sa racine : bandeau
+« Ce projet est vide » / « Cette carte est vide » avec choix du modèle et
+« Appliquer le modèle ».
+
 ## Activité (`/activity` — `activity/ActivityView`)
 
 Entrée « Activité » du menu. Période : puces (Aujourd'hui, Hier, 7 derniers

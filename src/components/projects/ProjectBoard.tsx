@@ -104,8 +104,8 @@ function StageCard({ stage, index, count, project, run, defaultOpen = true }: { 
             </span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            <DateField label="Début" value={stage.startDate} onChange={(v) => patch({ startDate: v })} />
-            <DateField label="Échéance" value={stage.dueDate} onChange={(v) => patch({ dueDate: v })} />
+            {!project.isTemplate && <DateField label="Début" value={stage.startDate} onChange={(v) => patch({ startDate: v })} />}
+            {!project.isTemplate && <DateField label="Échéance" value={stage.dueDate} onChange={(v) => patch({ dueDate: v })} />}
           </div>
         </div>
         <div className="flex shrink-0 items-center">
@@ -290,10 +290,15 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
   const closed = task.status === "CLOSED";
   const assignee = task.assigneeId ? project.members.find((m) => m.id === task.assigneeId) : null;
   const sheetHref = `/tasks/${task.id}`;
+  // Projet type : ni statut, ni avancement, ni dates, ni personnes (relèvent d'un vrai projet).
+  const tpl = project.isTemplate;
 
   return (
     <li className="px-2 py-2 sm:px-3">
       <div className="flex items-center gap-2">
+        {tpl ? (
+          <Circle className="h-5 w-5 shrink-0 text-faint" aria-hidden />
+        ) : (
         <button
           type="button"
           onClick={() => patch({ status: NEXT_STATUS[task.status] })}
@@ -303,6 +308,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
         >
           {closed ? <Lock className="h-5 w-5" /> : done ? <Check className="h-5 w-5" /> : task.status === "IN_PROGRESS" ? <CircleDot className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
         </button>
+        )}
         <PriorityFlag priority={task.priority} className={done ? "opacity-40" : ""} />
         <InlineEdit value={task.name} onSave={(name) => patch({ name })} className={`-mx-1.5 min-w-0 flex-1 text-sm ${done ? "text-muted line-through" : ""}`} />
         {task.hasNotes && <NotesLink noteRef={`task:${task.id}`} has />}
@@ -311,14 +317,14 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
             <MessageSquare className="h-3.5 w-3.5" /> {task.commentCount}
           </Link>
         )}
-        <div className="hidden items-center gap-2 sm:flex">
+        <div className={`hidden items-center gap-2 ${tpl ? "" : "sm:flex"}`}>
           <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-28 accent-brand-600" title="Avancement" aria-label={`Avancement de « ${task.name} »`} />
           <span className="w-9 text-right text-xs tabular-nums text-ink-2">{progress}%</span>
         </div>
-        {task.dueDate && (
+        {task.dueDate && !tpl && (
           <span className={`hidden shrink-0 text-xs md:inline ${!done && new Date(task.dueDate) < new Date() ? "text-danger" : "text-muted"}`}>{formatDate(task.dueDate)}</span>
         )}
-        {assignee ? (
+        {tpl ? null : assignee ? (
           <Avatar id={assignee.id} name={assignee.name} color={assignee.color} src={assignee.avatarUrl} size={24} />
         ) : (
           <span className="hidden h-6 w-6 shrink-0 rounded-full border border-dashed border-line-strong sm:inline-block" title="Non affectée" />
@@ -332,7 +338,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
       </div>
 
       {/* Avancement visible sur mobile */}
-      <div className="mt-1.5 flex items-center gap-2 pl-7 sm:hidden">
+      <div className={`mt-1.5 flex items-center gap-2 pl-7 sm:hidden ${tpl ? "!hidden" : ""}`}>
         <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="flex-1 accent-brand-600" aria-label={`Avancement de « ${task.name} »`} />
         <span className="w-9 text-right text-xs tabular-nums text-ink-2">{progress}%</span>
       </div>
@@ -348,6 +354,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
             className="-mx-1.5 block whitespace-pre-wrap text-ink-2"
           />
           <div className="flex flex-wrap items-center gap-3">
+            {!tpl && (
             <label className="flex items-center gap-2 text-xs text-muted">
               Responsable
               <select value={task.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-base text-ink sm:text-xs">
@@ -359,6 +366,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
                 ))}
               </select>
             </label>
+            )}
             <label className="flex items-center gap-2 text-xs text-muted">
               Priorité
               <select value={task.priority} onChange={(e) => patch({ priority: e.target.value })} className="rounded border border-line bg-surface px-1.5 py-0.5 text-base text-ink sm:text-xs">
@@ -379,14 +387,14 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
                 ))}
               </select>
             </label>
-            <DateField label="Début" value={task.startDate} onChange={(v) => patch({ startDate: v })} />
-            <DateField label="Échéance" value={task.dueDate} onChange={(v) => patch({ dueDate: v })} />
-            {task.status === "DONE" && (
+            {!tpl && <DateField label="Début" value={task.startDate} onChange={(v) => patch({ startDate: v })} />}
+            {!tpl && <DateField label="Échéance" value={task.dueDate} onChange={(v) => patch({ dueDate: v })} />}
+            {task.status === "DONE" && !tpl && (
               <Button size="sm" variant="outline" onClick={() => patch({ status: "CLOSED" })} title="Clôturer la tâche (elle sort du flux courant)">
                 <Lock className="h-3.5 w-3.5" /> Clôturer
               </Button>
             )}
-            {closed && (
+            {closed && !tpl && (
               <Button size="sm" variant="outline" onClick={() => patch({ status: "DONE" })} title="Rouvrir (revient à Terminée)">
                 Rouvrir
               </Button>

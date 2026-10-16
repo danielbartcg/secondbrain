@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { AdminTemplates } from "@/components/admin/AdminTemplates";
+import type { TemplatesDto } from "@/lib/templates";
 import { AdminCustomFields } from "@/components/admin/AdminCustomFields";
 import type { CustomFieldDto } from "@/lib/shared/custom-fields";
 import { ActivityView } from "@/components/activity/ActivityView";
@@ -221,6 +223,13 @@ function AdminScreen({ path, userId, userEmail }: { path: string; userId: string
     const id = r[1];
     body = <Loaded load={() => api.get<{ project: ProjectDto & { ownerName: string } }>(`/admin/projects/${id}`)} render={(d) => <AdminProjectView project={d.project} />} />;
   } else if (path === "/admin/notifications") body = <Loaded load={() => api.get<{ settings: NotificationSettingsDto }>("/admin/notifications")} render={(d) => <AdminNotifications initial={d.settings} adminEmail={userEmail} />} />;
+  else if (path === "/admin/templates")
+    body = (
+      <Loaded
+        load={() => Promise.all([api.get<{ templates: TemplatesDto }>("/templates"), api.get<{ projects: ProjectSummary[] }>("/projects"), api.get<{ mindmaps: MindMapSummary[] }>("/mindmaps")])}
+        render={([t, p, m]) => <AdminTemplates initial={t.templates} projects={p.projects.map((x) => ({ id: x.id, name: x.name }))} maps={m.mindmaps.map((x) => ({ id: x.id, title: x.title }))} />}
+      />
+    );
   else if (path === "/admin/fields") body = <Loaded load={() => api.get<{ fields: CustomFieldDto[]; usage: Record<string, number> }>("/admin/custom-fields")} render={(d) => <AdminCustomFields initial={d.fields} usage={d.usage} />} />;
   else if (path === "/admin/tasks") body = <Loaded load={() => api.get<{ tasks: OverviewTask[] }>("/admin/tasks")} render={(d) => <TaskOverviewTable tasks={d.tasks} />} />;
   else body = <Message title="Page introuvable" />;

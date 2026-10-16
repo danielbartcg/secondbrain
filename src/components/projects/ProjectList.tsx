@@ -9,6 +9,7 @@ import type { ProjectDto, ProjectSummary } from "@/lib/projects";
 import { Button, EmptyState, PageHeader, ProgressBar, errorMessage, formatDate } from "@/components/ui";
 import { PinButton } from "@/components/PinButton";
 import { CustomFieldChips } from "./ProjectCustomFields";
+import { TemplateSelect } from "@/components/templates/TemplatePicker";
 
 export const STATUS_LABEL: Record<ProjectSummary["status"], string> = {
   ACTIVE: "Actif",
@@ -36,6 +37,7 @@ export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initi
   const [projects, setProjects] = useState(initial);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initi
     setBusy(true);
     setError(null);
     try {
-      const { project } = await api.post<{ project: ProjectDto }>("/projects", { name: n });
+      const { project } = await api.post<{ project: ProjectDto }>("/projects", { name: n, ...(templateId ? { templateId } : {}) });
       router.push(`/projects/${project.id}`);
     } catch (err) {
       setError(errorMessage(err, "Création impossible."));
@@ -83,15 +85,16 @@ export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initi
       />
 
       {creating && (
-        <form onSubmit={create} className="mb-6 flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4 sm:flex-row">
+        <form onSubmit={create} className="mb-6 flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:flex-wrap">
           <input
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nom du projet"
             aria-label="Nom du projet"
-            className="flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
+            className="min-w-[12rem] flex-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
           />
+          <TemplateSelect kind="project" value={templateId} onChange={setTemplateId} className="sm:max-w-sm" />
           <div className="flex gap-2">
             <Button type="submit" disabled={busy || !name.trim()}>
               {busy ? "Création…" : "Créer"}

@@ -131,6 +131,8 @@ export type ProjectSummary = {
   deliverableCount: number;
   /** Champs personnalisés : { fieldId: texte | id d'option } (voir shared/custom-fields). */
   customFields: Record<string, string>;
+  /** Projet type (modèle) : édité dans l'administration, sans dates ni équipe. */
+  isTemplate: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -289,6 +291,7 @@ export function toProjectDto(p: ProjectRow): ProjectDto {
     memberCount: p.members.length,
     deliverableCount: p.deliverables.length,
     customFields: readCustomValues((p as { customFields?: unknown }).customFields),
+    isTemplate: !!(p as { isTemplate?: boolean }).isTemplate,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     notes: sanitizeNotes(p.notes),

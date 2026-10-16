@@ -93,6 +93,8 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
   const isOwner = (task.project?.ownerId ?? task.ownerId) === currentUserId;
   const members = task.project?.members ?? [];
   const backHref = task.project ? `/projects/${task.project.id}#plan` : "/projects/sans-projet";
+  // Tâche d'un projet type : structure seulement (ni statut, ni personnes, ni dates, ni sessions, ni commentaires).
+  const tpl = !!task.project?.isTemplate;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
@@ -117,6 +119,11 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
         <span className={`ml-auto text-xs ${saving ? "text-warn" : "text-faint"}`} role="status">{saving ? "Enregistrement…" : saved ? "Enregistré" : ""}</span>
       </div>
 
+      {tpl && (
+        <p className="mb-3 flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+          <Layers className="h-4 w-4 shrink-0" /> Tâche d&apos;un projet type : priorité, complexité, prérequis, notes et description seront copiés dans les projets créés à partir du modèle.
+        </p>
+      )}
       {!task.canEdit && (
         <p className="mb-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <Eye className="h-4 w-4 shrink-0" /> Consultation en lecture seule (administration ou tâche d&apos;un membre de votre équipe).
@@ -147,6 +154,8 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
           <InlineEdit value={task.name} onSave={(name) => patch({ name })} as="h1" className="-mx-1.5 mt-2 block text-2xl font-semibold leading-tight tracking-tight" />
 
           {/* Avancement */}
+          {!tpl && (
+          <>
           <div className="mt-5 flex items-center gap-3">
             <div className="flex flex-wrap gap-1">
               {(["TODO", "IN_PROGRESS", "DONE"] as const).map((s) => (
@@ -183,6 +192,8 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
             <ProgressBar percent={progress} color={color} className="h-2.5" />
             <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => onProgress(Number(e.target.value))} className="w-36 accent-brand-600" title="Avancement" aria-label="Avancement" />
           </div>
+          </>
+          )}
 
           {/* Rattachement : projet › étape › activité, tous facultatifs */}
           <AttachmentBlock task={task} patch={patch} />
@@ -212,6 +223,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
           </Block>
 
           {/* Acteurs */}
+          {!tpl && (
           <Block icon={<Users className="h-4 w-4" />} title="Acteurs" hint={task.project ? undefined : "rattachez la tâche à un projet pour désigner des personnes"}>
             <div className="grid gap-3 sm:grid-cols-3">
               <SubField icon={<User className="h-3.5 w-3.5" />} label="Responsable">
@@ -247,9 +259,11 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
               </SubField>
             </div>
           </Block>
+          )}
 
           {/* Calendrier */}
-          <Block icon={<CalendarDays className="h-4 w-4" />} title="Calendrier">
+          <Block icon={tpl ? <Link2 className="h-4 w-4" /> : <CalendarDays className="h-4 w-4" />} title={tpl ? "Prérequis" : "Calendrier"}>
+            {!tpl && (
             <div className="grid gap-3 sm:grid-cols-3">
               <SubField icon={<CalendarDays className="h-3.5 w-3.5" />} label="Début">
                 <input type="date" value={toInputDate(task.startDate)} onChange={(e) => patch({ startDate: e.target.value || null })} className={`${selectClass} w-full`} />
@@ -269,7 +283,8 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
                 {task.status !== "CLOSED" && <p className="mt-1 text-[11px] text-faint">Remplie automatiquement à la clôture.</p>}
               </SubField>
             </div>
-            <div className="mt-3 border-t border-line pt-3">
+            )}
+            <div className={tpl ? "" : "mt-3 border-t border-line pt-3"}>
               <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
                 <Link2 className="h-3.5 w-3.5" /> Prérequis (tâches à terminer avant)
               </span>
@@ -278,13 +293,13 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
           </Block>
 
           {/* Nœuds de carte mentale */}
-          <NodeLinks task={task} onChange={(nodes) => setTask((t) => ({ ...t, nodes }))} />
+          {!tpl && <NodeLinks task={task} onChange={(nodes) => setTask((t) => ({ ...t, nodes }))} />}
 
           {/* Notes riches (éditées dans « Prise de notes ») */}
           <NotesPreview html={task.notes} noteRef={`task:${task.id}`} className="mt-4 !rounded-xl !bg-surface-2/60 !p-3" />
 
           {/* Sessions de travail planifiées */}
-          <WorkSessions task={task} onChange={(workSessions) => setTask((t) => ({ ...t, workSessions }))} />
+          {!tpl && <WorkSessions task={task} onChange={(workSessions) => setTask((t) => ({ ...t, workSessions }))} />}
 
           <div className="mt-6">
             <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Description</h2>
@@ -323,7 +338,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
       </div>
 
       {/* Commentaires */}
-      <Comments task={task} currentUserId={currentUserId} isOwner={isOwner} onChange={setTask} />
+      {!tpl && <Comments task={task} currentUserId={currentUserId} isOwner={isOwner} onChange={setTask} />}
       </fieldset>
     </div>
   );
@@ -400,7 +415,8 @@ function AttachmentBlock({ task, patch }: { task: TaskDetailDto; patch: (data: R
       <div className="grid gap-2 sm:grid-cols-3">
         <label className="block">
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Projet</span>
-          <select value={task.project?.id ?? ""} onChange={(e) => patch({ projectId: e.target.value || null })} className={`${selectClass} w-full`}>
+          {/* Tâche d'un projet type : elle reste dans son modèle. */}
+          <select value={task.project?.id ?? ""} onChange={(e) => patch({ projectId: e.target.value || null })} disabled={!!task.project?.isTemplate} className={`${selectClass} w-full disabled:opacity-60`}>
             <option value="">Sans projet</option>
             {/* Projet courant toujours proposé (consultation : il n'est pas dans « mes » projets). */}
             {[

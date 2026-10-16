@@ -58,6 +58,8 @@ export type MindMapSharing = {
 export type MindMapSummary = {
   id: string;
   title: string;
+  /** Carte type (modèle, Administration → Modèles). */
+  isTemplate: boolean;
   nodeCount: number;
   createdAt: string;
   updatedAt: string;
@@ -66,6 +68,7 @@ export type MindMapSummary = {
 export type MindMapDto = {
   id: string;
   title: string;
+  isTemplate: boolean;
   createdAt: string;
   updatedAt: string;
   rootId: string;
@@ -164,6 +167,7 @@ export async function listMindMaps(userId: string): Promise<MindMapSummary[]> {
   return maps.map((m) => ({
     id: m.id,
     title: m.title,
+    isTemplate: m.isTemplate,
     nodeCount: m._count.nodes,
     createdAt: m.createdAt.toISOString(),
     updatedAt: m.updatedAt.toISOString(),
@@ -201,6 +205,7 @@ export async function getMindMap(userId: string, mapId: string): Promise<MindMap
   return {
     id: map.id,
     title: map.title,
+    isTemplate: map.isTemplate,
     createdAt: map.createdAt.toISOString(),
     updatedAt: map.updatedAt.toISOString(),
     rootId: root.id,

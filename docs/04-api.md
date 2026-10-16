@@ -123,7 +123,8 @@ propriétaire seulement (**403**). Carte non accessible : **404**.
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
 | GET | `/mindmaps` | — | `{ mindmaps: [{ id, title, nodeCount, createdAt, updatedAt, access, owner, sharedWith }] }` (mes cartes **et** celles partagées avec moi) |
-| POST | `/mindmaps` | `{ title }` | `201 { mindmap }` |
+| POST | `/mindmaps` | `{ title, templateId? }` | `201 { mindmap }` ; `templateId` : carte type (404 si inconnue, rien n'est créé) |
+| POST | `/mindmaps/:id/apply-template` | `{ templateId }` | `{ mindmap }` ; carte réduite à sa racine (409 sinon), droit d'écriture |
 | GET | `/mindmaps/:id` | — | `{ mindmap }` |
 | PATCH | `/mindmaps/:id` | `{ title? }` | `{ mindmap }` |
 | DELETE | `/mindmaps/:id` | — | `{ ok: true }` |
@@ -180,7 +181,11 @@ complet recalculé** (`{ project }`).
 | Méthode | Route | Corps |
 | --- | --- | --- |
 | GET | `/projects` | → `{ projects: ProjectSummary[] }` |
-| POST | `/projects` | `{ name, description?, color?, status?, startDate?, dueDate? }` (le créateur devient membre « Chef de projet ») |
+| POST | `/projects` | `{ name, description?, color?, status?, startDate?, dueDate?, customFields?, templateId? }` (le créateur devient membre « Chef de projet ») ; `templateId` : projet type (404 si inconnu, rien n'est créé) |
+| POST | `/projects/:id/apply-template` | `{ templateId }` | `{ project }` ; propriétaire (403), projet vide (409 sinon) |
+| GET | `/templates` | — | `{ templates: { projects: { id, name, description, color, stageCount, taskCount, riskCount, deliverableCount, updatedAt }[], maps: { id, title, nodeCount, updatedAt }[] } }` |
+| POST | `/admin/templates/projects` | `{ name, fromProjectId? }` | `201 { project }` (administrateurs) ; édition ensuite par les routes habituelles, suppression `DELETE /projects/:id` |
+| POST | `/admin/templates/maps` | `{ title, fromMapId? }` | `201 { mindmap }` (administrateurs) ; édition par les routes `/mindmaps/:id/**` |
 | GET | `/projects/:id` | → `{ project }` |
 | PATCH | `/projects/:id` | champs du POST, optionnels ; `customFields?: { fieldId: valeur \| null }` (fusion ; liste : id d'option ou libellé exact ; texte ≤ 500 ; 400 si champ inconnu, archivé ou valeur hors liste) |
 | GET | `/custom-fields` | — | `{ fields: { id, label, type, options: { id, label }[], order, active }[] }` (actifs) |

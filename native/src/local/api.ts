@@ -826,7 +826,18 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     for (const [m, re, h] of routes) {
       if (m !== method) continue;
       const match = re.exec(path);
-      if (match) return h({ params: match.slice(1).map(decodeURIComponent), body, query: url.searchParams });
+      if (!match) continue;
+      // Création à partir d'un modèle : la structure du modèle n'est pas locale, le serveur s'en charge.
+      if (method === "POST" && (path === "/projects" || path === "/mindmaps") && body && typeof body === "object" && (body as { templateId?: unknown }).templateId) {
+        return online(method, rawPath, body);
+      }
+      try {
+        return await h({ params: match.slice(1).map(decodeURIComponent), body, query: url.searchParams });
+      } catch (e) {
+        // Objet absent de la base locale (modèle, consultation, partage pas encore synchronisé) : serveur.
+        if (e instanceof ApiClientError && e.status === 404) return online(method, rawPath, body);
+        throw e;
+      }
     }
     // Tout le reste (équipe, livrables, documents, dossiers, administration, mot de passe…) : serveur.
     return online(method, rawPath, body);

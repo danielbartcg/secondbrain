@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { badRequest, notFound } from "@/lib/api";
 import { sanitizeNotes } from "@/lib/sanitize";
-import { hasHtmlContent, projectAccessWhere, taskAccessWhere, taskHref } from "@/lib/projects";
+import { hasHtmlContent, projectAccessWhere, projectEditWhere, taskAccessWhere, taskEditWhere, taskHref } from "@/lib/projects";
 import { NO_PROJECT_LABEL } from "@/lib/tasks";
 import { mapAccessWhere, requireMapAccess } from "@/lib/map-access";
 import { mapAccessOf } from "@/lib/shared/map-access";
@@ -243,18 +243,18 @@ export async function getDocument(userId: string, ref: string): Promise<NoteDocu
       return { ...base, editable, title: node.title, breadcrumb: [SECTION_CRUMB.mindmaps, ...path], href: `/mindmaps/${node.mapId}?node=${node.id}`, notes: sanitizeNotes(node.notes), updatedAt: node.updatedAt.toISOString() };
     }
     case "project": {
-      const p = await prisma.project.findFirst({ where: { id, ...projectAccessWhere(userId) }, select: { id: true, name: true, notes: true, updatedAt: true } });
+      const p = await prisma.project.findFirst({ where: { id, ...(await projectEditWhere(userId)) }, select: { id: true, name: true, notes: true, updatedAt: true } });
       if (!p) throw notFound("Projet");
       return { ...base, title: p.name, breadcrumb: [SECTION_CRUMB.projects], href: `/projects/${p.id}`, notes: sanitizeNotes(p.notes), updatedAt: p.updatedAt.toISOString() };
     }
     case "stage": {
-      const s = await prisma.stage.findFirst({ where: { id, project: projectAccessWhere(userId) }, select: { id: true, name: true, notes: true, updatedAt: true, project: { select: { id: true, name: true } } } });
+      const s = await prisma.stage.findFirst({ where: { id, project: (await projectEditWhere(userId)) }, select: { id: true, name: true, notes: true, updatedAt: true, project: { select: { id: true, name: true } } } });
       if (!s) throw notFound("Étape");
       return { ...base, title: s.name, breadcrumb: [SECTION_CRUMB.projects, { ref: `project:${s.project.id}`, title: s.project.name }], href: `/projects/${s.project.id}#plan`, notes: sanitizeNotes(s.notes), updatedAt: s.updatedAt.toISOString() };
     }
     case "activity": {
       const a = await prisma.activity.findFirst({
-        where: { id, stage: { project: projectAccessWhere(userId) } },
+        where: { id, stage: { project: (await projectEditWhere(userId)) } },
         select: { id: true, name: true, notes: true, updatedAt: true, stage: { select: { id: true, name: true, project: { select: { id: true, name: true } } } } },
       });
       if (!a) throw notFound("Activité");
@@ -269,7 +269,7 @@ export async function getDocument(userId: string, ref: string): Promise<NoteDocu
     }
     case "task": {
       const t = await prisma.task.findFirst({
-        where: { id, ...taskAccessWhere(userId) },
+        where: { id, ...(await taskEditWhere(userId)) },
         select: { id: true, name: true, notes: true, updatedAt: true, project: { select: { id: true, name: true } }, stage: { select: { id: true, name: true } }, activity: { select: { id: true, name: true } } },
       });
       if (!t) throw notFound("Tâche");
@@ -306,25 +306,25 @@ export async function saveNotes(userId: string, ref: string, html: string): Prom
       break;
     }
     case "project": {
-      const p = await prisma.project.findFirst({ where: { id, ...projectAccessWhere(userId) }, select: { id: true } });
+      const p = await prisma.project.findFirst({ where: { id, ...(await projectEditWhere(userId)) }, select: { id: true } });
       if (!p) throw notFound("Projet");
       await prisma.project.update({ where: { id }, data: { notes } });
       break;
     }
     case "stage": {
-      const s = await prisma.stage.findFirst({ where: { id, project: projectAccessWhere(userId) }, select: { id: true } });
+      const s = await prisma.stage.findFirst({ where: { id, project: (await projectEditWhere(userId)) }, select: { id: true } });
       if (!s) throw notFound("Étape");
       await prisma.stage.update({ where: { id }, data: { notes } });
       break;
     }
     case "activity": {
-      const a = await prisma.activity.findFirst({ where: { id, stage: { project: projectAccessWhere(userId) } }, select: { id: true } });
+      const a = await prisma.activity.findFirst({ where: { id, stage: { project: (await projectEditWhere(userId)) } }, select: { id: true } });
       if (!a) throw notFound("Activité");
       await prisma.activity.update({ where: { id }, data: { notes } });
       break;
     }
     case "task": {
-      const t = await prisma.task.findFirst({ where: { id, ...taskAccessWhere(userId) }, select: { id: true } });
+      const t = await prisma.task.findFirst({ where: { id, ...(await taskEditWhere(userId)) }, select: { id: true } });
       if (!t) throw notFound("Tâche");
       await prisma.task.update({ where: { id }, data: { notes } });
       break;

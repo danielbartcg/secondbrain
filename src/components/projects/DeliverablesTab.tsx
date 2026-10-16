@@ -45,6 +45,8 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
   const [uploading, setUploading] = useState(false);
   const assignee = d.assigneeId ? project.members.find((m) => m.id === d.assigneeId) : null;
   const late = d.expectedEnd && (d.status === "PLANNED" || d.status === "IN_PROGRESS") && new Date(d.expectedEnd) < new Date();
+  // Projet type : seulement le nom, la description et l'étape (statut, responsable, dates, documents : propres à chaque projet).
+  const tpl = project.isTemplate;
   const unattached = project.documents.filter((doc) => !doc.deliverableId);
 
   async function upload(files: FileList | null) {
@@ -68,7 +70,7 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={DELIVERABLE_STATUS_TONE[d.status]}>{DELIVERABLE_STATUS_LABEL[d.status]}</Badge>
+            {!tpl && <Badge tone={DELIVERABLE_STATUS_TONE[d.status]}>{DELIVERABLE_STATUS_LABEL[d.status]}</Badge>}
             <InlineEdit value={d.name} onSave={(name) => patch({ name })} as="h3" className="-mx-1.5 font-semibold" />
             {late && <Badge tone="danger">En retard</Badge>}
           </div>
@@ -100,7 +102,8 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
+      <div className={`mt-3 grid gap-2 text-sm ${tpl ? "sm:max-w-xs" : "sm:grid-cols-2 lg:grid-cols-5"}`}>
+        {!tpl && (
         <label className="flex flex-col gap-1 text-xs text-muted">
           Statut
           <select value={d.status} onChange={(e) => patch({ status: e.target.value })} className={selectClass}>
@@ -111,6 +114,8 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
             ))}
           </select>
         </label>
+        )}
+        {!tpl && (
         <label className="flex flex-col gap-1 text-xs text-muted">
           Responsable
           <select value={d.assigneeId ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className={selectClass}>
@@ -122,6 +127,7 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
             ))}
           </select>
         </label>
+        )}
         <label className="flex flex-col gap-1 text-xs text-muted">
           Étape
           <select value={d.stageId ?? ""} onChange={(e) => patch({ stageId: e.target.value || null })} className={selectClass}>
@@ -133,14 +139,18 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
             ))}
           </select>
         </label>
+        {!tpl && (
         <label className="flex flex-col gap-1 text-xs text-muted">
           Début attendu
           <input type="date" value={toInputDate(d.expectedStart)} onChange={(e) => patch({ expectedStart: e.target.value || null })} className={selectClass} />
         </label>
+        )}
+        {!tpl && (
         <label className="flex flex-col gap-1 text-xs text-muted">
           Fin attendue
           <input type="date" value={toInputDate(d.expectedEnd)} onChange={(e) => patch({ expectedEnd: e.target.value || null })} className={selectClass} />
         </label>
+        )}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted">
@@ -152,7 +162,8 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
         {d.deliveredAt && <span>Livré le {formatDate(d.deliveredAt)}</span>}
       </div>
 
-      {/* Documents du livrable */}
+      {/* Documents du livrable (pas dans un projet type) */}
+      {!tpl && (
       <div className="mt-3 rounded-xl border border-line bg-surface-2/60 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
@@ -204,6 +215,7 @@ function DeliverableCard({ d, index, count, project, run }: { d: DeliverableDto;
           </ul>
         )}
       </div>
+      )}
     </section>
   );
 }

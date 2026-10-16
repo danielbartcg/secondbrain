@@ -5,7 +5,7 @@ import { deleteDocumentFile, resolveDocumentPath, saveDocumentFile } from "@/lib
 import {
   checkFolder,
   mutateProject,
-  projectAccessWhere,
+  projectEditWhere,
   requireProjectAccess,
   toDocumentDto,
   type DocumentDto,
@@ -20,7 +20,7 @@ import type { UpdateDocumentInput } from "@/lib/schemas";
  */
 
 async function documentProjectId(userId: string, documentId: string): Promise<string> {
-  const d = await prisma.document.findFirst({ where: { id: documentId, project: projectAccessWhere(userId) }, select: { projectId: true } });
+  const d = await prisma.document.findFirst({ where: { id: documentId, project: (await projectEditWhere(userId)) }, select: { projectId: true } });
   if (!d) throw notFound("Document");
   return d.projectId;
 }
@@ -102,7 +102,7 @@ export async function documentForDownload(
   userId: string,
   documentId: string,
 ): Promise<{ path: string; mimeType: string; fileName: string; size: number }> {
-  const d = await prisma.document.findFirst({ where: { id: documentId, project: projectAccessWhere(userId) } });
+  const d = await prisma.document.findFirst({ where: { id: documentId, project: (await projectEditWhere(userId)) } });
   if (!d) throw notFound("Document");
   const filePath = resolveDocumentPath(d.storagePath);
   if (!filePath) throw notFound("Document");
