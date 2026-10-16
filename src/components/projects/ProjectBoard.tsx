@@ -46,7 +46,7 @@ export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }
             }}
           />
         )}
-        {project.tasks.length === 0 && !addingLoose && <p className="mt-1 text-xs text-muted">Les tâches créées ici ne sont rattachées à aucune étape ; elles comptent dans l'avancement du projet.</p>}
+        {project.tasks.length === 0 && !addingLoose && <p className="mt-1 text-xs text-muted">{project.isTemplate ? "Tâches du modèle rattachées à aucune étape." : "Les tâches créées ici ne sont rattachées à aucune étape ; elles comptent dans l'avancement du projet."}</p>}
       </section>
 
       <div className="flex items-center justify-between">
@@ -97,12 +97,19 @@ function StageCard({ stage, index, count, project, run, defaultOpen = true }: { 
             <InlineEdit value={stage.name} onSave={(name) => patch({ name })} as="h3" className="-mx-1.5 font-semibold" />
             <NotesLink noteRef={`stage:${stage.id}`} has={stage.hasNotes} />
           </div>
-          <div className="mt-2 flex items-center gap-3">
-            <ProgressBar percent={stage.progress.percent} color={project.color} />
-            <span className="shrink-0 text-xs font-medium tabular-nums text-ink-2">
-              {stage.progress.percent}% · {stage.progress.done}/{total}
-            </span>
-          </div>
+          {/* Projet type : pas d'avancement, seulement le nombre de tâches. */}
+          {project.isTemplate ? (
+            <p className="mt-1 text-xs text-muted">
+              {total} tâche{total > 1 ? "s" : ""}
+            </p>
+          ) : (
+            <div className="mt-2 flex items-center gap-3">
+              <ProgressBar percent={stage.progress.percent} color={project.color} />
+              <span className="shrink-0 text-xs font-medium tabular-nums text-ink-2">
+                {stage.progress.percent}% · {stage.progress.done}/{total}
+              </span>
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             {!project.isTemplate && <DateField label="Début" value={stage.startDate} onChange={(v) => patch({ startDate: v })} />}
             {!project.isTemplate && <DateField label="Échéance" value={stage.dueDate} onChange={(v) => patch({ dueDate: v })} />}
@@ -192,12 +199,18 @@ function ActivityBlock({ activity, index, count, project, run }: { activity: Act
             <InlineEdit value={activity.name} onSave={(name) => patch({ name })} as="h4" className="-mx-1.5 text-sm font-medium" />
             <NotesLink noteRef={`activity:${activity.id}`} has={activity.hasNotes} />
           </div>
-          <div className="mt-1.5 flex items-center gap-3">
-            <ProgressBar percent={activity.progress.percent} color={project.color} className="h-1.5" />
-            <span className="shrink-0 text-[11px] tabular-nums text-muted">
-              {activity.progress.percent}% · {activity.progress.done}/{activity.tasks.length}
-            </span>
-          </div>
+          {project.isTemplate ? (
+            <p className="mt-0.5 text-[11px] text-muted">
+              {activity.tasks.length} tâche{activity.tasks.length > 1 ? "s" : ""}
+            </p>
+          ) : (
+            <div className="mt-1.5 flex items-center gap-3">
+              <ProgressBar percent={activity.progress.percent} color={project.color} className="h-1.5" />
+              <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                {activity.progress.percent}% · {activity.progress.done}/{activity.tasks.length}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center">
           <IconBtn title="Monter" disabled={index === 0} onClick={() => patch({ order: index - 1 })}>
