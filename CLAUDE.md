@@ -147,6 +147,11 @@ d'`addLicense` ailleurs.
   (partagés serveur / application). Une nouvelle route `/api/v1` utilisée par
   un écran hors ligne doit exister dans `native/src/local/api.ts` (sinon elle
   est relayée au serveur et indisponible hors ligne).
+- **Parité stricte** avec le site (docs/05 § 8 ter) : un écran web nouveau ou
+  modifié l'est aussi dans `native/src/App.tsx` (même composition, mêmes
+  props) ; une route relayée en ligne doit fonctionner (multipart, lecture
+  hors périmètre local) ; un champ dérivé ajouté aux lignes synchronisées ⇒
+  incrémenter `LOCAL_DATA_VERSION`.
 - Après toute évolution touchant projets, tâches ou cartes : `npm run
   test:native` (serveur de dev lancé) en plus de `test:sync` ; pour la coque,
   `npm run desktop:smoke`.

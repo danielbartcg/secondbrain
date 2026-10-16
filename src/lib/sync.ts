@@ -119,6 +119,21 @@ async function mindMapRows(where: Prisma.MindMapWhereInput): Promise<Row[]> {
   return rows.map(({ owner, ...m }) => ({ ...m, ownerName: owner.name, ownerAvatarUrl: owner.avatarUrl }));
 }
 
+/**
+ * Membres et commentaires enrichis du nom et de la photo du compte
+ * (`userName` / `userAvatarUrl`, `authorName` / `authorAvatarUrl` : champs
+ * dérivés non journalisés) : l'application affiche les autres personnes
+ * comme le site.
+ */
+async function memberRows(where: Prisma.ProjectMemberWhereInput): Promise<Row[]> {
+  const rows = await prisma.projectMember.findMany({ where, include: { user: { select: { name: true, avatarUrl: true } } } });
+  return rows.map(({ user, ...m }) => ({ ...m, userName: user?.name ?? null, userAvatarUrl: user?.avatarUrl ?? null }));
+}
+async function commentRows(where: Prisma.TaskCommentWhereInput): Promise<Row[]> {
+  const rows = await prisma.taskComment.findMany({ where, include: { author: { select: { name: true, avatarUrl: true } } } });
+  return rows.map(({ author, ...c }) => ({ ...c, authorName: author.name, authorAvatarUrl: author.avatarUrl }));
+}
+
 /** Lignes courantes d'une entité, par identifiant. */
 async function fetchRows(entity: SyncEntity, ids: string[]): Promise<Map<string, Row>> {
   const out = new Map<string, Row>();
@@ -141,7 +156,7 @@ async function fetchRows(entity: SyncEntity, ids: string[]): Promise<Map<string,
       rows = await prisma.project.findMany({ where: { id: { in: ids } } });
       break;
     case "ProjectMember":
-      rows = await prisma.projectMember.findMany({ where: { id: { in: ids } } });
+      rows = await memberRows({ id: { in: ids } });
       break;
     case "Stage":
       rows = await prisma.stage.findMany({ where: { id: { in: ids } } });
@@ -159,7 +174,7 @@ async function fetchRows(entity: SyncEntity, ids: string[]): Promise<Map<string,
       rows = await prisma.workSession.findMany({ where: { id: { in: ids } } });
       break;
     case "TaskComment":
-      rows = await prisma.taskComment.findMany({ where: { id: { in: ids } } });
+      rows = await commentRows({ id: { in: ids } });
       break;
     case "Deliverable":
       rows = await prisma.deliverable.findMany({ where: { id: { in: ids } } });
@@ -281,7 +296,7 @@ export async function snapshot(userId: string, only?: { projectId?: string; mapI
     prisma.mindNode.findMany({ where: { mapId: { in: mids } } }),
     prisma.mindNodeTask.findMany({ where: { node: { mapId: { in: mids } } } }),
     prisma.project.findMany({ where: { id: { in: pids } } }),
-    prisma.projectMember.findMany({ where: { projectId: { in: pids } } }),
+    memberRows({ projectId: { in: pids } }),
     prisma.stage.findMany({ where: { projectId: { in: pids } } }),
     prisma.activity.findMany({ where: { stage: { projectId: { in: pids } } } }),
     prisma.task.findMany({ where: { OR: [{ projectId: { in: pids } }, ...(only ? [] : [{ projectId: null, ownerId: userId }])] } }),
@@ -293,7 +308,7 @@ export async function snapshot(userId: string, only?: { projectId?: string; mapI
   const [contributors, sessions, comments] = await Promise.all([
     prisma.taskContributor.findMany({ where: { taskId: { in: taskIds } } }),
     prisma.workSession.findMany({ where: { taskId: { in: taskIds } } }),
-    prisma.taskComment.findMany({ where: { taskId: { in: taskIds } } }),
+    commentRows({ taskId: { in: taskIds } }),
   ]);
 
   const groups: Array<[SyncEntity, Row[]]> = [
@@ -426,7 +441,11 @@ async function applyCreate(userId: string, op: SyncOpInput): Promise<void> {
       return;
     }
     case "Project":
-      await createProject(userId, createProjectSchema.parse(drop(f, ["notes"])), op.id);
+      {
+        // Membre « moi » créé hors ligne : même identifiant côté serveur (tâches déjà affectées).
+        const mid = typeof f.ownerMemberId === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(f.ownerMemberId) ? f.ownerMemberId : undefined;
+        await createProject(userId, createProjectSchema.parse(drop(f, ["notes", "ownerMemberId"])), op.id, mid);
+      }
       if (typeof f.notes === "string") await saveNotes(userId, `project:${op.id}`, notesSchema.parse(f.notes));
       return;
     case "Stage":

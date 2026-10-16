@@ -238,6 +238,8 @@ fonctionne hors ligne sur les projets et cartes (docs/05-offline-sync.md) :
 
 ## Synchronisation hors ligne (`src/lib/sync.ts`)
 
+Parité stricte site / application (décisions et mécanismes : docs/05, § 8 ter).
+
 Socle serveur des applications desktop / iPhone (détail : docs/05-offline-sync.md).
 - Un **déclencheur PostgreSQL** (`sb_sync_log`) journalise dans `SyncLog` toute
   écriture sur les tables synchronisées (création, champ modifié, suppression),

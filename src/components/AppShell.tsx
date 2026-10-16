@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { MessagesSquare, Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
 import { Avatar } from "@/components/ui";
-import { api } from "@/lib/client";
+import { api, ApiClientError } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { useUnreadMessages } from "@/lib/messages-store";
 import { seedPins, usePins } from "@/lib/pins-store";
@@ -59,7 +59,15 @@ export function AppShell({ user, children, statusSlot, pins: initialPins }: { us
   }, [open]);
 
   async function logout() {
-    await api.post("/auth/logout").catch(() => {});
+    try {
+      await api.post("/auth/logout");
+    } catch (e) {
+      // Application hors ligne : des modifications n'ont pas encore été envoyées au serveur.
+      if (e instanceof ApiClientError && e.code === "UNSYNCED_CHANGES") {
+        if (!window.confirm(`${e.message}\n\nReconnectez-vous au réseau pour les envoyer, ou confirmez pour vous déconnecter quand même.`)) return;
+        await api.post("/auth/logout", { force: true }).catch(() => {});
+      }
+    }
     router.push("/login");
     router.refresh();
   }

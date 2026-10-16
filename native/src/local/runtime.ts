@@ -1,4 +1,4 @@
-import { setApiTransport } from "@/lib/client";
+import { setApiTransport, setAppServerOrigin } from "@/lib/client";
 import { createLocalApi } from "./api";
 import { LocalDb } from "./db";
 import { LocalModel } from "./model";
@@ -36,6 +36,7 @@ export async function createRuntime(opts: { factory?: IDBFactory; dbName?: strin
     } else setApiTransport(handle);
   }
   setRemoteSession({ serverUrl: store.meta.serverUrl, token: store.meta.token });
+  setAppServerOrigin(store.meta.serverUrl || null);
   if (typeof window !== "undefined" && window.secondBrain && store.meta.token) await window.secondBrain.setSession({ serverUrl: store.meta.serverUrl, token: store.meta.token });
 
   async function signIn(serverUrl: string, email: string, password: string) {
@@ -62,6 +63,7 @@ export async function createRuntime(opts: { factory?: IDBFactory; dbName?: strin
     if (r.status !== 200 || !r.data.token) throw new Error(r.data.error?.message ?? `Connexion refusée (${r.status}).`);
     const token = r.data.token;
     setRemoteSession({ serverUrl: url, token });
+    setAppServerOrigin(url);
     // La coque Electron n'accepte que l'origine de sa session et ajoute elle-même le jeton : on la lui transmet avant /me.
     if (typeof window !== "undefined" && window.secondBrain) await window.secondBrain.setSession({ serverUrl: url, token });
     const me = await remote<{ profile: Profile }>("GET", "/me");

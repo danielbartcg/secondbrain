@@ -106,7 +106,9 @@ function checkedRequest(req, { upload = false } = {}) {
   if (!origin) throw new Error("URL invalide");
   const sessionOrigin = originOf(session.serverUrl);
   const isLogin = !upload && method === "POST" && url.pathname === "/api/v1/auth/login";
-  const allowed = (sessionOrigin && origin === sessionOrigin) || (isLogin && pendingServer && origin === pendingServer);
+  // Avant connexion : options publiques (lien « Mot de passe oublié », inscriptions ouvertes).
+  const isOptions = !upload && method === "GET" && url.pathname === "/api/v1/auth/options";
+  const allowed = (sessionOrigin && origin === sessionOrigin) || ((isLogin || isOptions) && pendingServer && origin === pendingServer);
   if (!allowed) throw new Error("Serveur non autorisé");
   const headers = {};
   for (const [k, v] of Object.entries(req.headers || {})) {
@@ -152,12 +154,23 @@ const DOCUMENT_DOWNLOAD = /^\/api\/v1\/documents\/[A-Za-z0-9_-]+\/download$/;
 /** Export Excel d'un projet (fichier binaire authentifié). */
 const PROJECT_EXPORT = /^\/api\/v1\/projects\/[A-Za-z0-9_-]+\/export$/;
 
+/** Message affiché par l'interface (toast) : erreurs de téléchargement. */
+function notifyRenderer(message) {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win && !win.isDestroyed()) win.webContents.send("sb:notice", String(message));
+}
+
 async function proxyAuthenticated(pathname, search) {
   if (!session.serverUrl || !session.token) return new Response("Connexion requise", { status: 401 });
   try {
-    return await net.fetch(session.serverUrl + pathname + search, { headers: { Authorization: `Bearer ${session.token}` } });
+    const r = await net.fetch(session.serverUrl + pathname + search, { headers: { Authorization: `Bearer ${session.token}` } });
+    if (r.ok) return r;
+    // Échec : pas de navigation vers une page d'erreur (la fenêtre quitterait l'application).
+    notifyRenderer(r.status === 404 ? "Fichier introuvable." : r.status === 401 ? "Session expirée : reconnectez-vous." : `Téléchargement impossible (${r.status}).`);
+    return new Response(null, { status: 204 });
   } catch {
-    return new Response("Ce document nécessite une connexion au serveur.", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    notifyRenderer("Ce fichier nécessite une connexion au serveur.");
+    return new Response(null, { status: 204 });
   }
 }
 
@@ -204,6 +217,9 @@ function registerIpc() {
     // Multipart : le Content-Type (avec boundary) est posé par FormData.
     for (const k of Object.keys(headers)) if (k.toLowerCase() === "content-type") delete headers[k];
     const form = new FormData();
+    // Champs texte (dossier, livrable…) : 20 au plus, valeurs bornées.
+    const fields = req.fields && typeof req.fields === "object" ? Object.entries(req.fields).slice(0, 20) : [];
+    for (const [k, v] of fields) if (typeof v === "string" && k.length <= 64 && v.length <= 2000) form.append(k, v);
     form.append(String(req.field || "file"), new Blob([Buffer.from(req.data)], { type: String(req.type || "") }), String(req.filename || "image"));
     const r = await net.fetch(url, { method: "POST", headers, body: form });
     return { status: r.status, body: await r.text() };

@@ -21,6 +21,18 @@ export class ApiClientError extends Error {
  * Transport alternatif : l'application native (native/) sert l'API depuis sa
  * base locale hors ligne. Sur le site, il reste nul et rien ne change.
  */
+let appServerOrigin: string | null = null;
+/** Application native : origine du serveur de la session (le site, lui, est servi par le serveur). */
+export function setAppServerOrigin(origin: string | null) {
+  appServerOrigin = origin;
+}
+/** Origine du serveur : celle de la page sur le site, celle de la session dans l'application. */
+export function serverOriginOf(fallback: string): string {
+  if (appServerOrigin) return appServerOrigin;
+  if (typeof window !== "undefined" && /^https?:$/.test(window.location.protocol) && !window.location.port.startsWith("517")) return window.location.origin;
+  return fallback;
+}
+
 export type ApiTransport = (method: string, path: string, body?: unknown) => Promise<unknown>;
 let transport: ApiTransport | null = null;
 export function setApiTransport(t: ApiTransport | null) {

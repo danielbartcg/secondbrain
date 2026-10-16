@@ -327,7 +327,9 @@ changer `parentId` = déplacer), `MindNodeTask` (id `nodeId:taskId`, create / de
 (`{ taskId, date }`), `TaskComment` (`{ taskId, body, parentId? }`, pas de modification). Lecture seule :
 `ProjectMember`, `Deliverable`, `Document` (sans chemin de stockage), `Folder`, `MindMapShare` (id `mapId:userId` ;
 le propriétaire reçoit tous les partages de sa carte, un destinataire seulement le sien). Les lignes `MindMap`
-portent en plus `ownerName` et `ownerAvatarUrl` (dérivés, non versionnés). Le périmètre `mapIds` comprend les
+portent en plus `ownerName` et `ownerAvatarUrl`, les `ProjectMember` `userName` et `userAvatarUrl`, les `TaskComment`
+`authorName` et `authorAvatarUrl` (dérivés, non versionnés). `Project` create accepte `ownerMemberId` (identifiant
+imposé de la fiche membre du créateur, projet créé hors ligne). Le périmètre `mapIds` comprend les
 cartes partagées avec moi ; une écriture sur une carte en lecture seule est `rejected` (403 `READ_ONLY`).
 
 Règles :
@@ -390,6 +392,7 @@ type OrganizerTask = Task & { projectId; projectName; projectColor; stageName; a
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
 | GET | `/me/tasks` | — | `{ tasks: OrganizerTask[] }` triées par rang, puis échéance, puis priorité |
+| GET | `/me/tasks/order` | — | `{ taskIds: string[] }` : mon ordre relatif (tâches accessibles), utilisé par l'application |
 | PUT | `/me/tasks/order` | `{ taskIds: string[] }` (ordre voulu ; ids inaccessibles ignorés) | `{ ok: true }` |
 
 ```ts

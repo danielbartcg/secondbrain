@@ -74,6 +74,46 @@ export async function remote<T = unknown>(method: string, path: string, body?: u
   return { status, data: data as T };
 }
 
+/**
+ * Formulaire multipart (documents de projet, fichiers de livrable) : un fichier
+ * et des champs texte. Coque Electron : envoyé par le processus principal.
+ */
+export async function remoteForm<T = unknown>(path: string, form: FormData): Promise<RemoteResponse<T>> {
+  if (forcedOffline) throw new NetworkError("Mode hors ligne");
+  const headers: Record<string, string> = { "X-Sync-Protocol": String(SYNC_PROTOCOL) };
+  if (session.token) headers.Authorization = `Bearer ${session.token}`;
+  let status: number;
+  let text: string;
+  try {
+    if (typeof window !== "undefined" && window.secondBrain) {
+      let file: { field: string; blob: File | Blob; name: string } | null = null;
+      const fields: Record<string, string> = {};
+      for (const [k, v] of form.entries()) {
+        if (typeof v === "string") fields[k] = v;
+        else if (!file) file = { field: k, blob: v, name: (v as File).name || "fichier" };
+      }
+      if (!file) throw new Error("Aucun fichier à envoyer.");
+      const r = await window.secondBrain.upload({ url: absolute(path), headers, field: file.field, filename: file.name, type: file.blob.type, data: await file.blob.arrayBuffer(), fields });
+      status = r.status;
+      text = r.body;
+    } else {
+      const r = await fetch(absolute(path), { method: "POST", headers, body: form });
+      status = r.status;
+      text = await r.text();
+    }
+  } catch (e) {
+    throw new NetworkError(e instanceof Error ? e.message : "Serveur injoignable");
+  }
+  if (status === 502 || status === 503 || status === 504) throw new NetworkError(`Serveur indisponible (${status})`);
+  let data: unknown = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = {};
+  }
+  return { status, data: data as T };
+}
+
 /** Téléversement d'une image de note vers le serveur ; renvoie l'URL /media/…. */
 export async function remoteUpload(file: Blob, filename: string): Promise<string> {
   if (forcedOffline) throw new NetworkError("Mode hors ligne");

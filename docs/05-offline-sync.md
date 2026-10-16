@@ -221,11 +221,57 @@ politique de confidentialité obligatoires.
   application mémorise le protocole de ses données (`meta.protocol`) :
   différent ⇒ **instantané complet** au premier pull après la mise à jour.
 
+## 8 ter. Parité avec le site (16/10/2026, audit complet)
+
+Toute fonction du site existe dans l'application, à l'identique ; seules
+différences voulues : le site reste strictement en ligne, la messagerie et les
+fonctions « serveur » (risques, réunions, historique, partage de cartes,
+équipe, livrables, dossiers, administration, clés, mot de passe, e-mail) sont
+**relayées en ligne** et affichent « Disponible uniquement en ligne » hors
+connexion ; l'application ajoute synchro, conflits et mises à jour.
+
+- **Fichiers (documents, livrables)** : un `FormData` relayé part en
+  multipart (`remoteForm` ; coque Electron : `sb:upload` avec champs texte,
+  20 au plus), jamais en JSON.
+- **Écriture relayée** : `online()` attend la synchronisation qui suit
+  (membre ajouté, livrable créé… visibles tout de suite par les écrans locaux).
+- **Lecture hors périmètre local** (`GET /tasks/:id`, `/projects/:id`,
+  `/mindmaps/:id`) : à défaut de copie locale, le serveur répond — fiches en
+  consultation (administrateur, manager : `canEdit: false`), projet ou carte
+  partagés à l'instant.
+- **Déconnexion** : synchronisation d'abord ; s'il reste des modifications non
+  envoyées, refus `409 UNSYNCED_CHANGES` et confirmation (« se déconnecter
+  quand même », `{ force: true }`) — plus jamais d'effacement silencieux.
+- **Profil et ordre personnel** relus après une synchronisation (au plus toutes
+  les 2 min) : rôle, équipe (« Mon équipe »), nom, photo, adresse validée ;
+  ordre « Synthèse » (`GET /me/tasks/order`). Un ordre changé hors ligne est
+  mis en attente (`meta.pendingRanks`) et envoyé à la reconnexion.
+- **Projet créé hors ligne** : la fiche membre « moi » a un identifiant local
+  transmis au serveur (`ownerMemberId` dans l'opération `Project create`),
+  qui la crée avec ce même identifiant : les tâches affectées hors ligne sont
+  acceptées.
+- **Noms et photos des autres** : les lignes `ProjectMember` portent
+  `userName` / `userAvatarUrl`, les `TaskComment` `authorName` /
+  `authorAvatarUrl` (dérivés, non journalisés). `LOCAL_DATA_VERSION`
+  (`native/src/local/types.ts`) : l'incrémenter force un instantané complet au
+  premier démarrage d'une version qui ajoute de tels champs, sans changer le
+  protocole.
+- **Mêmes règles locales** : détacher une tâche de son projet réservé à son
+  créateur ou au propriétaire (403) ; supprimer une étape ou une activité
+  retire ses tâches des prérequis (aussi corrigé côté serveur).
+- **Coque** : téléchargement de document ou export en échec → message
+  (`sb:notice`, toast) au lieu d'une page d'erreur ; notes enregistrées par
+  l'API locale à la fermeture ; épingles et notifications : dernière liste
+  connue hors ligne ; connecteur Claude : adresse du serveur de la session ;
+  écran de connexion : « Mot de passe oublié ? » et « Créer un compte » selon
+  `/auth/options` (ouverts dans le navigateur).
+- Tests : `npm run test:native`, section « 9 ter. Parité avec le site ».
+
 ## 9. Limites connues
 
-- Hors ligne, les photos des autres membres et les noms d'auteurs de
-  commentaires qui ne sont pas membres d'un projet commun ne sont pas connus
-  (silhouette, « Utilisateur »).
+- Les noms et photos des autres comptes sont ceux du dernier envoi de leurs
+  fiches membre / commentaires : un changement de photo n'est vu qu'à la
+  prochaine modification de ces lignes ou au prochain instantané.
 - Les nouveaux objets créés hors ligne par l'application n'envoient leurs
   notifications qu'à la synchro (le serveur les émet en rejouant l'opération).
 - L'ordre des éléments (renumérotation) calculé localement peut être corrigé

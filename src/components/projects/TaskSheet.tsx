@@ -402,7 +402,11 @@ function AttachmentBlock({ task, patch }: { task: TaskDetailDto; patch: (data: R
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted">Projet</span>
           <select value={task.project?.id ?? ""} onChange={(e) => patch({ projectId: e.target.value || null })} className={`${selectClass} w-full`}>
             <option value="">Sans projet</option>
-            {(projects ?? (task.project ? [{ id: task.project.id, name: task.project.name }] : [])).map((p) => (
+            {/* Projet courant toujours proposé (consultation : il n'est pas dans « mes » projets). */}
+            {[
+              ...(task.project && !(projects ?? []).some((p) => p.id === task.project!.id) ? [{ id: task.project.id, name: task.project.name }] : []),
+              ...(projects ?? []),
+            ].map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>

@@ -207,6 +207,68 @@ async function main() {
   const srvPrereq = await http<Any>("GET", `/tasks/${offId}`, A.token);
   check("prérequis synchronisé au serveur", JSON.stringify(srvPrereq.data.task?.prerequisiteIds) === JSON.stringify([taskId]), srvPrereq.data.task?.prerequisiteIds);
 
+  console.log("\n9 ter. Parité avec le site");
+  {
+    // Projet créé hors ligne, tâche affectée à soi : la fiche membre garde son identifiant au serveur.
+    setForcedOffline(true);
+    const np = await api("POST", "/projects", { name: "Projet hors ligne" });
+    const npId = np.project.id as string;
+    const meMember = np.project.members[0].id as string;
+    const nt = await api("POST", `/projects/${npId}/tasks`, { name: "À moi", assigneeId: meMember });
+    // Déconnexion avec des modifications non envoyées : refusée (rien n'est effacé).
+    const lo = await api("POST", "/auth/logout").then(() => null, (e: Any) => e);
+    check("déconnexion refusée tant que des modifications attendent", lo?.code === "UNSYNCED_CHANGES" && rt.store.outbox.length > 0 && !!rt.store.meta.token, lo?.message);
+    // Ordre personnel modifié hors ligne : mis en attente.
+    await api("PUT", "/me/tasks/order", { taskIds: [nt.task.id, offId] });
+    check("ordre personnel en attente hors ligne", JSON.stringify(rt.store.meta.pendingRanks) === JSON.stringify([nt.task.id, offId]));
+    setForcedOffline(false);
+    await rt.sync.syncNow();
+    const srvNt = await http<Any>("GET", `/tasks/${nt.task.id}`, A.token);
+    check("projet créé hors ligne : tâche affectée à soi acceptée par le serveur", srvNt.status === 200 && srvNt.data.task.assigneeId === meMember && !rt.store.conflicts.some((x) => x.entityId === nt.task.id), { task: srvNt.data.task?.assigneeId, meMember, conflicts: rt.store.conflicts.slice(-2) });
+    const srvOrder = await http<Any>("GET", "/me/tasks/order", A.token);
+    check("ordre personnel envoyé à la reconnexion", srvOrder.data.taskIds?.[0] === nt.task.id && rt.store.meta.pendingRanks === null, srvOrder.data);
+
+    // Fichier de projet (multipart) depuis l'application.
+    const doc = new FormData();
+    doc.append("file", new Blob(["bonjour"], { type: "text/plain" }), "note.txt");
+    const upDoc = await api("POST", `/projects/${npId}/documents`, doc).then((r: Any) => r, (e: Any) => e);
+    const docs = await http<Any>("GET", `/projects/${npId}/documents`, A.token);
+    check("document envoyé depuis l'application", !(upDoc instanceof Error) && docs.data.documents?.some((d: Any) => d.name === "note.txt"), upDoc?.message ?? docs.data);
+
+    // Projet partagé à l'instant par B : ouvert depuis le serveur avant la synchro.
+    const shared = await http<Any>("POST", "/projects", B.token, { name: "Partagé à l'instant" });
+    const sid = shared.data.project.id as string;
+    await http("POST", `/projects/${sid}/members`, B.token, { userId: A.id });
+    const opened = await api("GET", `/projects/${sid}`).then((r: Any) => r, (e: Any) => e);
+    check("projet pas encore synchronisé : ouvert depuis le serveur", opened?.project?.id === sid, opened?.message);
+    // Tâche de B : A (simple membre) ne peut pas la sortir du projet.
+    const bTask = await http<Any>("POST", `/projects/${sid}/tasks`, B.token, { name: "Tâche de B" });
+    await rt.sync.syncNow();
+    const detach = await api("PATCH", `/tasks/${bTask.data.task.id}`, { projectId: null }).then(() => null, (e: Any) => e);
+    check("détacher la tâche d'autrui : refusé localement (403)", detach?.status === 403, detach?.message);
+    // B commente : nom de l'auteur fourni par le serveur.
+    await http("POST", `/tasks/${bTask.data.task.id}/comments`, B.token, { body: "Vu par B" });
+    await rt.sync.syncNow();
+    const cm = rt.store.where("TaskComment", (x) => x.body === "Vu par B")[0];
+    const detail = await api("GET", `/tasks/${bTask.data.task.id}`);
+    check("commentaire d'autrui : nom du compte joint par le serveur", cm?.authorName === "NativeB Test" && detail.task.comments.some((x: Any) => x.authorName === "NativeB Test"), cm);
+
+    // Suppression d'une étape : ses tâches ne restent prérequises de personne.
+    const st = await api("POST", `/projects/${npId}/stages`, { name: "Étape jetable" });
+    const stId = st.project.stages[0].id as string;
+    const inStage = await api("POST", `/stages/${stId}/tasks`, { name: "Dans l'étape" });
+    await api("PATCH", `/tasks/${nt.task.id}`, { prerequisiteIds: [inStage.task.id] });
+    await rt.sync.syncNow();
+    await api("DELETE", `/stages/${stId}`);
+    await rt.sync.syncNow();
+    const after = await http<Any>("GET", `/tasks/${nt.task.id}`, A.token);
+    check("étape supprimée : prérequis nettoyés (local et serveur)", rt.model.task(nt.task.id)!.prerequisiteIds.length === 0 && after.data.task.prerequisiteIds.length === 0, { local: rt.model.task(nt.task.id)!.prerequisiteIds, server: after.data.task.prerequisiteIds });
+
+    await http("DELETE", `/projects/${npId}`, A.token);
+    await http("DELETE", `/projects/${sid}`, B.token);
+    await rt.sync.syncNow();
+  }
+
   console.log("\n10. iPhone : URL des médias");
   const media = mediaRewriter(() => "https://sb.example");
   const dto = { notes: '<p><img src="/media/2026/a.png"></p>', avatarUrl: "/media/u/b.webp", other: "texte /media/ inchangé" };

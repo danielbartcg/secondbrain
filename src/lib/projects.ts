@@ -305,7 +305,11 @@ export async function getProject(userId: string, projectId: string): Promise<Pro
   return toProjectDto(p);
 }
 
-export async function createProject(userId: string, input: CreateProjectInput, id?: string): Promise<ProjectDto> {
+/**
+ * `ownerMemberId` : identifiant imposé pour la fiche membre du créateur (projet
+ * créé hors ligne : l'application a déjà affecté des tâches à ce membre).
+ */
+export async function createProject(userId: string, input: CreateProjectInput, id?: string, ownerMemberId?: string): Promise<ProjectDto> {
   const owner = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, email: true } });
   const p = await prisma.project.create({
     data: {
@@ -318,7 +322,7 @@ export async function createProject(userId: string, input: CreateProjectInput, i
       startDate: toDate(input.startDate) ?? null,
       dueDate: toDate(input.dueDate) ?? null,
       // Le créateur fait d'office partie de l'équipe : il peut s'affecter des tâches.
-      members: { create: { userId, name: owner.name, email: owner.email, role: "Chef de projet" } },
+      members: { create: { id: ownerMemberId, userId, name: owner.name, email: owner.email, role: "Chef de projet" } },
     },
   });
   return getProject(userId, p.id);
@@ -426,6 +430,8 @@ export async function updateStage(userId: string, stageId: string, input: Update
 export async function deleteStage(userId: string, stageId: string): Promise<ProjectDto> {
   const projectId = await stageProjectId(userId, stageId);
   return mutateProject(projectId, async (tx) => {
+    // Les tâches de l'étape disparaissent : elles ne sont plus prérequises de personne.
+    for (const t of await tx.task.findMany({ where: { stageId }, select: { id: true } })) await dropFromPrerequisites(tx, t.id);
     await tx.stage.delete({ where: { id: stageId } });
     await resequence(tx, "stage", { projectId });
   });
@@ -452,6 +458,7 @@ export async function updateActivity(userId: string, activityId: string, input: 
 export async function deleteActivity(userId: string, activityId: string): Promise<ProjectDto> {
   const projectId = await activityProjectId(userId, activityId);
   return mutateProject(projectId, async (tx) => {
+    for (const t of await tx.task.findMany({ where: { activityId }, select: { id: true } })) await dropFromPrerequisites(tx, t.id);
     const a = await tx.activity.delete({ where: { id: activityId } });
     await resequence(tx, "activity", { stageId: a.stageId });
   });

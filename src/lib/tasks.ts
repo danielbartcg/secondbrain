@@ -345,6 +345,12 @@ export async function getMyTasks(userId: string): Promise<OrganizerDto> {
   return { tasks };
 }
 
+/** Ordre relatif personnel : identifiants des tâches ordonnées (accessibles), du premier au dernier. */
+export async function listMyTaskOrder(userId: string): Promise<string[]> {
+  const rows = await prisma.taskRank.findMany({ where: { userId, task: taskAccessWhere(userId) }, orderBy: { rank: "asc" }, select: { taskId: true } });
+  return rows.map((r) => r.taskId);
+}
+
 /** Enregistre l'ordre relatif personnel : `taskIds` dans l'ordre voulu (tâches accessibles uniquement). */
 export async function orderMyTasks(userId: string, taskIds: string[]): Promise<void> {
   const unique = [...new Set(taskIds)];

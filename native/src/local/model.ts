@@ -52,14 +52,24 @@ export class LocalModel {
     return u;
   }
 
-  /** Nom d'un compte : moi, sinon une fiche membre rattachée à ce compte. */
+  /**
+   * Nom et photo d'un compte, comme le serveur : moi ; sinon le compte tel que
+   * le serveur l'a joint aux membres (`userName`, `userAvatarUrl`) et aux
+   * commentaires (`authorName`, `authorAvatarUrl`) ; à défaut la fiche membre.
+   */
   userName(userId: string | null | undefined): string {
     if (!userId) return "Utilisateur";
     if (userId === this.store.meta.user?.id) return this.me.name;
-    return this.store.where("ProjectMember", (m) => m.userId === userId)[0]?.name ?? "Utilisateur";
+    const m = this.store.where("ProjectMember", (r) => r.userId === userId)[0];
+    if (m?.userName) return m.userName;
+    return this.store.where("TaskComment", (c) => c.authorId === userId && !!c.authorName)[0]?.authorName ?? m?.name ?? "Utilisateur";
   }
   userAvatar(userId: string | null | undefined): string | null {
-    return userId && userId === this.store.meta.user?.id ? this.me.avatarUrl : null;
+    if (!userId) return null;
+    if (userId === this.store.meta.user?.id) return this.me.avatarUrl;
+    const m = this.store.where("ProjectMember", (r) => r.userId === userId && r.userAvatarUrl !== undefined)[0];
+    if (m) return m.userAvatarUrl ?? null;
+    return this.store.where("TaskComment", (c) => c.authorId === userId && c.authorAvatarUrl !== undefined)[0]?.authorAvatarUrl ?? null;
   }
 
   // --- Lignes « façon Prisma » ------------------------------------------------------
@@ -163,7 +173,7 @@ export class LocalModel {
     const comments: TaskCommentDto[] = this.store
       .where("TaskComment", (c) => c.taskId === taskId)
       .sort(byCreated)
-      .map((c) => ({ id: c.id, parentId: c.parentId ?? null, authorId: c.authorId, authorName: this.userName(c.authorId), authorAvatarUrl: this.userAvatar(c.authorId), body: c.body, mentions: c.mentions ?? [], createdAt: c.createdAt }));
+      .map((c) => ({ id: c.id, parentId: c.parentId ?? null, authorId: c.authorId, authorName: c.authorName ?? this.userName(c.authorId), authorAvatarUrl: c.authorAvatarUrl !== undefined ? c.authorAvatarUrl : this.userAvatar(c.authorId), body: c.body, mentions: c.mentions ?? [], createdAt: c.createdAt }));
     const nodes = this.store
       .where("MindNodeTask", (l) => l.taskId === taskId)
       .map((l) => this.store.get("MindNode", l.nodeId))
@@ -529,7 +539,8 @@ export class LocalModel {
   }
 
   // --- Recherche locale (mêmes règles que src/lib/search.ts) --------------------------------
-  search(rawQuery: string, kinds?: SearchKind[], limit = 6): SearchHit[] {
+  search(rawQuery: string, kinds?: SearchKind[], rawLimit = 6): SearchHit[] {
+    const limit = Math.min(20, Math.max(1, rawLimit)); // même borne que le serveur
     const q = rawQuery.trim().slice(0, 100).toLowerCase();
     if (q.length < 2) return [];
     const all: SearchKind[] = ["project", "task", "node", "mindmap"];

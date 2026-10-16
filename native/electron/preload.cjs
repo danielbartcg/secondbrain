@@ -27,4 +27,6 @@ contextBridge.exposeInMainWorld("secondBrain", {
   installUpdate: () => ipcRenderer.invoke("sb:installUpdate"),
   onUpdateAvailable: (cb) => listen("sb:update-available", cb),
   onUpdateProgress: (cb) => listen("sb:update-progress", cb),
+  // Messages du processus principal (échec de téléchargement…).
+  onNotice: (cb) => listen("sb:notice", cb),
 });

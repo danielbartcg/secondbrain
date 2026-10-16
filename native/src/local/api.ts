@@ -25,7 +25,7 @@ import {
 import type { SearchKind } from "@/lib/search";
 import { ZodError, type ZodTypeAny, type z } from "zod";
 import { byOrder, type LocalModel } from "./model";
-import { NetworkError, remote, remoteUpload } from "./remote";
+import { NetworkError, remote, remoteForm, remoteUpload } from "./remote";
 import type { Store } from "./store";
 import { prerequisiteError } from "@/lib/shared/prerequisites";
 import { labelOf, newId, type SyncEngine } from "./sync";
@@ -99,12 +99,15 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   /** Relais vers le serveur (fonctions hors périmètre hors ligne). */
   async function online(method: string, path: string, body?: unknown): Promise<unknown> {
     try {
-      const r = await remote(method, path, body);
+      // Fichiers (documents, livrables) : formulaire multipart, comme sur le site.
+      const r = typeof FormData !== "undefined" && body instanceof FormData ? await remoteForm(path, body) : await remote(method, path, body);
       if (r.status >= 400) {
         const err = (r.data as { error?: { code: string; message: string; details?: unknown } }).error;
         throw new ApiClientError(r.status, err?.code ?? `HTTP_${r.status}`, err?.message ?? `Erreur ${r.status}`, err?.details);
       }
-      if (method !== "GET") void sync.syncNow();
+      // Écriture faite sur le serveur : on récupère tout de suite ses effets (membre ajouté,
+      // livrable créé…) pour que les écrans locaux suivants les voient.
+      if (method !== "GET") await sync.syncNow().catch(() => {});
       return r.data;
     } catch (e) {
       if (e instanceof NetworkError) throw new ApiClientError(503, "OFFLINE", "Cette action nécessite une connexion au serveur.");
@@ -127,6 +130,10 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     const m = model.mindmap(mapId);
     if (!m) throw notFound("Carte");
     return { mindmap: m };
+  }
+  /** Lecture d'une carte : locale, sinon serveur (carte partagée pas encore reçue). */
+  async function mapRead(mapId: string) {
+    return model.mindmap(mapId) ? mapResp(mapId) : online("GET", `/mindmaps/${encodeURIComponent(mapId)}`);
   }
 
   function createMap(body: unknown) {
@@ -260,9 +267,11 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     const u = me();
     store.put("Project", id, { id, ownerId: u.id, name: input.name, description: input.description, notes: "", color: input.color ?? null, status: input.status ?? "ACTIVE", startDate: toDay(input.startDate) ?? null, dueDate: toDay(input.dueDate) ?? null, createdAt: t, updatedAt: t });
     // Membre provisoire (le serveur crée le vrai à la synchro) : on peut s'affecter des tâches tout de suite.
+    // Fiche membre « moi » : le serveur la crée avec le même identifiant (ownerMemberId),
+    // si bien que les tâches affectées hors ligne restent valides à la synchronisation.
     const mid = newId("pm");
-    store.put("ProjectMember", mid, { id: mid, projectId: id, userId: u.id, name: u.name, email: u.email, role: "Chef de projet", color: null, createdAt: t, _provisional: true });
-    sync.enqueue("Project", id, "create", defined({ name: input.name, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate }), input.name);
+    store.put("ProjectMember", mid, { id: mid, projectId: id, userId: u.id, name: u.name, email: u.email, role: "Chef de projet", color: null, createdAt: t });
+    sync.enqueue("Project", id, "create", defined({ name: input.name, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate, ownerMemberId: mid }), input.name);
     return projectResp(id);
   }
 
@@ -308,6 +317,8 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
 
   function deleteStage(id: string) {
     const s = must("Stage", id, "Étape");
+    // Comme le serveur : les tâches supprimées ne restent prérequises de personne.
+    for (const t of store.where("Task", (r) => r.stageId === id)) dropFromPrerequisites(t.id as string);
     enqueue("Stage", id, "delete");
     store.removeCascade("Stage", id);
     resequence("Stage", (r) => r.projectId === s.projectId);
@@ -341,6 +352,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
 
   function deleteActivity(id: string) {
     const a = must("Activity", id, "Activité");
+    for (const t of store.where("Task", (r) => r.activityId === id)) dropFromPrerequisites(t.id as string);
     const s = must("Stage", a.stageId, "Étape");
     enqueue("Activity", id, "delete");
     store.removeCascade("Activity", id);
@@ -460,6 +472,10 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
       att = resolveAttachment({ projectId: input.projectId });
       if (att.projectId === t.projectId) att = { projectId: t.projectId ?? null, stageId: t.stageId ?? null, activityId: t.activityId ?? null };
     }
+    // Sortir une tâche de son projet : réservé à son créateur ou au propriétaire du projet (comme le serveur).
+    if (t.projectId && att.projectId === null && t.ownerId !== me().id && store.get("Project", t.projectId)?.ownerId !== me().id) {
+      throw new ApiClientError(403, "FORBIDDEN", "Seul le créateur de la tâche ou le propriétaire du projet peut la détacher du projet.");
+    }
     const moved = att.projectId !== (t.projectId ?? null) || att.stageId !== (t.stageId ?? null) || att.activityId !== (t.activityId ?? null);
     const projectChanged = att.projectId !== (t.projectId ?? null);
     const { status, progress } = reconcile({ status: t.status, progress: t.progress }, input);
@@ -528,9 +544,9 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     return { project: t.projectId ? model.project(t.projectId) : null, task: null };
   }
 
-  function taskDetail(taskId: string) {
+  async function taskDetail(taskId: string) {
     const d = model.taskDetail(taskId);
-    if (!d) throw notFound("Tâche");
+    if (!d) return online("GET", `/tasks/${encodeURIComponent(taskId)}`);
     return { task: d };
   }
 
@@ -648,7 +664,16 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     return r;
   }
 
-  async function logout() {
+  async function logout(body: unknown) {
+    const force = !!(body && typeof body === "object" && (body as { force?: unknown }).force === true);
+    if (!force) {
+      await sync.syncNow().catch(() => {});
+      const pending = store.outbox.length;
+      const conflicts = store.conflicts.length;
+      if (pending > 0) {
+        throw new ApiClientError(409, "UNSYNCED_CHANGES", `${pending} modification${pending > 1 ? "s n'ont" : " n'a"} pas encore été envoyée${pending > 1 ? "s" : ""} au serveur : elle${pending > 1 ? "s seraient perdues" : " serait perdue"} à la déconnexion.`, { pending, conflicts });
+      }
+    }
     await remote("POST", "/auth/logout").catch(() => {});
     if (typeof window !== "undefined" && window.secondBrain) await window.secondBrain.setSession(null);
     sync.stop();
@@ -659,15 +684,25 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   async function order(body: unknown) {
     const { taskIds } = parse(orderMyTasksSchema, body);
     store.setMeta("ranks", taskIds);
-    await remote("PUT", "/me/tasks/order", { taskIds }).catch(() => {});
+    try {
+      const r = await remote("PUT", "/me/tasks/order", { taskIds });
+      store.setMeta("pendingRanks", r.status < 400 ? null : taskIds);
+    } catch {
+      store.setMeta("pendingRanks", taskIds);
+    }
     return { ok: true };
   }
 
+  /** Dernière réponse par requête : affichée telle quelle hors ligne. */
+  const lastNotifications = new Map<string, unknown>();
   async function notifications(path: string, query: URLSearchParams) {
     try {
-      return await online("GET", path + (query.toString() ? `?${query}` : ""));
+      const key = path + (query.toString() ? `?${query}` : "");
+      const r = await online("GET", key);
+      lastNotifications.set(key, r);
+      return r;
     } catch (e) {
-      if (e instanceof ApiClientError && e.status === 503) return { notifications: [], unreadCount: 0 };
+      if (e instanceof ApiClientError && e.status === 503) return lastNotifications.get(path + (query.toString() ? `?${query}` : "")) ?? { notifications: [], unreadCount: 0 };
       throw e;
     }
   }
@@ -675,7 +710,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
   // --- Table de routage ----------------------------------------------------------------------------
   const routes: Array<[string, RegExp, Handler]> = [
     ["GET", /^\/auth\/me$/, () => ({ user: { id: me().id, email: me().email, name: me().name, firstName: me().firstName, lastName: me().lastName, avatarUrl: me().avatarUrl, theme: me().theme, role: me().role, isAdmin: me().isAdmin, createdAt: me().createdAt } })],
-    ["POST", /^\/auth\/logout$/, () => logout()],
+    ["POST", /^\/auth\/logout$/, ({ body }) => logout(body)],
     ["GET", /^\/me$/, () => profile()],
     ["PATCH", /^\/me$/, ({ body }) => updateProfile(body)],
     ["GET", /^\/dashboard$/, ({ query }) => ({ dashboard: model.dashboard(Math.min(365, Math.max(1, Number(query.get("horizon") ?? "30") || 30))) })],
@@ -683,7 +718,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     // Cartes mentales
     ["GET", /^\/mindmaps$/, () => ({ mindmaps: model.mindmaps() })],
     ["POST", /^\/mindmaps$/, ({ body }) => createMap(body)],
-    ["GET", /^\/mindmaps\/([^/]+)$/, ({ params }) => mapResp(params[0])],
+    ["GET", /^\/mindmaps\/([^/]+)$/, ({ params }) => mapRead(params[0])],
     ["PATCH", /^\/mindmaps\/([^/]+)$/, ({ params, body }) => updateMap(params[0], body)],
     ["DELETE", /^\/mindmaps\/([^/]+)$/, ({ params }) => deleteMap(params[0])],
     ["DELETE", /^\/mindmaps\/([^/]+)\/layout$/, ({ params }) => resetLayout(params[0])],
@@ -699,7 +734,8 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     ["POST", /^\/projects$/, ({ body }) => createProject(body)],
     ["GET", /^\/projects\/([^/]+)$/, ({ params }) => {
       const p = model.project(params[0]);
-      if (!p) throw notFound("Projet");
+      // Hors périmètre local (pas encore synchronisé) : serveur.
+      if (!p) return online("GET", `/projects/${encodeURIComponent(params[0])}`);
       return { project: p };
     }],
     ["PATCH", /^\/projects\/([^/]+)$/, ({ params, body }) => updateProject(params[0], body)],
@@ -736,6 +772,17 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     ["POST", /^\/uploads$/, ({ body }) => upload(body)],
     // Notifications : serveur si possible, sinon liste vide.
     ["GET", /^\/notifications$/, ({ query }) => notifications("/notifications", query)],
+    // Épingles : serveur (source de vérité), dernière liste connue hors ligne.
+    ["GET", /^\/me\/pins$/, async () => {
+      try {
+        const r = (await online("GET", "/me/pins")) as { pins: NonNullable<typeof store.meta.pins> };
+        store.setMeta("pins", r.pins);
+        return r;
+      } catch (e) {
+        if (e instanceof ApiClientError && e.status === 503 && store.meta.pins) return { pins: store.meta.pins };
+        throw e;
+      }
+    }],
   ];
 
   /** Transport branché sur `api` (src/lib/client.ts). */

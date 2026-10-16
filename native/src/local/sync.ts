@@ -1,6 +1,6 @@
 import { NetworkError, isForcedOffline, remote, remoteUpload } from "./remote";
 import type { Store } from "./store";
-import { SYNC_PROTOCOL, WRITABLE, type ConflictEntry, type Entity, type FieldSeqs, type Op, type OpKind, type Row, type RowRec, type SyncStatus } from "./types";
+import { LOCAL_DATA_VERSION, SYNC_PROTOCOL, WRITABLE, type ConflictEntry, type Entity, type FieldSeqs, type Op, type OpKind, type Row, type RowRec, type SyncStatus } from "./types";
 
 /**
  * Moteur de synchronisation de l'application native (docs/05-offline-sync.md).
@@ -19,6 +19,8 @@ import { SYNC_PROTOCOL, WRITABLE, type ConflictEntry, type Entity, type FieldSeq
 const SYNC_INTERVAL_MS = 30_000;
 const AFTER_WRITE_DELAY_MS = 1_500;
 const PUSH_BATCH = 100;
+/** Profil et ordre personnel relus au plus toutes les 2 minutes. */
+const ACCOUNT_REFRESH_MS = 120_000;
 
 type Change = { entity: Entity; id: string; op: "upsert" | "delete"; data?: Row; seqs?: FieldSeqs };
 type PullResult = { protocol: number; cursor: number | null; hasMore: boolean; snapshot: boolean; scope: { projectIds: string[]; mapIds: string[] }; changes: Change[] };
@@ -207,6 +209,7 @@ export class SyncEngine {
           const resync = await this.push();
           await this.pull(resync);
         } while (this.again);
+        await this.refreshAccount();
         const at = new Date().toISOString();
         this.store.setMeta("lastSyncAt", at);
         this.emit({ online: true, lastSyncAt: at, lastError: null });
@@ -221,6 +224,30 @@ export class SyncEngine {
       }
     })();
     return this.running;
+  }
+
+  /**
+   * Profil (rôle, équipe, nom, photo, adresse validée…) et ordre personnel
+   * « Mes tâches » relus sur le serveur, comme le site le fait à chaque page ;
+   * un ordre modifié hors ligne est envoyé d'abord.
+   */
+  private lastAccountRefresh = 0;
+  private async refreshAccount() {
+    if (!this.store.meta.pendingRanks && Date.now() - this.lastAccountRefresh < ACCOUNT_REFRESH_MS) return;
+    this.lastAccountRefresh = Date.now();
+    const me = await remote<{ profile?: Row }>("GET", "/me");
+    if (me.status === 200 && me.data.profile && JSON.stringify(me.data.profile) !== JSON.stringify(this.store.meta.user)) {
+      this.store.setMeta("user", me.data.profile as unknown as typeof this.store.meta.user);
+      this.emit();
+    }
+    const pending = this.store.meta.pendingRanks;
+    if (pending) {
+      const r = await remote("PUT", "/me/tasks/order", { taskIds: pending });
+      if (r.status < 400) this.store.setMeta("pendingRanks", null);
+      return;
+    }
+    const order = await remote<{ taskIds?: string[] }>("GET", "/me/tasks/order");
+    if (order.status === 200 && Array.isArray(order.data.taskIds)) this.store.setMeta("ranks", order.data.taskIds);
   }
 
   /** Vérifie la réponse : 426 (mise à jour obligatoire), 401 (session expirée). */
@@ -331,7 +358,7 @@ export class SyncEngine {
   }
 
   private async pull(full: boolean) {
-    if (full || !this.store.meta.cursor || this.store.meta.protocol !== SYNC_PROTOCOL) {
+    if (full || !this.store.meta.cursor || this.store.meta.protocol !== SYNC_PROTOCOL || this.store.meta.dataVersion !== LOCAL_DATA_VERSION) {
       const r = await remote<PullResult>("GET", "/sync/pull");
       this.guard(r.status, r.data);
       this.applySnapshot(r.data);
@@ -376,6 +403,7 @@ export class SyncEngine {
     this.store.replaceAll(recs);
     if (p.cursor !== null) this.store.setMeta("cursor", p.cursor);
     this.store.setMeta("protocol", SYNC_PROTOCOL);
+    this.store.setMeta("dataVersion", LOCAL_DATA_VERSION);
     this.emit({ remoteChanges: this.status.remoteChanges + 1 });
   }
 

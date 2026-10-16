@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bot, Check, Copy, KeyRound, Loader2, Mail, MailCheck, MailQuestion, Plus, Trash2 } from "lucide-react";
-import { api } from "@/lib/client";
+import { api, serverOriginOf } from "@/lib/client";
 import type { ProfileDto } from "@/lib/users";
 import type { ApiKeyDto } from "@/lib/api-keys";
 import { Button, Toggle, inputClass } from "@/components/ui";
@@ -154,8 +154,7 @@ export function EmailSection({ profile, onProfile }: { profile: ProfileDto; onPr
 // --- Connecteur Claude (MCP) -----------------------------------------------------------------------
 
 function serverOrigin(): string {
-  if (typeof window !== "undefined" && /^https?:$/.test(window.location.protocol) && !window.location.port.startsWith("517")) return window.location.origin;
-  return "https://secondbrain.danielbar-tcg.fr";
+  return serverOriginOf("https://secondbrain.danielbar-tcg.fr");
 }
 
 function CopyButton({ text, label = "Copier" }: { text: string; label?: string }) {

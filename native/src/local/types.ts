@@ -97,9 +97,22 @@ export type Meta = {
   /** Protocole des données locales : différent de SYNC_PROTOCOL (mise à jour de l'application) ⇒ instantané complet. */
   protocol: number;
   lastSyncAt: string | null;
-  /** Ordre personnel « Mes tâches » (non synchronisé : conservé localement). */
+  /** Ordre personnel « Mes tâches » (relu sur le serveur à chaque synchronisation). */
   ranks: string[];
+  /** Ordre modifié hors ligne, à envoyer au serveur (null = rien en attente). */
+  pendingRanks: string[] | null;
+  /** Version du format des lignes locales : différente de LOCAL_DATA_VERSION ⇒ instantané complet. */
+  dataVersion: number;
+  /** Dernières épingles connues (menu de gauche hors ligne). */
+  pins: { projects: { id: string; name: string; color: string | null }[]; mindmaps: { id: string; title: string }[] } | null;
 };
+
+/**
+ * Format des lignes locales (champs dérivés ajoutés par le serveur : noms et
+ * photos des comptes…). L'incrémenter force un instantané complet au premier
+ * démarrage de la nouvelle version, sans changer le protocole.
+ */
+export const LOCAL_DATA_VERSION = 2;
 
 export type SyncStatus = {
   online: boolean;

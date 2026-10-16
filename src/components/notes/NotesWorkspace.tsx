@@ -139,6 +139,11 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
   useEffect(() => {
     const onLeave = () => {
       if (pendingHtml.current !== null && current) {
+        // Application (app://, capacitor://) : API locale, enregistrée dans la base hors ligne.
+        if (!/^https?:$/.test(window.location.protocol)) {
+          void api.patch(`/notes/${current.replace(":", "/")}`, { notes: pendingHtml.current });
+          return;
+        }
         void fetch(`/api/v1/notes/${current.replace(":", "/")}`, {
           method: "PATCH",
           keepalive: true,

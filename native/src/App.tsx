@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { toast } from "@/components/ui";
 import { Download, Loader2, RefreshCw, WifiOff } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
 import { AppShell } from "@/components/AppShell";
@@ -8,7 +9,7 @@ import { MindMapEditor } from "@/components/mindmap/MindMapEditor";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { MessagesApp } from "@/components/messages/MessagesApp";
 import { AdminNotifications } from "@/components/admin/AdminNotifications";
-import type { NotificationSettingsDto } from "@/lib/settings";
+import type { NotificationSettingsDto, RegistrationSettingsDto } from "@/lib/settings";
 import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
 import { OrphanTasks } from "@/components/projects/OrphanTasks";
 import { TaskSheet } from "@/components/projects/TaskSheet";
@@ -19,6 +20,7 @@ import { PreferencesPage } from "@/components/PreferencesPage";
 import { TeamOverview } from "@/components/admin/TeamOverview";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { AdminUsers } from "@/components/admin/AdminUsers";
+import { AdminRegistrationToggle } from "@/components/admin/AdminRegistrationToggle";
 import { AdminProjects } from "@/components/admin/AdminProjects";
 import { AdminProjectView } from "@/components/admin/AdminProjectView";
 import { TaskOverviewTable } from "@/components/admin/TaskOverviewTable";
@@ -55,6 +57,9 @@ export function App({ runtime }: { runtime: Runtime }) {
   const [, setSession] = useState(0);
   const user = runtime.store.meta.user;
   const signedIn = !!(user && runtime.store.meta.token) && !status.signedOut;
+
+  // Messages du processus principal (téléchargement impossible…) : même toast que le site.
+  useEffect(() => window.secondBrain?.onNotice?.((message) => toast(message, "error")), []);
 
   // Changements arrivés du serveur : actualisation automatique des écrans « passifs ».
   useEffect(() => {
@@ -162,7 +167,7 @@ function Screen({ path, runtime }: { path: string; runtime: Runtime }) {
   if (path === "/preferences") return <Loaded load={() => api.get<{ profile: ProfileDto }>("/me")} render={(d) => <PreferencesPage initial={d.profile} />} />;
   if (path === "/team") return <Loaded load={() => api.get<{ members: Parameters<typeof TeamOverview>[0]["members"]; tasks: OverviewTask[] }>("/me/team")} render={(d) => <TeamOverview members={d.members} tasks={d.tasks} />} />;
   if (path === "/admin") return <Redirect to="/admin/users" />;
-  if (path.startsWith("/admin/")) return <AdminScreen path={path} userId={userId} />;
+  if (path.startsWith("/admin/")) return <AdminScreen path={path} userId={userId} userEmail={runtime.store.meta.user!.email} />;
   return <Message title="Page introuvable" />;
 }
 
@@ -181,21 +186,33 @@ function DashboardScreen({ userName }: { userName: string }) {
   );
 }
 
-function AdminScreen({ path, userId }: { path: string; userId: string }) {
+function AdminScreen({ path, userId, userEmail }: { path: string; userId: string; userEmail: string }) {
   let body: React.ReactNode;
   let r: RegExpExecArray | null;
-  if (path === "/admin/users") body = <Loaded load={() => api.get<{ users: AdminUserDto[] }>("/admin/users")} render={(d) => <AdminUsers initial={d.users} currentUserId={userId} />} />;
+  // Même composition que la page web /admin/users : inscriptions libres + comptes.
+  if (path === "/admin/users")
+    body = (
+      <Loaded
+        load={() => Promise.all([api.get<{ users: AdminUserDto[] }>("/admin/users"), api.get<{ registration: RegistrationSettingsDto }>("/admin/settings")])}
+        render={([u, s]) => (
+          <>
+            <AdminRegistrationToggle initial={s.registration} />
+            <AdminUsers initial={u.users} currentUserId={userId} />
+          </>
+        )}
+      />
+    );
   else if (path === "/admin/projects") body = <Loaded load={() => api.get<{ projects: AdminProjectSummary[] }>("/admin/projects")} render={(d) => <AdminProjects projects={d.projects} />} />;
   else if ((r = /^\/admin\/projects\/([^/]+)$/.exec(path))) {
     const id = r[1];
     body = <Loaded load={() => api.get<{ project: ProjectDto & { ownerName: string } }>(`/admin/projects/${id}`)} render={(d) => <AdminProjectView project={d.project} />} />;
-  } else if (path === "/admin/notifications") body = <Loaded load={() => api.get<{ settings: NotificationSettingsDto }>("/admin/notifications")} render={(d) => <AdminNotifications initial={d.settings} adminEmail="" />} />;
+  } else if (path === "/admin/notifications") body = <Loaded load={() => api.get<{ settings: NotificationSettingsDto }>("/admin/notifications")} render={(d) => <AdminNotifications initial={d.settings} adminEmail={userEmail} />} />;
   else if (path === "/admin/tasks") body = <Loaded load={() => api.get<{ tasks: OverviewTask[] }>("/admin/tasks")} render={(d) => <TaskOverviewTable tasks={d.tasks} />} />;
   else body = <Message title="Page introuvable" />;
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
       <h1 className="text-2xl font-semibold tracking-tight">Administration</h1>
-      <p className="mt-1 text-sm text-muted">Comptes, rôles et hiérarchie ; vue d&apos;ensemble des projets et des tâches de tout le monde (lecture seule).</p>
+      <p className="mt-1 text-sm text-muted">Comptes, rôles et hiérarchie ; vue d&apos;ensemble des projets et des tâches de tout le monde (lecture seule) ; notifications et e-mails.</p>
       <AdminNav />
       <div className="mt-5">{body}</div>
     </div>
