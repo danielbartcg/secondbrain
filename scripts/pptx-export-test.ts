@@ -146,7 +146,7 @@ async function main() {
     console.log(`    ${slides.length} diapositives, ${charts} graphiques, ${Math.round(r.buf.length / 1024)} Ko, ${r.ms} ms`);
     check("présentation 16:9", /cx="12192000" cy="6858000"/.test(await zip.file("ppt/presentation.xml")!.async("string")));
     const all = slides.join("\n");
-    for (const title of ["Synthèse", "Avancement par étape", "Planning des étapes", "Points d'attention", "Risques et opportunités", "Livrables", "Réunions et décisions", "Équipe et charge", "Prochaines étapes"])
+    for (const title of ["Synthèse", "Avancement par étape", "Planning des étapes", "Points d'attention", "Risques", "Opportunités", "Livrables", "Réunions et décisions", "Équipe et charge", "Prochaines étapes"])
       check(`diapositive « ${title} »`, slides.some((s) => s.includes(title)));
     check("titre : nom du projet", slides[0].includes(name) && slides[0].includes("ÉTAT DES LIEUX"), slides[0]);
     check("encadrés à commenter sur chaque diapositive de contenu", slides.slice(1).every((s) => s.includes("Cliquez pour commenter")), slides.map((s) => s.includes("Cliquez pour commenter")));
@@ -180,7 +180,7 @@ async function main() {
     const empty = await download(alice, e.data.project.id);
     check("200", empty.status === 200, empty.status);
     const et = (await slideTexts(empty.buf)).slides.join("\n");
-    check("états vides explicites", ["Aucun livrable déclaré.", "Aucun risque ni opportunité déclaré.", "Aucune réunion enregistrée.", "Aucune tâche en retard.", "Aucune étape définie"].every((x) => et.includes(x)), et.slice(0, 600));
+    check("états vides explicites", ["Aucun livrable déclaré.", "Aucun risque déclaré.", "Aucune opportunité déclarée.", "Aucune réunion enregistrée.", "Aucune tâche en retard.", "Aucune étape définie"].every((x) => et.includes(x)), et.slice(0, 600));
   } finally {
     await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
     await prisma.user.deleteMany({ where: { id: { in: createdUsers } } });

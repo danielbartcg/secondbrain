@@ -550,7 +550,7 @@ Réponses : `{ risks: Risk[] }` (liste complète du projet, triée par `order` p
 | Méthode | Route | Réponse |
 | --- | --- | --- |
 | GET | `/projects/:id/export` | classeur `.xlsx` (`attachment`) : Synthèse (avec champs personnalisés), Tâches, Planning (Gantt), Étapes & activités, Livrables, Risques & opportunités, Matrices, Réunions, Équipe, Documents ; membres du projet (404 sinon) ; 30 / 15 min |
-| GET | `/projects/:id/export-pptx` | présentation `.pptx` « état des lieux » (`application/vnd.openxmlformats-officedocument.presentationml.presentation`, `attachment; filename="<Projet>-etat-des-lieux-AAAA-MM-JJ.pptx"`) : Titre, Synthèse, Avancement par étape, Planning, Points d'attention, Risques et opportunités, Livrables, Réunions et décisions, Équipe et charge, Prochaines étapes, chacune avec un encadré à commenter ; membres du projet (404 sinon, projets types compris) ; quota partagé avec l'export Excel (30 / 15 min) |
+| GET | `/projects/:id/export-pptx` | présentation `.pptx` « état des lieux » (`application/vnd.openxmlformats-officedocument.presentationml.presentation`, `attachment; filename="<Projet>-etat-des-lieux-AAAA-MM-JJ.pptx"`) : Titre, Synthèse, Avancement par étape, Planning, Points d'attention, Risques, Opportunités (une diapositive chacun, avec sa matrice 5 × 5), Livrables, Réunions et décisions, Équipe et charge, Prochaines étapes, chacune avec un encadré à commenter ; membres du projet (404 sinon, projets types compris) ; quota partagé avec l'export Excel (30 / 15 min) |
 
 ## Administration (compléments)
 

@@ -600,8 +600,8 @@ retards), **Planning des étapes** (frise mensuelle ou trimestrielle dessinée
 en formes : barres avec avancement, contour rouge si échéance dépassée,
 jalons, ligne « Aujourd'hui »), **Points d'attention** (10 tâches les plus en
 retard, compteurs retard / critiques / bloquées par un prérequis ouvert),
-**Risques et opportunités** (registre trié par criticité, stratégie,
-matrice 5 × 5 des risques non clos), **Livrables**, **Réunions et décisions**
+**Risques** puis **Opportunités** sur deux diapositives (registre trié par criticité, stratégie,
+matrice 5 × 5 lisible pour chacun, libellés des axes), **Livrables**, **Réunions et décisions**
 (10 plus récentes, statut de validation), **Équipe et charge** (ouvertes /
 en retard / terminées par membre + barres empilées natives), **Prochaines
 étapes** (échéances de tâches, livrables et étapes à 30 jours). Chaque

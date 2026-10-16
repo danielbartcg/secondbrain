@@ -7,7 +7,7 @@ import { listRisks, type RiskDto } from "@/lib/risks";
 import { listMeetings, type MeetingDto } from "@/lib/meetings";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "@/lib/api";
-import { STRATEGY_LABEL, RISK_STATUS_LABEL, riskLevel, type RiskLevel } from "@/lib/shared/risks";
+import { BENEFIT_LABELS, PROBABILITY_LABELS, SEVERITY_LABELS, STRATEGY_LABEL, RISK_STATUS_LABEL, riskLevel, type RiskLevel } from "@/lib/shared/risks";
 
 /**
  * Export PowerPoint « état des lieux » d'un projet (bouton « Export
@@ -17,7 +17,7 @@ import { STRATEGY_LABEL, RISK_STATUS_LABEL, riskLevel, type RiskLevel } from "@/
  * à compléter dans PowerPoint.
  *
  * Diapositives : Titre, Synthèse (indicateurs + graphique natif), Avancement
- * par étape, Planning des étapes, Points d'attention, Risques et opportunités
+ * par étape, Planning des étapes, Points d'attention, Risques, Opportunités
  * (registre + matrice 5×5), Livrables, Réunions et décisions, Équipe,
  * Prochaines étapes (30 jours). Les tableaux longs sont paginés (lignes
  * plafonnées par diapositive, nombre de pages borné) ; uniquement des
@@ -697,64 +697,85 @@ export async function renderProjectDeck(data: ProjectDeckData): Promise<{ buffer
     flexComment(ctx, s, "actions correctives engagées, responsables et dates cibles, besoins d'arbitrage…", "Actions correctives");
   }
 
-  // --- 6. Risques et opportunités
+  // --- 6. Risques, puis 7. Opportunités : une diapositive chacun (registre + matrice 5 × 5 lisible).
   {
     const order = { OPEN: 0, MONITORING: 1, TREATED: 2, CLOSED: 3 } as Record<string, number>;
-    const sorted = [...risks].sort((a, b) => (a.status === "CLOSED" ? 1 : 0) - (b.status === "CLOSED" ? 1 : 0) || b.score - a.score || order[a.status] - order[b.status]);
-    const { pages, rest } = chunk(sorted, 8, 3);
-    pages.forEach((page, pi) => {
-      const s = contentSlide(ctx, pageTitle("Risques et opportunités", pi, pages.length), `${plural(openRisks.length, "risque ouvert", "risques ouverts")} · ${plural(openOpps.length, "opportunité ouverte", "opportunités ouvertes")} · ${plural(risks.length, "élément")} au registre`);
-      const tw = 9.0;
-      const tableBottom = BOTTOM - 1.45;
-      if (!page.length) return emptyBody(ctx, s, "Aucun risque ni opportunité déclaré.", "risques identifiés hors registre, points de vigilance, opportunités à saisir…");
-      else {
+    const AXES = {
+      RISK: { impact: "Gravité", levels: SEVERITY_LABELS, fill: RISK_FILL, mark: RED },
+      OPPORTUNITY: { impact: "Bénéfice", levels: BENEFIT_LABELS, fill: OPP_FILL, mark: "0F766E" },
+    } as const;
+    for (const kind of ["RISK", "OPPORTUNITY"] as const) {
+      const isRisk = kind === "RISK";
+      const axis = AXES[kind];
+      const list = risks.filter((r) => r.kind === kind);
+      const open = list.filter((r) => r.status !== "CLOSED");
+      const sorted = [...list].sort((a, b) => (a.status === "CLOSED" ? 1 : 0) - (b.status === "CLOSED" ? 1 : 0) || b.score - a.score || order[a.status] - order[b.status]);
+      const { pages, rest } = chunk(sorted, 9, 3);
+      const title = isRisk ? "Risques" : "Opportunités";
+      const sub = isRisk
+        ? `${plural(open.length, "risque ouvert", "risques ouverts")} · ${plural(open.filter((r) => r.level === "high" || r.level === "critical").length, "élevé ou critique", "élevés ou critiques")} · ${plural(list.length, "risque")} au registre`
+        : `${plural(open.length, "opportunité ouverte", "opportunités ouvertes")} · ${plural(list.length, "opportunité")} au registre`;
+      pages.forEach((page, pi) => {
+        const s = contentSlide(ctx, pageTitle(title, pi, pages.length), sub);
+        const tw = 8.1;
+        const tableBottom = BOTTOM - 1.45;
+        if (!page.length) {
+          emptyBody(ctx, s, isRisk ? "Aucun risque déclaré." : "Aucune opportunité déclarée.", isRisk ? "risques identifiés hors registre, points de vigilance…" : "opportunités à saisir, gains possibles, leviers d'accélération…");
+          return;
+        }
         table(
           ctx, s, MX, TOP,
           [
-            { label: "", w: 0.42, align: "center" },
-            { label: "Intitulé", w: 3.2 },
-            { label: "Criticité", w: 1.15, align: "center" },
-            { label: "Statut", w: 1.3, align: "center" },
-            { label: "Stratégie", w: 1.6 },
-            { label: "Responsable", w: 1.33 },
+            { label: "Intitulé", w: 3.45 },
+            { label: "Criticité", w: 1.1, align: "center" },
+            { label: "Statut", w: 1.2, align: "center" },
+            { label: "Stratégie", w: 1.35 },
+            { label: "Responsable", w: 1.0 },
           ],
           page.map((r) => {
-            const fill = (r.kind === "RISK" ? RISK_FILL : OPP_FILL)[r.level];
+            const fill = axis.fill[r.level];
             return [
-              { text: r.kind === "RISK" ? "R" : "O", bold: true, color: r.kind === "RISK" ? RED : "0F766E" },
-              clean(r.title, 60),
+              clean(r.title, 70),
               { text: `${r.score} · ${r.levelLabel}`, color: fill[1], fill: fill[0], bold: true },
               { text: RISK_STATUS_LABEL[r.status] ?? r.status, tone: RISK_STATUS_TONE[r.status] ?? "grey" },
-              r.strategy ? STRATEGY_LABEL[r.kind][r.strategy] : { text: "À définir", color: FAINT },
-              clean(r.ownerName, 24) || "—",
+              r.strategy ? STRATEGY_LABEL[kind][r.strategy] : { text: "À définir", color: FAINT },
+              clean(r.ownerName, 20) || "—",
             ];
           }),
           Math.min(0.42, (tableBottom - TOP) / (page.length + 1)),
         );
-        if (pi === pages.length - 1) moreNote(ctx, s, MX, tw, rest, "élément");
-      }
-      // Matrice 5×5 des risques non clos (probabilité × gravité).
-      const mx = MX + tw + 0.6;
-      const cell = Math.min(0.5, (MX + CW - mx) / 5);
-      const my = TOP + 0.35;
-      s.addText("Matrice des risques non clos", { x: mx - 0.45, y: TOP - 0.05, w: 5 * cell + 0.45, h: 0.3, fontFace: FONT, fontSize: 11, bold: true, color: TEXT, margin: 0, align: "center" });
-      const count = new Map<string, number>();
-      for (const r of openRisks) count.set(`${r.probability}:${r.impact}`, (count.get(`${r.probability}:${r.impact}`) ?? 0) + 1);
-      for (let p = 5; p >= 1; p--)
-        for (let i = 1; i <= 5; i++) {
-          const n = count.get(`${p}:${i}`) ?? 0;
-          const [fill, ink] = RISK_FILL[riskLevel(p * i)];
-          s.addText(n ? String(n) : "", {
-            x: mx + (i - 1) * cell, y: my + (5 - p) * cell, w: cell, h: cell,
-            shape: "rect" as PptxGenJS.ShapeType, fill: { color: fill }, line: { color: WHITE, width: 1.5 },
-            fontFace: FONT, fontSize: 13, bold: true, color: ink, align: "center", valign: "middle", margin: 0,
-          });
+        if (pi === pages.length - 1) moreNote(ctx, s, MX, tw, rest, isRisk ? "risque" : "opportunité");
+
+        // Matrice 5 × 5 (éléments non clos) : grandes cases, libellés d'axes.
+        const labelW = 1.05;
+        const mx = MX + tw + 0.45 + labelW;
+        const cell = Math.min(0.62, (MX + CW - mx) / 5);
+        const my = TOP + 0.4;
+        s.addText(`Matrice des ${isRisk ? "risques non clos" : "opportunités non closes"}`, { x: mx - labelW, y: TOP - 0.05, w: 5 * cell + labelW, h: 0.3, fontFace: FONT, fontSize: 12, bold: true, color: TEXT, margin: 0, align: "center" });
+        const count = new Map<string, number>();
+        for (const r of open) count.set(`${r.probability}:${r.impact}`, (count.get(`${r.probability}:${r.impact}`) ?? 0) + 1);
+        for (let p = 5; p >= 1; p--) {
+          // Libellé de probabilité à gauche de la ligne.
+          s.addText(`${p} · ${PROBABILITY_LABELS[p - 1]}`, { x: mx - labelW, y: my + (5 - p) * cell, w: labelW - 0.06, h: cell, fontFace: FONT, fontSize: 8, color: MUTED, align: "right", valign: "middle", margin: 0, fit: "shrink" });
+          for (let i = 1; i <= 5; i++) {
+            const n = count.get(`${p}:${i}`) ?? 0;
+            const [fill, ink] = axis.fill[riskLevel(p * i)];
+            s.addText(n ? String(n) : String(p * i), {
+              x: mx + (i - 1) * cell, y: my + (5 - p) * cell, w: cell, h: cell,
+              shape: "rect" as PptxGenJS.ShapeType, fill: { color: fill }, line: { color: WHITE, width: 2 },
+              fontFace: FONT, fontSize: n ? 16 : 9, bold: !!n, italic: !n, color: n ? ink : mix(ink, fill, 0.55), align: "center", valign: "middle", margin: 0,
+            });
+          }
         }
-      s.addText("Probabilité →", { x: mx - 0.32, y: my, w: 0.26, h: 5 * cell, fontFace: FONT, fontSize: 9, color: MUTED, vert: "vert270", align: "center", valign: "middle", margin: 0 });
-      s.addText("Gravité →", { x: mx, y: my + 5 * cell + 0.03, w: 5 * cell, h: 0.25, fontFace: FONT, fontSize: 9, color: MUTED, align: "center", margin: 0 });
-      reach(ctx, my + 5 * cell + 0.3);
-      flexComment(ctx, s, "risques majeurs, évolution depuis le dernier point, plans de traitement, opportunités à saisir…");
-    });
+        // Libellés de l'axe horizontal (gravité / bénéfice) sous les colonnes.
+        for (let i = 1; i <= 5; i++) {
+          s.addText(`${i}\n${axis.levels[i - 1]}`, { x: mx + (i - 1) * cell, y: my + 5 * cell + 0.03, w: cell, h: 0.42, fontFace: FONT, fontSize: 7.5, color: MUTED, align: "center", valign: "top", margin: 0, fit: "shrink" });
+        }
+        s.addText(`Probabilité ↑   ·   ${axis.impact} →   ·   les nombres = éléments non clos`, { x: mx - labelW, y: my + 5 * cell + 0.48, w: 5 * cell + labelW, h: 0.25, fontFace: FONT, fontSize: 8, color: FAINT, align: "center", margin: 0 });
+        reach(ctx, my + 5 * cell + 0.75);
+        flexComment(ctx, s, isRisk ? "risques majeurs, évolution depuis le dernier point, plans de traitement, arbitrages attendus…" : "opportunités à saisir, gains attendus, actions pour les concrétiser…");
+      });
+    }
   }
 
   // --- 7. Livrables
