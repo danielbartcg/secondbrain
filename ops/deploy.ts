@@ -60,12 +60,10 @@ if (local && remote && local !== remote) {
     console.warn(
       [
         "⚠ Écrans modifiés depuis la dernière version de l'application desktop :",
-        ...screens.split("
-").slice(0, 15).map((l) => "   " + l),
+        ...screens.split("\n").slice(0, 15).map((l) => "   " + l),
         "  → incrémenter native/electron/package.json, npm run desktop:build puis npm run desktop:publish",
         "    (sinon l'application installée garde les anciens écrans et ne propose pas de mise à jour).",
-      ].join("
-"),
+      ].join("\n"),
     );
   }
 }
