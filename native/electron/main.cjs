@@ -23,6 +23,11 @@ const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const { createUpdater } = require("./updater.cjs");
 
+// Identifiant d'application Windows (AppUserModelID) = appId d'electron-builder,
+// posé par l'installateur sur les raccourcis : la fenêtre se rattache à
+// l'icône épinglée dans la barre des tâches au lieu d'en ouvrir une seconde.
+if (process.platform === "win32") app.setAppUserModelId("fr.danielbar-tcg.secondbrain");
+
 const RENDERER = path.join(__dirname, "renderer");
 const DEV_URL = process.env.SB_DEV_URL || "";
 const SMOKE = process.argv.includes("--smoke-test");

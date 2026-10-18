@@ -127,7 +127,7 @@ Préférences → Connecteur Claude ; l'adresse est
   `GET /downloads/latest.json` (public, `no-cache`) 10 s après le lancement, toutes
   les heures et au retour sur la fenêtre (10 min min.), ou via Préférences → « Rechercher une mise à jour ».
 - L'installateur est vérifié (SHA-256 de `latest.json`) avant d'être lancé en
-  silencieux (`/S --force-run`) ; ne jamais modifier l'installateur ni
+  silencieux (`/S --updated --force-run`) ; `--updated` évite que l'ancienne version soit désinstallée raccourcis compris (l'application se désépinglait de la barre des tâches à chaque mise à jour, corrigé en 0.3.10 ; la mise à jour depuis 0.3.9 ou avant désépingle encore une dernière fois). L'application pose aussi son AppUserModelID (= `appId`). Ne jamais modifier l'installateur ni
   `latest.json` à la main sur le serveur.
 - Les 3 derniers installateurs sont conservés ; un retour arrière consiste à
   republier une version **supérieure** (l'updater n'installe jamais une version

@@ -139,7 +139,7 @@ Page **Conflits** : votre valeur et la valeur retenue, « Copier ma valeur ».
   `sb:checkUpdate` / `sb:installUpdate` **sans paramètre** (serveur et fichier
   déterminés par le processus principal). Installation : téléchargement dans
   `%TEMP%` avec progression, **vérification SHA-256**, lancement détaché
-  silencieux (`/S --force-run`) une fois le fichier réellement fermé, avec nouveaux essais
+  silencieux (`/S --updated --force-run` : `--updated` conserve raccourcis et épingle de la barre des tâches) une fois le fichier réellement fermé, avec nouveaux essais
   pendant ~15 s si Windows le verrouille (EBUSY, analyse antivirus), puis l'application quitte et redémarre mise à
   jour. Avant : `syncNow` + `store.flush` ; s'il reste des opérations, elles
   sont conservées (IndexedDB et `session.json` dans `userData`). Les coques

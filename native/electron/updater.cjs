@@ -5,8 +5,12 @@
  *   `npm run desktop:publish`) et compare sa version (x.y.z) à app.getVersion().
  * - install() : télécharge l'installateur NSIS dans le dossier temporaire
  *   (progression envoyée à l'interface), vérifie son empreinte SHA-256, le
- *   lance en mode silencieux (`/S --force-run` : installation puis relance de
- *   l'application) et quitte. Les données (IndexedDB, session) vivent dans le
+ *   lance en mode silencieux (`/S --updated --force-run` : installation puis
+ *   relance de l'application) et quitte. `--updated` est indispensable : sans
+ *   lui, l'installateur NSIS (dossier d'installation modifiable) traite la mise
+ *   à jour comme une installation neuve, désinstalle l'ancienne version
+ *   raccourcis compris — ce qui **désépingle l'application de la barre des
+ *   tâches** — puis les recrée. Avec lui, il garde raccourcis et épingle. Les données (IndexedDB, session) vivent dans le
  *   profil userData (%APPDATA%), conservé par l'installateur.
  *
  * Le serveur est celui de la session enregistrée (sinon le serveur de
@@ -48,7 +52,7 @@ async function launchInstaller(file) {
   for (let attempt = 0; ; attempt++) {
     try {
       await new Promise((res, rej) => {
-        const child = spawn(file, ["/S", "--force-run"], { detached: true, stdio: "ignore" });
+        const child = spawn(file, ["/S", "--updated", "--force-run"], { detached: true, stdio: "ignore" });
         child.once("error", rej);
         child.once("spawn", () => {
           child.unref();
@@ -184,7 +188,7 @@ function createUpdater({ getServerUrl, getWindow }) {
         fs.rmSync(dest, { force: true });
         throw new Error("Le fichier téléchargé est corrompu (empreinte SHA-256 différente). Mise à jour annulée.");
       }
-      // Installation silencieuse puis relance (--force-run) ; l'installateur attend la fermeture de l'application.
+      // Installation silencieuse en mode mise à jour (raccourcis et épingle conservés) puis relance (--force-run) ; l'installateur attend la fermeture de l'application.
       await launchInstaller(dest);
       setTimeout(() => app.quit(), 500);
       return { ok: true };
