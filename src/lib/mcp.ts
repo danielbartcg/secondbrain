@@ -1,10 +1,10 @@
 import "server-only";
-import type { User } from "@prisma/client";
+import type { Prisma, TaskStatus, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/api";
 import { isAdmin } from "@/lib/roles";
 import { htmlToText } from "@/lib/sanitize";
-import { getProject, getProjectAdmin, listAllProjectsAdmin, listProjects, taskAccessWhere } from "@/lib/projects";
+import { getProject, getProjectAdmin, listAllProjectsAdmin, listProjects, projectAccessWhere, taskAccessWhere } from "@/lib/projects";
 import { getMyTasks, getTaskDetail, listAllTasksAdmin, listTeamTasks, tasksOfUsersWhere, type OverviewTask } from "@/lib/tasks";
 import { getMindMap, listMindMaps } from "@/lib/mindmaps";
 import { children as noteChildren, getDocument } from "@/lib/notes";
@@ -18,6 +18,8 @@ import { listTemplates } from "@/lib/templates";
 import { allCustomFields, listCustomFields } from "@/lib/custom-fields";
 import { customEntries, type CustomFieldDto } from "@/lib/shared/custom-fields";
 import { listMapEvents } from "@/lib/map-events";
+import { meetingStatus } from "@/lib/meetings";
+import { QUERY_ENTITIES, queryObjects, type QueryArgs } from "@/lib/mcp-query";
 import { ACTIVITY_PRESETS } from "@/lib/shared/activity-period";
 
 /**
@@ -41,6 +43,8 @@ export const MCP_SERVER_INFO = { name: "second-brain", title: "Second Brain", ve
 export const MCP_INSTRUCTIONS =
   "Second Brain : gestion de projets (projets › étapes › activités › tâches, livrables, équipe), cartes mentales et prise de notes. " +
   "Lecture : commencez par list_projects / list_my_tasks / search, puis get_project, get_task, get_mind_map ou read_note. " +
+  "Pour toute question « derniers / récents / créés par / modifiés depuis » sur n'importe quel objet (tâches, comptes-rendus, commentaires, risques, documents, nœuds, messages…), utilisez query_objects (createdAt / updatedAt sur chaque objet). " +
+  "Récent : list_recent_tasks (dernières tâches créées / modifiées / clôturées), list_meetings (dernières réunions avec leurs comptes-rendus), get_meeting. " +
   "Pour « que s'est-il passé » sur une période (jour, semaine, mois, dates libres), utilisez get_activity : un seul appel consolide tâches, cartes mentales, réunions, risques, livrables et documents ; rédigez ensuite la synthèse. get_map_history donne l'historique détaillé d'une carte. " +
   "Écriture (clé autorisée) : create_task, update_task, bulk_update_tasks (ex. assigner toutes les tâches d'un projet), delete_task, add_comment, create_project, update_project, create_stage, save_note, create_meeting, update_meeting (compte-rendu), decide_meeting, upsert_risk, edit_mind_map, send_message ; " +
   "pour tout le reste, api_request appelle n'importe quelle route de l'API (consultez api_reference). Les personnes se désignent par nom, e-mail ou id. Confirmez avec l'utilisateur avant une suppression ou une modification en masse. " +
@@ -102,6 +106,7 @@ function taskForAi(t: TaskDto, members: ProjectDto["members"]) {
     description: t.description || undefined,
     comments: t.commentCount,
     hasNotes: t.hasNotes,
+    createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
 }
@@ -202,7 +207,167 @@ function limitOf(args: Record<string, unknown>, def = 200) {
 
 // --- Outils -------------------------------------------------------------------------------------
 
+/** Libellés des statuts de compte-rendu et de décision (lecture par Claude). */
+const MEETING_STATUS_FR: Record<string, string> = { draft: "brouillon (compte-rendu vide)", no_review: "sans validation demandée", pending: "en attente de validation", approved: "validé", rejected: "refusé" };
+const DECISION_FR: Record<string, string> = { PENDING: "en attente", APPROVED: "validé", REJECTED: "refusé" };
+
+
+const MEETING_AI_INCLUDE = {
+  project: { select: { id: true, name: true } },
+  author: { select: { name: true } },
+  participants: { include: { member: { select: { name: true } } } },
+  approvers: { include: { member: { select: { name: true } } } },
+} satisfies Prisma.MeetingInclude;
+type MeetingAiRow = Prisma.MeetingGetPayload<{ include: typeof MEETING_AI_INCLUDE }>;
+
+function meetingForAi(m: MeetingAiRow, withMinutes: boolean, maxChars = 6000) {
+  return {
+    id: m.id,
+    title: m.title,
+    project: { id: m.project.id, name: m.project.name },
+    date: m.date.toISOString(),
+    location: m.location || undefined,
+    author: m.author?.name ?? undefined,
+    participants: m.participants.map((p) => p.member.name),
+    status: MEETING_STATUS_FR[meetingStatus(m)],
+    approvers: m.approvers.map((a) => ({ name: a.member.name, decision: DECISION_FR[a.decision] ?? a.decision, comment: a.comment || undefined, decidedAt: a.decidedAt?.toISOString() })),
+    minutesUpdatedAt: m.minutesUpdatedAt?.toISOString(),
+    ...(withMinutes ? { minutes: text(m.minutes, maxChars) } : {}),
+  };
+}
+
 export const TOOLS: Tool[] = [
+  {
+    name: "query_objects",
+    title: "Rechercher n'importe quel objet (filtres, tri par date)",
+    description:
+      "Requête souple sur tous les objets de mon périmètre, avec leur date de création (createdAt) et de modification (updatedAt), triés du plus récent au plus ancien (sort = created par défaut, ou updated ; order asc pour l'inverse). " +
+      "entity : project, stage, activity, task, comment, meeting (réunion et son compte-rendu), risk (risques et opportunités), deliverable, document, folder, mind_map, node, conversation, message, notification. " +
+      "Filtres : author (« me » / « moi » ou un nom : créateur de la tâche ou du projet, rédacteur du compte-rendu, auteur du commentaire ou du message, déposant du document, propriétaire de la carte), assignee (« me » ou un nom : responsable de tâche, de livrable ou de risque), project_id, map_id, task_id, status (ex. task : open, TODO, IN_PROGRESS, DONE, CLOSED ; meeting : draft, no_review, pending, approved, rejected ; notification : read, unread), text (contient), created_after / created_before / updated_after / updated_before (AAAA-MM-JJ ou ISO), limit (20 par défaut, 200 max), with_content (texte complet des notes, comptes-rendus, messages ; sinon extrait). " +
+      "Exemples : « mes 3 derniers comptes-rendus » → { entity: \"meeting\", author: \"me\", limit: 3, with_content: true } ; « les 10 dernières tâches créées » → { entity: \"task\", limit: 10 } ; « commentaires d'Alice cette semaine » → { entity: \"comment\", author: \"Alice\", created_after: \"AAAA-MM-JJ\" }. Avec admin_access (administrateur) : toute la plateforme (sauf conversations, messages et notifications, toujours personnels).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity: { type: "string", enum: [...QUERY_ENTITIES] },
+        author: { type: "string" },
+        assignee: { type: "string" },
+        project_id: { type: "string" },
+        map_id: { type: "string" },
+        task_id: { type: "string" },
+        status: { type: "string" },
+        text: { type: "string" },
+        created_after: { type: "string" },
+        created_before: { type: "string" },
+        updated_after: { type: "string" },
+        updated_before: { type: "string" },
+        sort: { type: "string", enum: ["created", "updated"] },
+        order: { type: "string", enum: ["desc", "asc"] },
+        limit: { type: "number", minimum: 1, maximum: 200 },
+        with_content: { type: "boolean" },
+        ...ADMIN_FLAG,
+      },
+      required: ["entity"],
+    },
+    run: async (user, args) => queryObjects(user, { ...(args as unknown as QueryArgs), all: wantsAdmin(user, args) }),
+  },
+  {
+    name: "list_recent_tasks",
+    title: "Dernières tâches (créées, modifiées, terminées)",
+    description:
+      "Les N tâches les plus récentes de mon périmètre (tous projets, et mes tâches sans projet), triées par date : sort = « created » (dernières créées, défaut), « updated » (dernières modifiées) ou « closed » (dernières clôturées). Filtres : project_id, status. Avec admin_access (administrateur) : toute la plateforme. Ex. « les 10 dernières tâches créées » → { limit: 10 }.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sort: { type: "string", enum: ["created", "updated", "closed"] },
+        limit: { type: "number", minimum: 1, maximum: 200, description: "10 par défaut." },
+        project_id: { type: "string" },
+        status: { type: "string", enum: ["open", "TODO", "IN_PROGRESS", "DONE", "CLOSED"] },
+        ...ADMIN_FLAG,
+      },
+    },
+    run: async (user, args) => {
+      const sort = str(args, "sort", false) || "created";
+      const limit = typeof args.limit === "number" ? Math.max(1, Math.min(200, Math.floor(args.limit))) : 10;
+      const status = str(args, "status", false);
+      const projectId = str(args, "project_id", false);
+      const where: Prisma.TaskWhereInput = {
+        AND: [
+          wantsAdmin(user, args) ? { OR: [{ project: { isTemplate: false } }, { projectId: null }] } : taskAccessWhere(user.id),
+          projectId ? { projectId } : {},
+          status === "open" ? { status: { in: ["TODO", "IN_PROGRESS"] } } : status ? { status: status as TaskStatus } : {},
+          sort === "closed" ? { closedAt: { not: null } } : {},
+        ],
+      };
+      const rows = await prisma.task.findMany({
+        where,
+        orderBy: sort === "updated" ? { updatedAt: "desc" } : sort === "closed" ? { closedAt: "desc" } : { createdAt: "desc" },
+        take: limit,
+        include: { project: { select: { id: true, name: true } }, stage: { select: { name: true } }, owner: { select: { name: true } }, assignee: { select: { name: true } } },
+      });
+      return rows.map((t) => ({
+        id: t.id,
+        name: t.name,
+        project: t.project ? { id: t.project.id, name: t.project.name } : null,
+        stage: t.stage?.name ?? undefined,
+        status: t.status,
+        priority: t.priority,
+        assignee: t.assignee?.name ?? undefined,
+        createdBy: t.owner.name,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+        dueDate: t.dueDate?.toISOString(),
+        closedAt: t.closedAt?.toISOString(),
+      }));
+    },
+  },
+  {
+    name: "list_meetings",
+    title: "Réunions et comptes-rendus",
+    description:
+      "Réunions de mes projets (ou d'un projet : project_id), les plus récentes d'abord : titre, projet, date, rédacteur, participants, statut de validation et décisions des validateurs, et le texte du compte-rendu (with_minutes, vrai par défaut ; 6 000 caractères au plus chacun — get_meeting pour l'intégralité). Ex. « les 3 derniers comptes-rendus » → { limit: 3 }. Avec admin_access (administrateur) : toute la plateforme.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string" },
+        limit: { type: "number", minimum: 1, maximum: 50, description: "5 par défaut." },
+        with_minutes: { type: "boolean" },
+        status: { type: "string", enum: ["draft", "no_review", "pending", "approved", "rejected"], description: "Filtre sur le statut : draft (compte-rendu vide), no_review (sans validateur), pending, approved, rejected." },
+        past_only: { type: "boolean", description: "Seulement les réunions déjà tenues (date passée)." },
+        ...ADMIN_FLAG,
+      },
+    },
+    run: async (user, args) => {
+      const limit = typeof args.limit === "number" ? Math.max(1, Math.min(50, Math.floor(args.limit))) : 5;
+      const projectId = str(args, "project_id", false);
+      const wanted = str(args, "status", false);
+      const rows = await prisma.meeting.findMany({
+        where: {
+          project: wantsAdmin(user, args) ? { isTemplate: false } : projectAccessWhere(user.id),
+          ...(projectId ? { projectId } : {}),
+          ...(args.past_only === true ? { date: { lte: new Date() } } : {}),
+        },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: wanted ? 500 : limit,
+        include: MEETING_AI_INCLUDE,
+      });
+      const filtered = wanted ? rows.filter((m) => meetingStatus(m) === wanted).slice(0, limit) : rows;
+      return filtered.map((m) => meetingForAi(m, args.with_minutes !== false));
+    },
+  },
+  {
+    name: "get_meeting",
+    title: "Compte-rendu de réunion (intégral)",
+    description: "Une réunion et l'intégralité de son compte-rendu (texte), avec participants et décisions des validateurs.",
+    inputSchema: { type: "object", properties: { meeting_id: { type: "string" }, ...ADMIN_FLAG }, required: ["meeting_id"] },
+    run: async (user, args) => {
+      const m = await prisma.meeting.findFirst({
+        where: { id: str(args, "meeting_id"), project: wantsAdmin(user, args) ? { isTemplate: false } : projectAccessWhere(user.id) },
+        include: MEETING_AI_INCLUDE,
+      });
+      if (!m) throw new ApiError(404, "NOT_FOUND", "Réunion introuvable.");
+      return meetingForAi(m, true, 200_000);
+    },
+  },
   {
     name: "get_activity",
     title: "Rapport d'activité sur une période",
@@ -385,9 +550,13 @@ export const TOOLS: Tool[] = [
         if (!ok) throw new ApiError(404, "NOT_FOUND", isAdmin(user) ? "Tâche hors de votre périmètre (relancer avec admin_access: true si l'utilisateur le demande)." : "Tâche introuvable.");
       }
       const t = await getTaskDetail(user.id, id);
+      const meta = await prisma.task.findUnique({ where: { id }, select: { createdAt: true, owner: { select: { name: true } } } });
       return {
         id: t.id,
         name: t.name,
+        createdBy: meta?.owner.name,
+        createdAt: meta?.createdAt.toISOString(),
+        updatedAt: t.updatedAt,
         project: t.project?.name ?? null,
         stage: t.stage?.name ?? null,
         activity: t.activity?.name ?? null,

@@ -400,7 +400,24 @@ Connecteur Claude) ; une clé ne vaut pas session et inversement. Outils
 l'utilisateur : `whoami`, `get_dashboard`, `list_projects`, `get_project`,
 `list_my_tasks`, `list_tasks` (N-1), `get_task`, `list_mind_maps`,
 `get_mind_map`, `browse_notes`, `read_note`, `search`, `list_users`
-(administrateurs). Un **administrateur** n'accède aux projets et tâches des
+(administrateurs).
+
+**Requêtes souples sur tous les objets** (`src/lib/mcp-query.ts`,
+outil `query_objects`) : une seule entrée pour projet, étape, activité,
+tâche, commentaire, réunion (compte-rendu), risque / opportunité, livrable,
+document, dossier, carte mentale, nœud, conversation, message, notification ;
+filtres `author` (« me » = moi, sinon nom), `assignee`, `project_id`,
+`map_id`, `task_id`, `status`, `text`, fenêtres `created_after/before`,
+`updated_after/before` ; tri `created` / `updated`, ordre, `limit` (20, 200
+max) ; `with_content` renvoie le texte intégral (sinon extrait de 400
+caractères). **Chaque élément porte `createdAt` / `updatedAt`** : « mes trois
+derniers CR » = `{ entity: "meeting", author: "me", limit: 3 }`. Raccourcis :
+`list_recent_tasks` (dernières créées / modifiées / clôturées),
+`list_meetings` (comptes-rendus avec statut de validation), `get_meeting`
+(intégral). Messages, conversations et notifications restent personnels ;
+le reste suit le périmètre (`projectAccessWhere`, `taskAccessWhere`,
+`mapAccessWhere`, modèles exclus). L'écriture de tous ces objets passe par
+les outils dédiés ou `api_request` (ci-dessous). Un **administrateur** n'accède aux projets et tâches des
 autres que s'il le demande **explicitement** (`admin_access: true`) ; sans ce
 drapeau, son périmètre est le sien.
 

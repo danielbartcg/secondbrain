@@ -51,7 +51,8 @@ type Row = Prisma.MeetingGetPayload<{ include: typeof INCLUDE }>;
 
 const hasContent = (html: string) => /<img\b/i.test(html) || htmlToText(html).length > 0;
 
-function statusOf(m: Row): MeetingStatus {
+/** Statut d'un compte-rendu (aussi utilisé par le connecteur MCP). */
+export function meetingStatus(m: { minutes: string; approvers: { decision: string }[] }): MeetingStatus {
   if (!hasContent(m.minutes)) return "draft";
   if (m.approvers.length === 0) return "no_review";
   if (m.approvers.some((a) => a.decision === "REJECTED")) return "rejected";
@@ -84,7 +85,7 @@ function toDto(m: Row, userId: string, projectOwnerId: string): MeetingDto {
         decidedAt: a.decidedAt?.toISOString() ?? null,
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "fr")),
-    status: statusOf(m),
+    status: meetingStatus(m),
     canEdit: m.authorId === userId || projectOwnerId === userId,
     myDecision: m.approvers.find((a) => a.member.userId === userId)?.decision ?? null,
     createdAt: m.createdAt.toISOString(),

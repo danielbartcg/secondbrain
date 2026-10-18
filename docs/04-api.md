@@ -441,7 +441,12 @@ réponses `application/json`, lots acceptés, notifications → `202`).
 document sauf auth, clés, mot de passe, e-mail, sync, mcp) ; une erreur
 métier revient en résultat d'outil `isError: true`. Paramètre
 `admin_access: true` (administrateurs) sur `list_projects`, `get_project`,
-`list_tasks`, `get_task`.
+`list_tasks`, `get_task`, `query_objects`, `list_recent_tasks`, `list_meetings`,
+`get_meeting`. `query_objects { entity, author?, assignee?, project_id?,
+map_id?, task_id?, status?, text?, created_after?, created_before?,
+updated_after?, updated_before?, sort?: created|updated, order?, limit?,
+with_content? }` → `{ entity, count, items: { id, …, createdAt, updatedAt }[] }`.
+Les tâches (`Task` DTO) exposent aussi `createdAt`.
 
 ## Notifications
 

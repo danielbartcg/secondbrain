@@ -39,6 +39,7 @@
     "test:activity": "tsx scripts/activity-test.ts",
     "test:custom-fields": "tsx scripts/custom-fields-test.ts",
     "test:templates": "tsx scripts/templates-test.ts",
+    "test:mcp-query": "tsx scripts/mcp-query-test.ts",
     "test:map-shares": "tsx scripts/map-shares-test.ts",
     "perf:seed": "tsx scripts/perf-seed.ts",
     "perf:bench": "tsx scripts/perf-bench.ts"

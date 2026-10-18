@@ -57,6 +57,7 @@ export type TaskDto = {
   nodeIds: string[];
   /** Tâches prérequises (même projet). */
   prerequisiteIds: string[];
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -216,6 +217,7 @@ export function toTaskDto(t: TaskRow): TaskDto {
     hasNotes: hasHtmlContent(t.notes),
     nodeIds: t.nodes.map((n) => n.nodeId),
     prerequisiteIds: t.prerequisiteIds ?? [],
+    createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
   };
 }

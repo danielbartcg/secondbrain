@@ -114,6 +114,7 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run desktop:build` / `desktop:publish` | installateur Windows (`native/release/`) / publication sur le serveur (page `/app`) |
 | `npm run ios:sync` / `ios:open` | application iPhone : build de l'interface + mise à jour du projet Xcode `native/ios` / ouverture dans Xcode (Mac) ; envoi TestFlight par le workflow GitHub « iOS TestFlight » |
 | `npm run test:pptx` | tests de bout en bout de l'export PowerPoint « état des lieux » (contenu des diapositives, graphiques, accès, projet vide) — serveur lancé (`BASE_URL`, `SAVE_PPTX=fichier.pptx` pour conserver la présentation de démonstration) |
+| `npm run test:mcp-query` | tests de bout en bout des requêtes MCP sur tous les objets (`query_objects` : auteur, dates, tri, texte, périmètre ; `list_recent_tasks`, `list_meetings`, `get_meeting`) — serveur de dev lancé |
 | `npm run test:templates` | tests de bout en bout des modèles (projets types, cartes types : édition par les administrateurs, exclusion des périmètres, création et application, outils MCP) — serveur de dev lancé |
 | `npm run test:custom-fields` | tests de bout en bout des champs personnalisés des projets (administration, valeurs, renommage / retrait / archivage / suppression, synchro, outils MCP) — serveur de dev lancé |
 | `npm run test:activity` | tests de bout en bout de la piste d'audit des cartes et du rapport d'activité (API, filtres, droits, outils MCP) et des fenêtres de temps — serveur de dev lancé |
