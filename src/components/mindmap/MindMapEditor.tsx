@@ -32,6 +32,7 @@ import { useSearchParams } from "next/navigation";
 import { PinButton } from "@/components/PinButton";
 import { ShareMapDialog } from "./ShareMapDialog";
 import { MapHistoryPanel } from "./MapHistoryPanel";
+import { Backlinks } from "@/components/Backlinks";
 
 /**
  * Éditeur de carte mentale.
@@ -1042,6 +1043,8 @@ function Editor({ initial }: { initial: MindMapDto }) {
                   />
                 )}
               </div>
+
+              {!selected.id.startsWith("tmp-") && <Backlinks key={selected.id} objectRef={selected.parentId ? `node:${real(selected.id)}` : `mindmap:${map.id}`} className="mt-4 !p-3" />}
 
               {!readOnly && (
               <div className="mt-4 flex flex-wrap gap-2">

@@ -1,4 +1,5 @@
 import sanitizeHtml from "sanitize-html";
+import { OBJECT_REF_RE } from "./shared/links";
 
 /**
  * Assainissement du HTML produit par l'éditeur de notes (TipTap).
@@ -8,6 +9,27 @@ import sanitizeHtml from "sanitize-html";
  * https (pas http : contenu mixte, pistage en clair) ; pas de data: ni de
  * blob: (une URL blob n'a de sens que dans l'onglet qui l'a créée ; elle ne doit jamais être persistée).
  */
+/**
+ * Lien vers un objet de l'application (`[[…]]` dans l'éditeur) : `data-ref`
+ * = « kind:id », lu par les rétroliens et le graphe de connaissances
+ * (`src/lib/links.ts`). Toute autre valeur est retirée.
+ */
+
+/** Lien interne (chemin de l'application) : même onglet ; externe : nouvel onglet, sans référent. */
+function transformLink(tagName: string, attribs: sanitizeHtml.Attributes): sanitizeHtml.Tag {
+  const out: sanitizeHtml.Attributes = { ...attribs };
+  if (out["data-ref"] !== undefined && !OBJECT_REF_RE.test(out["data-ref"])) delete out["data-ref"];
+  if (/^\/(?!\/)/.test(out.href ?? "")) {
+    delete out.target;
+    out.rel = "noopener";
+  } else {
+    delete out["data-ref"];
+    out.rel = "noopener noreferrer nofollow";
+    out.target = "_blank";
+  }
+  return { tagName, attribs: out };
+}
+
 const OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
     "p", "br", "strong", "em", "u", "s", "code", "pre", "blockquote",
@@ -16,7 +38,7 @@ const OPTIONS: sanitizeHtml.IOptions = {
     "table", "thead", "tbody", "tr", "th", "td", "colgroup", "col",
   ],
   allowedAttributes: {
-    a: ["href", "target", "rel"],
+    a: ["href", "target", "rel", "data-ref"],
     ul: ["data-type"],
     li: ["data-type", "data-checked"],
     input: ["type", "checked"],
@@ -28,7 +50,7 @@ const OPTIONS: sanitizeHtml.IOptions = {
   allowedSchemesByTag: { img: ["https"] },
   allowProtocolRelative: false,
   transformTags: {
-    a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer nofollow", target: "_blank" }),
+    a: transformLink,
     input: (tagName, attribs) =>
       attribs.type === "checkbox" ? { tagName, attribs } : { tagName: "span", attribs: {} },
   },

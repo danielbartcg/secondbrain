@@ -266,6 +266,14 @@ connexion ; l'application ajoute synchro, conflits et mises à jour.
   écran de connexion : « Mot de passe oublié ? » et « Créer un compte » selon
   `/auth/options` (ouverts dans le navigateur).
 - Tests : `npm run test:native`, section « 9 ter. Parité avec le site ».
+- **Second cerveau** (18/10/2026) : plannings de référence, fraîcheur, liens
+  (suggestions, rétroliens, graphe `/graph`), résurgence, voyage dans le temps
+  (`/mindmaps/:id/time-travel` dans `App.tsx`) et flux iCal sont **relayés en
+  ligne** (aucune table synchronisée, aucun champ dérivé : ni
+  `SYNC_PROTOCOL_VERSION` ni `LOCAL_DATA_VERSION` ne changent). Les liens
+  `[[…]]` voyagent dans les notes déjà synchronisées (`data-ref` conservé
+  par `sanitizeNotes`, partagé) : un lien écrit hors ligne compte dès la
+  synchro.
 
 ## 9. Limites connues
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Inbox, Layers, Lock, MessageSquare, NotebookPen, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Inbox, Layers, Lock, MessageSquare, Moon, NotebookPen, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ActivityDto, ProjectDto, StageDto, TaskDto } from "@/lib/projects";
 import type { TaskStatus } from "@prisma/client";
@@ -13,7 +13,36 @@ import { DateField, type Resp, type Run } from "./ProjectWorkspace";
  * Plan du projet : étapes › activités (facultatives) › tâches, avec saisie
  * d'avancement, statut, priorité, complexité, responsable et accès à la fiche tâche.
  */
+/** Fraîcheur : tâches ouvertes sans activité depuis N jours (id → dernière activité). */
+const StaleContext = createContext<Record<string, string>>({});
+
+/** Charge la fraîcheur du projet (en ligne ; silencieux hors ligne ou en mode modèle). */
+function useProjectStale(project: ProjectDto): Record<string, string> {
+  const [stale, setStale] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (project.isTemplate) return;
+    let alive = true;
+    api
+      .get<{ stale: { tasks: Record<string, string> } }>(`/projects/${project.id}/stale`)
+      .then((r) => alive && setStale(r.stale.tasks))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [project.id, project.isTemplate, project.updatedAt]);
+  return stale;
+}
+
 export function ProjectBoard({ project, run }: { project: ProjectDto; run: Run }) {
+  const stale = useProjectStale(project);
+  return (
+    <StaleContext.Provider value={stale}>
+      <ProjectBoardBody project={project} run={run} />
+    </StaleContext.Provider>
+  );
+}
+
+function ProjectBoardBody({ project, run }: { project: ProjectDto; run: Run }) {
   const [showAddStage, setShowAddStage] = useState(project.stages.length === 0);
   const [addingLoose, setAddingLoose] = useState(false);
   // Gros projet : seules les premières étapes sont dépliées à l’ouverture (réactivité).
@@ -305,6 +334,8 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
   const sheetHref = `/tasks/${task.id}`;
   // Projet type : ni statut, ni avancement, ni dates, ni personnes (relèvent d'un vrai projet).
   const tpl = project.isTemplate;
+  const staleSince = useContext(StaleContext)[task.id];
+  const idleDays = staleSince ? Math.floor((Date.now() - new Date(staleSince).getTime()) / 86_400_000) : 0;
 
   return (
     <li className="px-2 py-2 sm:px-3">
@@ -325,6 +356,13 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
         <PriorityFlag priority={task.priority} className={done ? "opacity-40" : ""} />
         <InlineEdit value={task.name} onSave={(name) => patch({ name })} className={`-mx-1.5 min-w-0 flex-1 text-sm ${done ? "text-muted line-through" : ""}`} />
         {task.hasNotes && <NotesLink noteRef={`task:${task.id}`} has />}
+        {staleSince && !done && (
+          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800" title={`Aucune activité depuis ${idleDays} jours (dernière le ${formatDate(staleSince)})`}>
+            <Moon className="h-3 w-3" aria-hidden />
+            <span className="sr-only">Endormie : </span>
+            {idleDays} j
+          </span>
+        )}
         {task.commentCount > 0 && (
           <Link href={sheetHref} className="hidden items-center gap-0.5 text-xs text-muted sm:flex" title="Commentaires">
             <MessageSquare className="h-3.5 w-3.5" /> {task.commentCount}

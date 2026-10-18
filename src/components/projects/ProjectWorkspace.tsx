@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, Presentation, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users, LayoutTemplate } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, Presentation, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users, LayoutTemplate, History } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import { InlineEdit, ProgressBar, errorMessage, toInputDate, toast } from "@/components/ui";
@@ -10,6 +10,7 @@ import { STATUS_LABEL } from "./ProjectList";
 import { ProjectBoard } from "./ProjectBoard";
 import { ProjectKanbanTab } from "./ProjectKanbanTab";
 import { ProjectGanttTab } from "./ProjectGanttTab";
+import { ProjectTimeTravelTab } from "./ProjectTimeTravelTab";
 import { ProjectMeetingsTab } from "./ProjectMeetingsTab";
 import { ProjectRisksTab } from "./ProjectRisksTab";
 import { ProjectDashboardTab } from "./ProjectDashboardTab";
@@ -17,6 +18,7 @@ import { TeamTab } from "./TeamTab";
 import { DeliverablesTab } from "./DeliverablesTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { NotesPreview } from "@/components/notes/NotesPreview";
+import { Backlinks } from "@/components/Backlinks";
 import { PinButton } from "@/components/PinButton";
 import { ProjectCustomFields } from "./ProjectCustomFields";
 import { ApplyTemplateBanner } from "@/components/templates/TemplatePicker";
@@ -33,7 +35,7 @@ export type Run = (fn: () => Promise<Resp>) => Promise<void>;
 
 const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9", "#ec4899", "#64748b"];
 
-type TabKey = "dashboard" | "plan" | "gantt" | "kanban" | "reunions" | "livrables" | "risques" | "documents" | "equipe";
+type TabKey = "dashboard" | "plan" | "gantt" | "kanban" | "reunions" | "livrables" | "risques" | "documents" | "equipe" | "temps";
 const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> = [
   { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { key: "plan", label: "Plan", icon: ListTree },
@@ -44,6 +46,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> 
   { key: "risques", label: "Risques", icon: ShieldAlert },
   { key: "documents", label: "Documents", icon: FileText },
   { key: "equipe", label: "Équipe", icon: Users },
+  { key: "temps", label: "Voyage dans le temps", icon: History },
 ];
 
 /** Projet type : seuls les onglets de structure (pas de dates, d'équipe, de réunions ni de documents). */
@@ -210,6 +213,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
 
       {/* Notes riches du projet (éditées dans « Prise de notes ») */}
       <NotesPreview html={project.notes} noteRef={`project:${project.id}`} title="Notes du projet" className="mt-4" />
+      {!tpl && <Backlinks objectRef={`project:${project.id}`} className="mt-4" />}
 
       {/* Onglets */}
       <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="Sections du projet">
@@ -235,12 +239,13 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
       <div className="mt-5" role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label}>
         {tab === "dashboard" && <ProjectDashboardTab project={project} onGoTo={selectTab} />}
         {tab === "plan" && <ProjectBoard project={project} run={run} />}
-        {tab === "gantt" && <ProjectGanttTab project={project} run={run} />}
+        {tab === "gantt" && <ProjectGanttTab project={project} run={run} currentUserId={currentUserId} />}
         {tab === "reunions" && <ProjectMeetingsTab project={project} currentUserId={currentUserId} />}
         {tab === "risques" && <ProjectRisksTab project={project} canEdit />}
         {tab === "kanban" && <ProjectKanbanTab project={project} run={run} />}
         {tab === "livrables" && <DeliverablesTab project={project} run={run} />}
         {tab === "documents" && <DocumentsTab project={project} run={run} currentUserId={currentUserId} />}
+        {tab === "temps" && <ProjectTimeTravelTab project={project} />}
         {tab === "equipe" && <TeamTab project={project} run={run} isOwner={isOwner} currentUserId={currentUserId} />}
       </div>
     </div>

@@ -4,6 +4,8 @@ import type { TemplatesDto } from "@/lib/templates";
 import { AdminCustomFields } from "@/components/admin/AdminCustomFields";
 import type { CustomFieldDto } from "@/lib/shared/custom-fields";
 import { ActivityView } from "@/components/activity/ActivityView";
+import { KnowledgeGraph } from "@/components/graph/KnowledgeGraph";
+import type { KnowledgeGraph as KnowledgeGraphDto } from "@/lib/links";
 import type { ActivityReport } from "@/lib/activity";
 import { toast } from "@/components/ui";
 import { Download, Loader2, RefreshCw, WifiOff } from "lucide-react";
@@ -12,6 +14,7 @@ import { AppShell } from "@/components/AppShell";
 import { HomeDashboard } from "@/components/dashboard/HomeDashboard";
 import { MindMapList } from "@/components/mindmap/MindMapList";
 import { MindMapEditor } from "@/components/mindmap/MindMapEditor";
+import { MapTimeTravel } from "@/components/mindmap/MapTimeTravel";
 import { ProjectList } from "@/components/projects/ProjectList";
 import { MessagesApp } from "@/components/messages/MessagesApp";
 import { AdminNotifications } from "@/components/admin/AdminNotifications";
@@ -136,6 +139,11 @@ function Screen({ path, runtime }: { path: string; runtime: Runtime }) {
         </div>
       )} />
     );
+  // Voyage dans le temps d'une carte : calculé par le serveur (piste d'audit), en ligne uniquement.
+  if ((r = m(/^\/mindmaps\/([^/]+)\/time-travel$/))) {
+    const id = r[1];
+    return <Loaded load={() => api.get<{ mindmap: MindMapDto }>(`/mindmaps/${id}`)} render={(d) => <MapTimeTravel mapId={d.mindmap.id} title={d.mindmap.title} />} />;
+  }
   if ((r = m(/^\/mindmaps\/([^/]+)$/))) {
     const id = r[1];
     return <Loaded load={() => api.get<{ mindmap: MindMapDto }>(`/mindmaps/${id}`)} render={(d) => <MindMapEditor initial={d.mindmap} />} />;
@@ -172,6 +180,14 @@ function Screen({ path, runtime }: { path: string; runtime: Runtime }) {
         render={([a, p, m]) => (
           <ActivityView initial={a.activity} projects={p.projects.map((x) => ({ id: x.id, name: x.name }))} maps={m.mindmaps.map((x) => ({ id: x.id, title: x.title }))} isAdmin={!!runtime.store.meta.user!.isAdmin} />
         )}
+      />
+    );
+  // Graphe des liens : calculé par le serveur (notes de tout le périmètre), en ligne uniquement.
+  if (path === "/graph")
+    return (
+      <Loaded
+        load={() => Promise.all([api.get<{ graph: KnowledgeGraphDto }>("/links/graph"), api.get<{ projects: ProjectSummary[] }>("/projects"), api.get<{ mindmaps: MindMapSummary[] }>("/mindmaps")])}
+        render={([g, p, m]) => <KnowledgeGraph graph={g.graph} projects={p.projects.map((x) => ({ id: x.id, name: x.name }))} maps={m.mindmaps.map((x) => ({ id: x.id, title: x.title }))} />}
       />
     );
   // Messagerie : en ligne uniquement (relayée au serveur).

@@ -175,6 +175,18 @@ body {
 .ProseMirror img.ProseMirror-selectednode {
   @apply ring-2 ring-brand-500;
 }
+/* Lien vers un objet de l'application ([[…]]) : pastille discrète. */
+a[data-ref] {
+  @apply rounded px-0.5 font-medium text-brand-700 no-underline;
+  background-color: color-mix(in srgb, var(--color-brand-600) 9%, transparent);
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-brand-600) 55%, transparent);
+}
+a[data-ref]:hover {
+  background-color: color-mix(in srgb, var(--color-brand-600) 16%, transparent);
+}
+.ProseMirror a[data-ref] {
+  cursor: text;
+}
 /* Texte riche (éditeur et rendu) : espacements resserrés — la typographie
    par défaut de « prose » espace trop les paragraphes pour des notes. */
 .prose :where(p) {

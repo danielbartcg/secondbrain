@@ -633,6 +633,61 @@ construit la présentation sans base. Même quota que l'export Excel
 (`export:<userId>`, 30 / 15 min) ; relayée par la coque desktop (liste
 blanche `PROJECT_EXPORT`).
 
+## Second cerveau : liens, fraîcheur, résurgence, référence, voyage dans le temps, iCal
+
+Fonctions sans IA, calculées à partir des données existantes (décision du
+18/10/2026). Toutes **en ligne** (dans l'application native, routes relayées
+au serveur ; écrans masqués ou « Disponible uniquement en ligne » hors
+connexion). Tests : `npm run test:knowledge` (pur) et
+`npm run test:knowledge-e2e` (API, droits).
+
+- **Liens entre objets** (`src/lib/links.ts`, `src/lib/shared/links.ts`) :
+  `[[` dans l'éditeur riche insère `<a href data-ref="kind:id">`. **Décision :
+  pas de table de liens** — les liens vivent dans le HTML des notes ;
+  `sanitizeNotes` garde `data-ref` (motif strict) sur les seuls liens
+  internes. Rétroliens et graphe cherchent `data-ref="…"` (`contains`) dans
+  les notes des projets, étapes, activités, tâches, nœuds et les
+  comptes-rendus de réunion, filtrés par les périmètres habituels (modèles
+  exclus) : toute écriture (site, application hors ligne rejouée, MCP,
+  modèles) est prise en compte sans code supplémentaire. Cibles
+  inaccessibles écartées du graphe. Navigation : écouteur de clic dans
+  `AppShell` (`router.push`, aussi dans l'application native).
+- **Fraîcheur** (`src/lib/freshness.ts`) : dernière activité d'une tâche =
+  max(`Task.updatedAt`, dernier `TaskEvent`) ; d'un projet = max des lignes du
+  projet, étapes, livrables, risques, réunions, documents, tâches et pistes
+  d'audit (agrégats `groupBy` + une requête paramétrée). Préfiltre en base
+  (`updatedAt < seuil`), listes bornées. Seuil personnel `User.staleDays`
+  (14 j par défaut). Tâches ouvertes seulement (TODO / IN_PROGRESS), projets
+  **actifs** seulement (en pause = volontairement arrêté).
+- **Résurgence** (`src/lib/resurface.ts`, règles pures
+  `src/lib/shared/leitner.ts`) : 3 notes par jour (jour de Paris) — cartes
+  échues d'abord, puis notes jamais relues (non vides, non modifiées depuis
+  30 j) dans un ordre pseudo-aléatoire stable pour la journée (FNV-1a). Boîtes
+  1–5 à 3 / 10 / 30 / 90 / 180 jours ; « Toujours utile » monte d'une boîte,
+  « À revoir bientôt » revient en boîte 1, « Ne plus proposer » archive. Le
+  quota du jour baisse à chaque réponse (pas de remplacement). Une note
+  devenue inaccessible ou vide est écartée et sa carte supprimée.
+- **Planning de référence** (`src/lib/baselines.ts`, glissements purs dans
+  `ganttModel.ts` : `baselineSpans`, `stageSlips`, `baselineSummary`) :
+  instantané JSON des dates des étapes et tâches, pris sous le verrou du
+  projet, 20 par projet. Le glissement compare les **fins** (positif = retard).
+- **Voyage dans le temps** (`src/lib/time-travel.ts`, règles pures
+  `src/lib/shared/time-travel.ts`) : on part de l'état actuel et on défait les
+  évènements d'audit postérieurs à la date (libellés retraduits : « En
+  cours » → `IN_PROGRESS`, « 15/10/2026 », « 40 % », noms) ; objets créés
+  après la date exclus ; avancement rendu cohérent avec le statut. Cartes :
+  titres, statuts, couleurs défaits ; nœuds supprimés depuis connus par leur
+  titre ; déplacements signalés, non défaits. Courbe d'avancement : 40 points
+  de la création du projet à aujourd'hui. Limites : tâche supprimée = son
+  historique perdu ; étapes sans piste d'audit (nom actuel).
+- **Flux iCal** (`src/lib/calendar-feed.ts`, générateur pur
+  `src/lib/shared/ical.ts`) : URL secrète `cal_` + 256 bits (empreinte
+  SHA-256 seule en base, `CalendarFeed`), route publique
+  `/api/v1/calendar/:token.ics` (seul accès sans session à des données
+  personnelles : jeton révocable / régénérable, 60 lectures / 15 min,
+  `no-store`). Liens absolus construits depuis `X-Forwarded-Host` /
+  `X-Forwarded-Proto` (posés par Caddy). Interdit au connecteur MCP.
+
 ## Inscriptions et comptes
 
 `AppSettings.registrationEnabled` (Administration → Utilisateurs) ouvre ou
@@ -649,7 +704,10 @@ disposal au démontage / changement de dépendances, `themeColor()` pour
 résoudre les variables CSS du thème. Composants : `StatusDonut` (PieChart),
 `ProgressBarsChart` (XYChart, barres empilées jauge), `PlanningChart` (Gantt :
 DateAxis + CategoryAxis, barre prévisionnelle claire + part réalisée pleine,
-ligne « aujourd'hui », libellés français). Licence commerciale amCharts 4
+ligne « aujourd'hui », libellés français), `ProgressCurveChart` (courbe
+d'avancement du voyage dans le temps), graphe des liens (extension
+« force-directed », `charts/forceDirected.ts`, toujours importée avec le cœur
+et les graphiques). Licence commerciale amCharts 4
 (`CH214458775`, `MP214458775`) appliquée une fois par l'enveloppe
 (`applyLicense`) : plus de logo amCharts. Libellés issus des utilisateurs :
 `[` et `]` doublés (codes de mise en forme amCharts).

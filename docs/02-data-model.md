@@ -32,13 +32,16 @@ Conversation ──< Message (author? → User ; replyToId? → Message : répon
 AppSettings (une ligne « global »)          SMTP, e-mails, notifications activées
 User ──< Pin (kind PROJECT|MINDMAP, targetId)  épingles du menu de gauche
 Task.prerequisiteIds[] → Task (même projet)  prérequis (Gantt)
+Project ──< ProjectBaseline (createdBy? → User)  plannings de référence (Gantt)
+User ──< ResurfaceCard (ref « kind:id »)      résurgence (boîtes de Leitner)
+User ──o CalendarFeed                          flux iCal personnel (un au plus)
 ```
 
 ## Comptes
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
-| `User` | `id`, `email` (unique), `passwordHash`, `name` (affiché, = « Prénom Nom »), `firstName`, `lastName`, `avatarUrl?`, `theme` (`light` · `dark` · `sepia` · `ocean` · `forest`), `role` (`USER` · `ADMIN`), `managerId?` (N+1, `SetNull`), `emailVerifiedAt?` (adresse validée, informatif), `emailNotifications` (copies e-mail, vrai par défaut), timestamps | propriétaire des cartes et des projets, auteur des commentaires et dépôts ; `reports` = N-1 directs ; super administrateur codé en dur (e-mail) |
+| `User` | `id`, `email` (unique), `passwordHash`, `name` (affiché, = « Prénom Nom »), `firstName`, `lastName`, `avatarUrl?`, `theme` (`light` · `dark` · `sepia` · `ocean` · `forest`), `role` (`USER` · `ADMIN`), `managerId?` (N+1, `SetNull`), `emailVerifiedAt?` (adresse validée, informatif), `emailNotifications` (copies e-mail, vrai par défaut), `staleDays` (fraîcheur : jours sans activité avant « endormi », 14 par défaut, 1–365), timestamps | propriétaire des cartes et des projets, auteur des commentaires et dépôts ; `reports` = N-1 directs ; super administrateur codé en dur (e-mail) |
 | `EmailToken` | `id`, `userId`, `kind` (`VERIFY_EMAIL` · `RESET_PASSWORD`), `tokenHash` (unique, SHA-256), `email` (adresse visée), `expiresAt` (7 j / 1 h), `usedAt?`, `createdAt` | lien envoyé par e-mail, **à usage unique** (consommation atomique) ; un nouveau lien invalide les précédents du même usage ; une validation n'est acceptée que si `email` est toujours l'adresse du compte |
 | `ApiKey` | `id`, `userId`, `name`, `prefix` (10 premiers caractères, affichage), `tokenHash` (unique, SHA-256), `canWrite` (défaut true), `lastUsedAt?`, `createdAt` | clé `sb_…` (256 bits) du connecteur MCP, montrée une seule fois ; lecture seule si `canWrite` faux, ne vaut pas session (refusée par `/api/v1` hors `/mcp`) ; 10 par compte |
 | `Session` | `id`, `token` (unique : **empreinte SHA-256 hex** du jeton de 256 bits), `userId`, `label?`, `expiresAt`, `createdAt` | jeton unique cookie **et** Bearer, jamais stocké en clair (`hashSessionToken()`) ; `label` = client (« Web », « iPhone ») |
@@ -136,6 +139,18 @@ Types de notification (`NotificationType`) : `ASSIGNED`, `TASK_UPDATED`,
 Non synchronisés (en ligne uniquement dans l'application native).
 `AppSettings.registrationEnabled` : inscriptions libres.
 
+## Second cerveau (non synchronisés)
+
+| Modèle | Champs | Notes |
+| --- | --- | --- |
+| `ProjectBaseline` | `id`, `projectId` (cascade), `name`, `createdById?` (`SetNull`), `createdByName` (figé), `data` (JSON `{ stages: [{ id, name, startDate, dueDate }], tasks: [{ id, name, stageId, startDate, dueDate }] }`, dates AAAA-MM-JJ), `taskCount` (tâches datées), `createdAt` | planning de référence figé ; 20 par projet ; supprimable par son auteur ou le propriétaire ; index `(projectId, createdAt)` |
+| `ResurfaceCard` | `userId` + `ref` (clé ; « kind:id » de Prise de notes), `box` 1–5, `dueAt`, `lastReviewedAt?`, `archived`, `createdAt` | créée à la première réponse ; supprimée si la note devient inaccessible ou vide ; index `(userId, dueAt)` |
+| `CalendarFeed` | `userId` (clé), `tokenHash` (unique, SHA-256 du jeton `cal_…`), `createdAt`, `lastUsedAt?` (mis à jour au plus une fois par heure) | régénérer remplace l'empreinte (l'ancienne adresse cesse) ; supprimé avec le compte |
+
+Les **liens `[[…]]`** n'ont pas de table : ils sont dans le HTML des notes
+(`data-ref`, voir docs/01). La **fraîcheur** et le **voyage dans le temps**
+sont calculés à la lecture (pistes d'audit, `updatedAt`).
+
 ## Épingles du menu
 
 | Modèle | Champs | Notes |
@@ -184,6 +199,7 @@ Version d'un champ = `max(seq)` de ses lignes `UPSERT` (ou de la création).
 | `20261013150000_object_notes` | `notes` (HTML) sur `Project`, `Stage`, `Activity`, `Task` |
 | `20261016090000_map_shares_api_key_write` | `MindMapShare` (`MapPermission`), valeur `MAP_SHARED` de `NotificationType` (et droit d'écriture des clés d'API) |
 | `20261016091000_map_share_sync_trigger` | `sb_sync_log()` redéfinie avec la branche `MindMapShare` (identifiant « mapId:userId », portée `mapId`) et déclencheur sur `MindMapShare` |
+| `20261018090000_baselines_resurface_calendar` | `User.staleDays`, `ProjectBaseline`, `ResurfaceCard`, `CalendarFeed` |
 | `20261013080000_orphan_tasks_node_links` | `Task.ownerId` / `projectId` (reprise : projet déduit de l'étape, propriétaire du projet), `Task.stageId` nullable, `MindNodeTask` |
 
 Développement : `npx prisma migrate dev`. Production : `npm run prod:deploy`

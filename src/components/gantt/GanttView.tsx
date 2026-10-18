@@ -15,10 +15,12 @@ import {
   duration,
   fmtRange,
   fmtShort,
+  fmtSlip,
   headerTiers,
   isWeekend,
   planUpdates,
   previewSpans,
+  slipDays,
   snapDays,
   stageSpan,
   taskSpan,
@@ -60,6 +62,8 @@ type Props = {
   busy?: boolean;
   onCommit: (c: GanttCommit) => Promise<void>;
   onOpen: (taskId: string) => void;
+  /** Planning de référence : étendues figées par clé de ligne (barres fantômes, glissements). */
+  baseline?: Map<string, Span> | null;
 };
 
 const LEFT_W = "w-[170px] md:w-[400px]";
@@ -74,7 +78,7 @@ const DRAG_THRESHOLD = 4;
 
 type Drag = { id: string; mode: DragMode; startX: number; pointerId: number; moved: boolean; delta: number; raf: number };
 
-export function GanttView({ project, scale, cascade, busy = false, onCommit, onOpen }: Props) {
+export function GanttView({ project, scale, cascade, busy = false, onCommit, onOpen, baseline = null }: Props) {
   const px = SCALE_PX[scale];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [drafts, setDrafts] = useState<Map<string, Span>>(() => new Map());
@@ -106,8 +110,8 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
 
   // Bornes de la frise : calculées hors aperçu pour ne pas bouger pendant le glisser.
   const baseSpans = useMemo(
-    () => [...allTasks.map(baseSpan), ...project.stages.map((s) => stageSpan(s, []))],
-    [allTasks, baseSpan, project.stages],
+    () => [...allTasks.map(baseSpan), ...project.stages.map((s) => stageSpan(s, [])), ...(baseline ? [...baseline.values()] : [])],
+    [allTasks, baseSpan, project.stages, baseline],
   );
   const range = useMemo(() => timelineRange(baseSpans, today, scale), [baseSpans, today, scale]);
   const width = (range.end - range.start + 1) * px;
@@ -394,6 +398,7 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
                     end={span ? fmtShort(span.end) : "—"}
                     days={span ? duration(span) : null}
                     percent={r.percent}
+                    slip={baseline ? slipDays(span, baseline.get(r.key)) : null}
                     collapsed={r.kind !== "task" ? r.collapsed : false}
                     count={r.kind !== "task" ? r.count : 0}
                     done={r.kind === "task" && isFinished(r.task.status)}
@@ -443,6 +448,29 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
                   </span>
                 </>
               )}
+
+              {/* Planning de référence : barre fantôme sous chaque barre réelle */}
+              {baseline &&
+                rows.map((r, i) => {
+                  const b = baseline.get(r.key);
+                  if (!b || !inView(i)) return null;
+                  return (
+                    <div
+                      key={`base${r.key}`}
+                      className="pointer-events-none absolute rounded-[2px] border border-ink-2/50"
+                      style={{
+                        left: xOf(b.start),
+                        top: i * ROW_H + ROW_H - 7,
+                        width: duration(b) * px,
+                        height: 4,
+                        zIndex: 2,
+                        backgroundImage: "repeating-linear-gradient(135deg, var(--color-muted) 0 2px, transparent 2px 4px)",
+                      }}
+                      title={`Référence : ${fmtRange(b)}`}
+                      aria-hidden
+                    />
+                  );
+                })}
 
               <GanttConnectors links={links} width={width} height={height} focusId={dragId ?? hover ?? selected} />
 
@@ -496,6 +524,7 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
                     span={tipSpan}
                     group={(parentsOf.get(tipTask.id) ?? []).map((k) => groupName.get(k) ?? "").filter(Boolean).join(" › ")}
                     conflict={conflicts.has(tipTask.id)}
+                    base={baseline?.get(tipTask.id) ?? null}
                     left={Math.max(4, Math.min(xOf(tipSpan.start), width - 264))}
                     top={tipRow >= rows.length - 3 && rows.length > 4 ? undefined : (tipRow + 1) * ROW_H + 2}
                     bottom={tipRow >= rows.length - 3 && rows.length > 4 ? height - tipRow * ROW_H + 2 : undefined}
@@ -538,6 +567,7 @@ const GridRow = memo(function GridRow(p: {
   end: string;
   days: number | null;
   percent: number;
+  slip: number | null;
   collapsed: boolean;
   count: number;
   done: boolean;
@@ -587,6 +617,14 @@ const GridRow = memo(function GridRow(p: {
           </button>
         )}
         {p.conflict && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-danger" aria-label="Conflit de prérequis" />}
+        {p.slip !== null && p.slip !== 0 && (
+          <span
+            className={`ml-auto shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums ${p.slip > 0 ? "bg-red-50 text-danger" : "bg-ok/10 text-ok"}`}
+            title={`${p.slip > 0 ? "Retard" : "Avance"} de ${Math.abs(p.slip)} jour${Math.abs(p.slip) > 1 ? "s" : ""} sur la référence`}
+          >
+            {fmtSlip(p.slip)}
+          </span>
+        )}
       </div>
       <span className="hidden w-16 shrink-0 tabular-nums text-muted md:block">{p.start}</span>
       <span className="hidden w-16 shrink-0 tabular-nums text-muted md:block">{p.end}</span>
@@ -697,6 +735,7 @@ function Tooltip(p: {
   span: Span;
   group: string;
   conflict: boolean;
+  base: Span | null;
   left: number;
   top?: number;
   bottom?: number;
@@ -715,6 +754,15 @@ function Tooltip(p: {
       {!p.dragging && (
         <p className="text-muted">
           {status} · {p.task.progress} %
+        </p>
+      )}
+      {p.base && (
+        <p className="text-muted">
+          Référence : {fmtRange(p.base)}
+          {(() => {
+            const d = slipDays(p.span, p.base);
+            return d ? <span className={d > 0 ? " font-semibold text-danger" : " font-semibold text-ok"}> ({fmtSlip(d)})</span> : null;
+          })()}
         </p>
       )}
       {p.conflict && (

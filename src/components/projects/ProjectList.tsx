@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, FolderKanban, Inbox, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, FolderKanban, Inbox, Moon, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto, ProjectSummary } from "@/lib/projects";
+import type { StaleOverview } from "@/lib/freshness";
 import { Button, EmptyState, PageHeader, ProgressBar, errorMessage, formatDate } from "@/components/ui";
 import { PinButton } from "@/components/PinButton";
 import { CustomFieldChips } from "./ProjectCustomFields";
@@ -41,6 +42,18 @@ export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initi
   const [filter, setFilter] = useState<Filter>("ALL");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fraîcheur : projets actifs sans activité depuis N jours (en ligne, silencieux sinon).
+  const [stale, setStale] = useState<Map<string, number>>(() => new Map());
+  useEffect(() => {
+    let alive = true;
+    api
+      .get<{ stale: StaleOverview }>("/me/stale")
+      .then((r) => alive && setStale(new Map(r.stale.projects.map((p) => [p.id, p.idleDays]))))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -161,6 +174,11 @@ export function ProjectList({ initial, orphanCount = 0, currentUserId }: { initi
                   </Link>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
                     <span className={`rounded-full px-2 py-0.5 font-medium ${STATUS_CLASS[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+                    {stale.has(p.id) && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-800" title={`Aucune activité depuis ${stale.get(p.id)} jours`}>
+                        <Moon className="h-3 w-3" aria-hidden /> Endormi · {stale.get(p.id)} j
+                      </span>
+                    )}
                     <span>
                       {p.stageCount} étape{p.stageCount > 1 ? "s" : ""}
                     </span>

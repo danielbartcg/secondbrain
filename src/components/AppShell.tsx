@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, MessagesSquare, Brain, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
+import { Activity, MessagesSquare, Brain, Network, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
 import { Avatar } from "@/components/ui";
 import { api, ApiClientError } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
@@ -17,6 +17,7 @@ const NAV = [
   { href: "/projects", label: "Projets", icon: FolderKanban },
   { href: "/organize", label: "Mes tâches", icon: CalendarCheck2 },
   { href: "/notes", label: "Prise de notes", icon: NotebookPen },
+  { href: "/graph", label: "Graphe des liens", icon: Network },
   { href: "/activity", label: "Activité", icon: Activity },
   { href: "/messages", label: "Messages", icon: MessagesSquare },
 ];
@@ -48,6 +49,27 @@ export function AppShell({ user, children, statusSlot, pins: initialPins }: { us
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const unreadMessages = useUnreadMessages();
+
+  // Liens entre objets (`[[…]]`, data-ref) dans les notes affichées : navigation
+  // interne sans rechargement (et dans l'application native). Dans un éditeur,
+  // il faut Ctrl / ⌘ + clic ; ailleurs, Ctrl / ⌘ + clic garde l'ouverture dans
+  // un nouvel onglet du navigateur.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || !(e.target instanceof Element)) return;
+      const a = e.target.closest<HTMLAnchorElement>("a[data-ref]");
+      const href = a?.getAttribute("href");
+      if (!a || !href || !href.startsWith("/") || href.startsWith("//")) return;
+      const editing = !!a.closest('[contenteditable="true"]');
+      const modifier = e.ctrlKey || e.metaKey;
+      if (editing && !modifier) return;
+      if (!editing && (modifier || e.shiftKey)) return;
+      e.preventDefault();
+      router.push(href);
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [router]);
 
   // Tiroir mobile : Échap le ferme.
   useEffect(() => {

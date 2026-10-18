@@ -9,6 +9,8 @@ import { ProgressBarsChart } from "@/components/charts/ProgressBarsChart";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { DesktopAppPromo } from "@/components/DesktopAppPromo";
 import { IosInstallHint } from "@/components/IosInstallHint";
+import { StalePanel } from "./StalePanel";
+import { ResurfacePanel } from "./ResurfacePanel";
 import {
   Badge,
   DELIVERABLE_STATUS_COLOR,
@@ -211,6 +213,9 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
             </ul>
           )}
         </section>
+
+        <StalePanel />
+        <ResurfacePanel />
       </div>
     </div>
   );

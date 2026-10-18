@@ -549,3 +549,76 @@ export function buildLinks(
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Planning de référence (baseline) : étendues figées et glissements
+// ---------------------------------------------------------------------------
+
+type BaselineInput = {
+  stages: { id: string; name: string; startDate: string | null; dueDate: string | null }[];
+  tasks: { id: string; name: string; stageId: string | null; startDate: string | null; dueDate: string | null }[];
+};
+
+/** Étendues figées par clé de ligne du Gantt (`id` de tâche, `stage:<id>`). */
+export function baselineSpans(data: BaselineInput): Map<string, Span> {
+  const m = new Map<string, Span>();
+  const byStage = new Map<string, Span[]>();
+  for (const t of data.tasks) {
+    const s = taskSpan(t);
+    if (!s) continue;
+    m.set(t.id, s);
+    if (t.stageId) byStage.set(t.stageId, [...(byStage.get(t.stageId) ?? []), s]);
+  }
+  for (const st of data.stages) {
+    const s = stageSpan(st, byStage.get(st.id) ?? []);
+    if (s) m.set(`stage:${st.id}`, s);
+  }
+  return m;
+}
+
+/** Glissement en jours de la fin (positif = retard sur la référence) ; null si l'une des deux manque. */
+export function slipDays(current: Span | null | undefined, base: Span | null | undefined): number | null {
+  return current && base ? current.end - base.end : null;
+}
+
+export type StageSlip = { id: string; name: string; base: Span | null; current: Span | null; slip: number | null; startSlip: number | null };
+
+/**
+ * Glissement de chaque étape actuelle par rapport à la référence (fin et
+ * début), dans l'ordre du plan ; une étape absente de la référence a
+ * `base: null`.
+ */
+export function stageSlips(project: GProject, base: Map<string, Span>): StageSlip[] {
+  return project.stages.map((s) => {
+    const spans = [...s.activities.flatMap((a) => a.tasks), ...s.tasks].map(taskSpan).filter((x): x is Span => !!x);
+    const current = stageSpan(s, spans);
+    const b = base.get(`stage:${s.id}`) ?? null;
+    return { id: s.id, name: s.name, base: b, current, slip: slipDays(current, b), startSlip: current && b ? current.start - b.start : null };
+  });
+}
+
+/** Écart global entre référence et réel : tâches ajoutées, retirées, en retard / en avance sur la référence. */
+export function baselineSummary(project: GProject, data: BaselineInput, base: Map<string, Span>) {
+  const tasks = [...project.stages.flatMap((s) => [...s.activities.flatMap((a) => a.tasks), ...s.tasks]), ...project.tasks];
+  const ids = new Set(tasks.map((t) => t.id));
+  let late = 0;
+  let early = 0;
+  let maxSlip = 0;
+  for (const t of tasks) {
+    const d = slipDays(taskSpan(t), base.get(t.id));
+    if (d === null) continue;
+    if (d > 0) late++;
+    if (d < 0) early++;
+    maxSlip = Math.max(maxSlip, d);
+  }
+  const added = tasks.filter((t) => taskSpan(t) && !base.has(t.id)).length;
+  const removed = data.tasks.filter((t) => !ids.has(t.id)).length;
+  const end = unionSpan(tasks.map(taskSpan));
+  const baseEnd = unionSpan(data.tasks.map(taskSpan));
+  return { late, early, maxSlip, added, removed, projectSlip: slipDays(end, baseEnd) };
+}
+
+/** Libellé court d'un glissement : « +3 j », « −2 j », « = ». */
+export function fmtSlip(d: number): string {
+  return d === 0 ? "=" : `${d > 0 ? "+" : "−"}${Math.abs(d)} j`;
+}

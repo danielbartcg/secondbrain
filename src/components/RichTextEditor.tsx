@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -14,6 +13,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import { uploadImage } from "@/lib/client";
 import { EmojiButton } from "@/components/EmojiPicker";
+import { ObjectLink, useWikiLinks } from "@/components/WikiLinks";
 
 /**
  * Éditeur WYSIWYG des notes (repris du template boutique).
@@ -28,6 +28,8 @@ import { EmojiButton } from "@/components/EmojiPicker";
  * cassée partout ailleurs).
  *
  * Emoji : bouton de la barre d'outils (sélecteur emoji-mart).
+ * Liens entre objets : taper `[[` ouvre la liste des objets à lier
+ * (`WikiLinks.tsx`) ; Ctrl/⌘ + clic sur un lien interne l'ouvre.
  * `variant="compact"` (messagerie) : barre réduite ; `onSubmit` est appelé par
  * Ctrl/⌘ + Entrée.
  */
@@ -88,13 +90,14 @@ export function RichTextEditor({
   const onSubmitRef = useRef(onSubmit);
   onSubmitRef.current = onSubmit;
   const compact = variant === "compact";
+  const wikiKeyRef = useRef<(e: KeyboardEvent) => boolean>(() => false);
 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit,
       Image.configure({ inline: false }),
-      LinkExtension.configure({ openOnClick: false }),
+      ObjectLink.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -113,6 +116,10 @@ export function RichTextEditor({
       // 16 px minimum sur mobile : évite le zoom automatique d'iOS à la saisie.
       attributes: { class: "prose max-w-none", "aria-label": placeholder },
       handleKeyDown: (_view, event) => {
+        if (wikiKeyRef.current(event)) {
+          event.preventDefault();
+          return true;
+        }
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && onSubmitRef.current) {
           event.preventDefault();
           onSubmitRef.current();
@@ -141,6 +148,9 @@ export function RichTextEditor({
     },
   });
 
+  const wiki = useWikiLinks(editor);
+  wikiKeyRef.current = wiki.onKeyDown;
+
   // Changement de document (autre nœud sélectionné) : on recharge le contenu
   // sans déclencher onChange.
   const lastKey = useRef(documentKey);
@@ -164,6 +174,7 @@ export function RichTextEditor({
         <div style={{ ["--editor-min-height" as string]: `${minHeight}px` }} className="max-h-60 overflow-y-auto px-1">
           <EditorContent editor={editor} />
         </div>
+        {wiki.menu}
         {editor && (
           <div className="flex flex-wrap items-center gap-1 border-t border-line p-1">
             <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive("bold")} label="G" title="Gras" className="font-bold" />
@@ -237,6 +248,7 @@ export function RichTextEditor({
       <div style={{ ["--editor-min-height" as string]: `${minHeight}px` }}>
         <EditorContent editor={editor} />
       </div>
+      {wiki.menu}
     </div>
   );
 }

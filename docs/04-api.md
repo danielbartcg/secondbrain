@@ -576,3 +576,37 @@ Réponses : `{ risks: Risk[] }` (liste complète du projet, triée par `order` p
 ## Téléchargements (compléments)
 
 `GET /downloads/latest.json` (public, `no-cache`) : `{ platform, version, file, size, sha256, publishedAt }` de la dernière version desktop (404 si aucune) ; lu par l'updater de l'application.
+
+## Second cerveau (liens, fraîcheur, résurgence, référence, voyage dans le temps, iCal)
+
+Toutes en ligne (relayées par l'application native). Schémas :
+`src/lib/schemas-features.ts`.
+
+| Méthode | Route | Corps / paramètres | Réponse |
+| --- | --- | --- | --- |
+| GET | `/projects/:id/baselines` | — | `{ baselines: [{ id, name, createdAt, createdById, createdByName, taskCount }] }` (plus récentes d'abord) ; membres du projet, 404 sinon (projets types compris) |
+| POST | `/projects/:id/baselines` | `{ name (1–120) }` | `201 { baseline }` avec `data: { stages: [{ id, name, startDate, dueDate }], tasks: [{ id, name, stageId, startDate, dueDate }] }` (dates AAAA-MM-JJ) ; 409 `LIMIT` au-delà de 20 ; verrou du projet |
+| GET | `/projects/:id/baselines/:baselineId` | — | `{ baseline }` |
+| PATCH | `/projects/:id/baselines/:baselineId` | `{ name }` | `{ baseline }` (résumé) ; auteur ou propriétaire, 403 sinon |
+| DELETE | `/projects/:id/baselines/:baselineId` | — | `{ ok: true }` ; auteur ou propriétaire, 403 sinon |
+| GET | `/me/stale?days=` | `days` 1–365 (défaut : `staleDays` du profil) | `{ stale: { days, tasks: [{ id, name, status, dueDate, projectId, projectName, lastActivityAt, idleDays }] (50 au plus, plus anciennes d'abord), taskCount, projects: [{ id, name, color, lastActivityAt, idleDays }] } }` — mes tâches ouvertes (projets actifs / en pause, sans projet) et mes projets **actifs** sans activité |
+| GET | `/projects/:id/stale?days=` | idem | `{ stale: { days, lastActivityAt, tasks: { [taskId]: lastActivityAt } } }` — toutes les tâches ouvertes endormies du projet |
+| PATCH | `/me` | `{ staleDays? (1–365) }` | profil (`staleDays` ajouté à `ProfileDto`) |
+| GET | `/links/suggest?q=` | `q` ≤ 100 (vide = récents) | `{ items: [{ ref, kind, title, context, href }] }` — 4 par type (tâches, projets, nœuds, cartes, réunions, étapes, activités, documents), périmètre de l'utilisateur ; 300 / 15 min |
+| GET | `/links/backlinks?ref=kind:id` | — | `{ items: [{ ref, kind, title, context, href, excerpt }] }` — objets accessibles dont les notes / comptes-rendus contiennent `data-ref="<ref>"` (50 par type) ; référence invalide ⇒ liste vide |
+| GET | `/links/graph` | — | `{ graph: { nodes: [{ ref, kind, title, href, projectId, mapId }], edges: [{ from, to }], truncated } }` — seuls les objets reliés ; cibles inaccessibles écartées |
+| GET | `/me/resurface` | — | `{ items: [{ ref, kind, title, href, context, excerpt, box (0 = jamais relue), updatedAt, lastReviewedAt }] }` — 3 notes au plus pour aujourd'hui |
+| POST | `/me/resurface` | `{ ref (kind:id de Prise de notes), answer: remember \| again \| archive }` | `{ items }` à jour ; 404 si l'objet n'est pas lisible |
+| GET | `/me/calendar` | — | `{ feed: { active, createdAt, lastUsedAt } }` |
+| POST | `/me/calendar` | — | `201 { path: "/api/v1/calendar/cal_….ics", feed }` — **montré une seule fois** ; régénérer invalide l'ancienne adresse |
+| DELETE | `/me/calendar` | — | `{ ok: true }` (révocation) |
+| GET | `/calendar/:token.ics` | **public** (jeton secret dans l'URL) | `text/calendar` (RFC 5545) : échéances de mes tâches ouvertes (journée entière), mes sessions de travail (disponible), réunions où je suis rédacteur / participant / validateur (1 h), livrables dont je suis responsable — de J−90 à J+366, 2 000 évènements ; 404 jeton inconnu ; 60 / 15 min par jeton ; `no-store` |
+| GET | `/projects/:id/time-travel?at=` | `at` ISO ou AAAA-MM-JJ (fin de journée, heure de Paris ; défaut maintenant) | `{ state: { at, createdAt, stats: { total, done, inProgress, todo, percent, late }, stages: [{ id, name, total, done, percent }], tasks: [{ id, stageId, name, status, progress, priority, complexity, startDate, dueDate, assignee, changedSince }], since: { created, changed }, curve: [{ date, percent, done, total }] (≤ 41 points) } }` ; 400 date invalide |
+| GET | `/mindmaps/:id/time-travel?at=` | idem | `{ state: { at, createdAt, nodes: [{ id, parentId, title, status, color }], deletedSince: [{ id, title, at }], movedSince: [{ id, title, from }], createdSince } }` ; droit de lecture |
+
+Liens dans le HTML des notes : `<a href="/tasks/…" data-ref="task:…">` ;
+`sanitizeNotes` ne garde `data-ref` (motif
+`(project|stage|activity|task|mindmap|node|meeting|document):id`) que sur un
+lien **interne** (chemin commençant par `/`, sans `target`), jamais sur un lien
+externe. Connecteur MCP : `api_request` refuse `/me/calendar` et
+`/calendar/*`.

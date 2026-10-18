@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { History, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MapEventDto } from "@/lib/map-events";
@@ -89,6 +90,9 @@ export function MapHistoryPanel({
       <header className="flex items-center gap-2 border-b border-line px-4 py-3">
         <History className="h-4 w-4 text-brand-600" />
         <h2 className="flex-1 text-sm font-semibold">Historique</h2>
+        <Link href={`/mindmaps/${mapId}/time-travel`} className="rounded-lg px-2 py-1 text-xs font-medium text-brand-700 hover:bg-surface-2" title="Voir la carte telle qu'elle était à une date passée">
+          Voyage dans le temps
+        </Link>
         <button type="button" onClick={onClose} className="rounded-lg p-1 text-muted hover:bg-surface-2 hover:text-ink" title="Fermer" aria-label="Fermer l'historique">
           <X className="h-4 w-4" />
         </button>

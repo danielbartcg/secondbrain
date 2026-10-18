@@ -6,6 +6,8 @@
 import {
   ROW_H,
   applyDrag,
+  baselineSpans,
+  baselineSummary,
   buildLinks,
   buildRows,
   conflictIds,
@@ -18,6 +20,9 @@ import {
   planUpdates,
   routeLink,
   roundedPath,
+  slipDays,
+  stageSlips,
+  fmtSlip,
   snapDays,
   stageSpan,
   taskSpan,
@@ -189,6 +194,35 @@ check("lien en conflit : marqué et contourné", lq.conflict && lq.around);
 check("lien normal : direct, non conflictuel", !lr.conflict && !lr.around);
 check("lien part du bord droit (fin incluse + 1 jour)", lr.points[0][0] === 30 && lr.points[lr.points.length - 1][0] === 80);
 check("lien vers ligne masquée ignoré", buildLinks(linkTasks, lSpans, new Map([["p", 0], ["q", 1]]), (n) => n).length === 1);
+
+// ---- Planning de référence (baseline)
+const frozen = {
+  stages: [
+    { id: "s1", name: "Étape 1", startDate: null, dueDate: null },
+    { id: "s3", name: "Étape datée", startDate: "2026-11-01", dueDate: "2026-11-04" },
+  ],
+  tasks: [
+    { id: "t1", name: "t1", stageId: "s1", startDate: "2026-10-12", dueDate: "2026-10-13" },
+    { id: "t3", name: "t3", stageId: "s1", startDate: "2026-10-18", dueDate: "2026-10-19" },
+    { id: "t4", name: "t4", stageId: "s3", startDate: "2026-11-03", dueDate: "2026-11-04" },
+    { id: "old", name: "retirée", stageId: null, startDate: "2026-10-01", dueDate: "2026-10-02" },
+  ],
+};
+const bs = baselineSpans(frozen);
+check("référence : étendue de tâche", eq(bs.get("t3"), { start: dayNum("2026-10-18"), end: dayNum("2026-10-19") }));
+check("référence : étape sans dates = union de ses tâches", eq(bs.get("stage:s1"), { start: dayNum("2026-10-12"), end: dayNum("2026-10-19") }));
+check("référence : étape datée = ses propres dates", eq(bs.get("stage:s3"), { start: dayNum("2026-11-01"), end: dayNum("2026-11-04") }));
+check("glissement : retard positif", slipDays(taskSpan(task("x", "2026-10-20", "2026-10-22")), bs.get("t3")) === 3);
+check("glissement : null sans référence", slipDays(taskSpan(task("x", "2026-10-20", "2026-10-22")), undefined) === null);
+const ss = stageSlips(project, bs);
+check("glissement par étape : fin de l'étape 1 (+3 j), début inchangé", ss[0].slip === 3 && ss[0].startSlip === 0, ss[0]);
+check("glissement par étape : étape absente de la référence", ss[1].base === null && ss[1].slip === null);
+check("glissement par étape : étape datée (+1 j : 05/11 contre 04/11)", ss[2].slip === 1, ss[2]);
+const sum = baselineSummary(project, frozen, bs);
+check("synthèse : 2 en retard (t3, t4), 0 en avance", sum.late === 2 && sum.early === 0, sum);
+check("synthèse : ajoutées (t5, t6) et retirée (old)", sum.added === 2 && sum.removed === 1, sum);
+check("synthèse : glissement de fin du projet", sum.projectSlip === 1, sum);
+check("libellés de glissement", fmtSlip(3) === "+3 j" && fmtSlip(-2) === "−2 j" && fmtSlip(0) === "=");
 
 console.log(`\n${passes} réussi(s), ${failures} échec(s)`);
 if (failures) process.exit(1);

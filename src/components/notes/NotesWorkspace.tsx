@@ -7,6 +7,7 @@ import { Brain, ChevronDown, ChevronRight, ExternalLink, FolderKanban, Inbox, La
 import { api } from "@/lib/client";
 import type { NoteDocument, NoteKind, TreeItem } from "@/lib/notes";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { Backlinks } from "@/components/Backlinks";
 import { toast } from "@/components/ui";
 
 /**
@@ -321,6 +322,7 @@ export function NotesWorkspace({ roots }: { roots: TreeItem[] }) {
             ) : (
               <p className="mt-6 text-sm text-muted">Cette rubrique regroupe des éléments ; dépliez-la dans l&apos;arborescence et choisissez un élément pour prendre des notes.</p>
             )}
+            {doc.kind !== "root" && doc.kind !== "section" && <Backlinks key={doc.ref} objectRef={doc.ref} className="mt-8" />}
           </article>
         )}
       </div>

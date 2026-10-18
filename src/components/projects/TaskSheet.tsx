@@ -9,6 +9,7 @@ import type { MemberDto, ProjectDto, ProjectSummary, TaskMutation } from "@/lib/
 import type { TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
 import type { NodeTasksResult } from "@/lib/tasks";
 import { NotesPreview } from "@/components/notes/NotesPreview";
+import { Backlinks } from "@/components/Backlinks";
 import {
   Avatar,
   Badge,
@@ -312,6 +313,9 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
               className="-mx-1.5 block min-h-12 whitespace-pre-wrap text-sm leading-relaxed text-ink-2"
             />
           </div>
+
+          {/* Liens [[…]] entrants */}
+          {!tpl && <Backlinks objectRef={`task:${task.id}`} className="mt-6" />}
 
           {/* Piste d'audit */}
           <TaskHistory taskId={task.id} version={task.updatedAt} />

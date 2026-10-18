@@ -63,8 +63,19 @@ en production sur https://secondbrain.danielbar-tcg.fr.
    **Notifications in-app** (cloche) : tâche assignée, réponse à un
    commentaire, tâche assignée mise à jour, mention — cliquables, lues /
    non lues.
+   **Second cerveau** : **liens `[[…]]`** entre notes, tâches, projets,
+   étapes, nœuds de carte, réunions et documents (autocomplétion dans tout
+   éditeur riche), panneau **« Mentionné dans »** sur chaque objet et
+   **graphe des liens** ; **résurgence** quotidienne de notes anciennes
+   (répétition espacée, boîtes de Leitner) ; **fraîcheur** (tâches et
+   projets « endormis » au-delà d'un seuil réglable) ; **plannings de
+   référence** dans le Gantt (barres fantômes, glissement par tâche et par
+   étape) ; **voyage dans le temps** d'un projet ou d'une carte (état
+   reconstitué à une date passée depuis les pistes d'audit, courbe
+   d'avancement) ; **flux iCal** personnel (Outlook, iPhone, Google Agenda).
 3. **Tableau de bord personnel** — mes tâches, échéances à venir, retards,
-   répartitions par statut, avancement des projets.
+   répartitions par statut, avancement des projets, tâches et projets
+   endormis, notes à relire aujourd'hui.
 
 Toute la logique passe par une **API REST versionnée `/api/v1`** (cookie de
 session pour le web, jeton `Bearer` pour une future application mobile) —
@@ -115,6 +126,8 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run ios:sync` / `ios:open` | application iPhone : build de l'interface + mise à jour du projet Xcode `native/ios` / ouverture dans Xcode (Mac) ; envoi TestFlight par le workflow GitHub « iOS TestFlight » |
 | `npm run test:pptx` | tests de bout en bout de l'export PowerPoint « état des lieux » (contenu des diapositives, graphiques, accès, projet vide) — serveur lancé (`BASE_URL`, `SAVE_PPTX=fichier.pptx` pour conserver la présentation de démonstration) |
 | `npm run test:mcp-query` | tests de bout en bout des requêtes MCP sur tous les objets (`query_objects` : auteur, dates, tri, texte, périmètre ; `list_recent_tasks`, `list_meetings`, `get_meeting`) — serveur de dev lancé |
+| `npm run test:knowledge` | tests purs des liens `[[…]]` (assainissement, extraction), de la répétition espacée, de l'iCalendar et du voyage dans le temps — sans serveur |
+| `npm run test:knowledge-e2e` | tests de bout en bout des plannings de référence, de la fraîcheur, des liens (rétroliens, graphe, suggestions), de la résurgence, du flux iCal et du voyage dans le temps, droits compris — serveur de dev lancé, `BASE_URL` facultatif |
 | `npm run test:templates` | tests de bout en bout des modèles (projets types, cartes types : édition par les administrateurs, exclusion des périmètres, création et application, outils MCP) — serveur de dev lancé |
 | `npm run test:custom-fields` | tests de bout en bout des champs personnalisés des projets (administration, valeurs, renommage / retrait / archivage / suppression, synchro, outils MCP) — serveur de dev lancé |
 | `npm run test:activity` | tests de bout en bout de la piste d'audit des cartes et du rapport d'activité (API, filtres, droits, outils MCP) et des fenêtres de temps — serveur de dev lancé |

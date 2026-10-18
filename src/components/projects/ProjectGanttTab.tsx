@@ -9,6 +9,7 @@ import { PALETTE } from "@/components/charts/AmChart";
 import { GanttView, type GanttCommit } from "@/components/gantt/GanttView";
 import { NO_STAGE_COLOR, conflictIds, taskSpan, type GanttScale, type Span } from "@/components/gantt/ganttModel";
 import { toast } from "@/components/ui";
+import { BaselineControls } from "./BaselineControls";
 import type { Resp, Run } from "./ProjectWorkspace";
 
 /**
@@ -38,11 +39,12 @@ function commitMessage({ updates, mode, delta }: GanttCommit): string {
   return `${mode === "start" ? "Début" : "Échéance"} modifié${mode === "start" ? "" : "e"} (${days})${cascade}.`;
 }
 
-export function ProjectGanttTab({ project, run }: { project: ProjectDto; run: Run }) {
+export function ProjectGanttTab({ project, run, currentUserId }: { project: ProjectDto; run: Run; currentUserId: string }) {
   const router = useRouter();
   const [scale, setScale] = useState<GanttScale>("week");
   const [cascade, setCascade] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [baseline, setBaseline] = useState<Map<string, Span> | null>(null);
 
   const tasks = useMemo(() => allTasks(project), [project]);
   const conflicts = useMemo(() => {
@@ -117,6 +119,8 @@ export function ProjectGanttTab({ project, run }: { project: ProjectDto; run: Ru
         </span>
       </p>
 
+      <BaselineControls project={project} currentUserId={currentUserId} onSpans={setBaseline} />
+
       {legend.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2" aria-label="Étapes">
           {legend.map((l) => (
@@ -136,7 +140,7 @@ export function ProjectGanttTab({ project, run }: { project: ProjectDto; run: Ru
       )}
 
       <div className="mt-3">
-        <GanttView project={project} scale={scale} cascade={cascade} busy={busy} onCommit={commit} onOpen={open} />
+        <GanttView project={project} scale={scale} cascade={cascade} busy={busy} onCommit={commit} onOpen={open} baseline={baseline} />
       </div>
 
       {unplanned.length > 0 && (

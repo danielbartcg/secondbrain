@@ -69,6 +69,8 @@ export const updateProfileSchema = z.object({
   theme: themeSchema.optional(),
   /** Copies e-mail des notifications. */
   emailNotifications: z.boolean().optional(),
+  /** Fraîcheur : jours sans activité avant qu'une tâche ou un projet soit signalé (1 à 365). */
+  staleDays: z.number().int().min(1).max(365).optional(),
 });
 export const adminUpdateUserSchema = z.object({
   role: z.enum(["USER", "ADMIN"]).optional(),

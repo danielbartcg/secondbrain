@@ -376,7 +376,9 @@ sinon silhouette sur couleur stable par id),
 ## Graphiques (`src/components/charts/`)
 
 `AmChart` (enveloppe amCharts 4), `StatusDonut`, `ProgressBarsChart`,
-`PlanningChart`. Règle : tout nouveau graphique = nouveau composant dans ce
+`PlanningChart`, `DailyActivityChart`, `ProgressCurveChart` (voyage dans le
+temps) ; `forceDirected.ts` charge l'extension « force-directed » (graphe des
+liens) avec le cœur. Règle : tout nouveau graphique = nouveau composant dans ce
 dossier, construit avec amCharts 4.
 
 ## Fiche projet : nouveaux onglets et export
@@ -451,3 +453,57 @@ Bandeau « Nouvelle version x.y.z disponible — Mettre à jour / Plus tard »
 modifications en attente, affiche la progression du téléchargement puis
 « Installation… l'application va redémarrer ». Préférences → Application
 desktop : « Rechercher une mise à jour ».
+
+## Second cerveau : liens, fraîcheur, résurgence, référence, voyage dans le temps, iCal
+
+- **Liens `[[…]]`** (`WikiLinks.tsx`, branché dans `RichTextEditor` : notes,
+  comptes-rendus, messages) : taper `[[` ouvre une liste flottante (portail,
+  `/links/suggest`, 150 ms) d'objets — tâches, projets, nœuds, cartes,
+  réunions, étapes, activités, documents — filtrée au fil de la frappe ;
+  ↑ ↓ Entrée / Tab, Échap ferme. Le lien inséré est une pastille teintée
+  (`a[data-ref]`, `globals.css`). Dans un éditeur : Ctrl / ⌘ + clic l'ouvre ;
+  ailleurs (aperçus de notes) : clic = navigation interne sans rechargement
+  (écouteur de `AppShell`, site et application), Ctrl / ⌘ + clic = nouvel
+  onglet.
+- **« Mentionné dans »** (`Backlinks.tsx`) : objets dont les notes lient
+  l'objet, avec extrait autour du lien ; sur la fiche projet (sous les
+  notes), la fiche tâche (avant l'historique), le panneau d'un nœud de carte
+  et chaque document de Prise de notes. Masqué s'il est vide ou hors ligne,
+  et en mode modèle.
+- **Graphe des liens** (`/graph`, `graph/KnowledgeGraph.tsx`, entrée de
+  menu) : amCharts 4 « force-directed » (`charts/forceDirected.ts`, chargé à
+  la demande avec le cœur), couleur par type, taille selon le nombre de
+  liens, clic = ouvrir l'objet ; périmètre (projet ou carte : ses objets et
+  leurs voisins), types affichables / masquables, « Les plus reliés ».
+- **Tableau de bord** : « Endormis » (`dashboard/StalePanel.tsx` : projets
+  actifs en pastilles, 8 tâches avec leurs jours d'inactivité, lien « Régler
+  le seuil ») et « À relire aujourd'hui » (`dashboard/ResurfacePanel.tsx` :
+  3 notes au plus, type et boîte, extrait, « Toujours utile » / « À revoir
+  bientôt » / « Ne plus proposer » ; « C'est tout pour aujourd'hui »).
+- **Plan du projet** : pastille ambrée lune « N j » sur les tâches ouvertes
+  endormies (`ProjectBoard`, contexte `StaleContext`) ; **liste des
+  projets** : pastille « Endormi · N j ».
+- **Gantt — planning de référence** (`projects/BaselineControls.tsx`) :
+  choix de la référence (la plus récente par défaut, « Aucun »), « Figer le
+  planning actuel » (nom proposé « Référence du JJ/MM/AAAA »), suppression
+  (auteur ou propriétaire) ; synthèse (fin du projet, tâches en retard / en
+  avance, ajoutées, retirées, auteur) et tableau dépliable « Glissement par
+  étape ». Dans `GanttView` (prop `baseline`) : barre fantôme hachurée sous
+  chaque barre (tâches et étapes), badge « +3 j » / « −2 j » dans la grille,
+  ligne « Référence : … (+3 j) » dans l'infobulle.
+- **Voyage dans le temps** : onglet du projet (`ProjectTimeTravelTab`, masqué
+  en mode modèle) — date (champ, curseur, raccourcis 7 / 30 / 90 j,
+  « Création »), courbe d'avancement cliquable
+  (`charts/ProgressCurveChart.tsx` : avancement moyen + tâches terminées,
+  ligne « Consulté »), indicateurs, avancement par étape, tableau des tâches
+  d'alors (filtre « modifiées depuis »). Carte : `/mindmaps/:id/time-travel`
+  (`mindmap/MapTimeTravel.tsx`, lien « Voyage dans le temps » du panneau
+  Historique) — arborescence d'alors, supprimés et déplacés depuis.
+- **Préférences** (`preferences/FeatureSections.tsx`) : « Fraîcheur » (seuil
+  en jours, ancre `#fraicheur`) et « Calendrier (abonnement iCal) » (créer /
+  régénérer / désactiver ; adresse montrée une fois avec « Copier », mode
+  d'emploi Outlook, iPhone — lien `webcal:` —, Google Agenda).
+- Application native : mêmes écrans ; `/graph` et `/mindmaps/:id/time-travel`
+  ajoutés à `native/src/App.tsx` ; tout ce qui précède est **en ligne**
+  (routes relayées au serveur) et se masque ou affiche « Disponible
+  uniquement en ligne » hors connexion.

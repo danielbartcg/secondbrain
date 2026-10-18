@@ -7,6 +7,7 @@ import { ApiClientError, api, uploadImage } from "@/lib/client";
 import type { ProfileDto, Theme } from "@/lib/users";
 import { Avatar, Button, PageHeader, inputClass } from "@/components/ui";
 import { ConnectorSection, EmailSection } from "@/components/preferences/AccountSections";
+import { CalendarSection, FreshnessSection } from "@/components/preferences/FeatureSections";
 import { PasswordStrengthMeter } from "@/components/PasswordStrengthMeter";
 
 /**
@@ -166,6 +167,10 @@ export function PreferencesPage({ initial }: { initial: ProfileDto }) {
 
       {/* Adresse e-mail et notifications par e-mail */}
       <EmailSection profile={profile} onProfile={setProfile} />
+
+      {/* Fraîcheur et abonnement iCal */}
+      <FreshnessSection profile={profile} onProfile={setProfile} />
+      <CalendarSection />
 
       {/* Mot de passe */}
       <PasswordSection />

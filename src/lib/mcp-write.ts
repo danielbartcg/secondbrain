@@ -38,7 +38,7 @@ export type WriteTool = {
 const INTERNAL_BASE = () => (process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`).replace(/\/+$/, "");
 
 /** Routes jamais accessibles par le connecteur (identité, clés, synchro, le connecteur lui-même). */
-const FORBIDDEN = [/^\/mcp(\/|$)/, /^\/auth(\/|$)/, /^\/me\/api-keys/, /^\/me\/password/, /^\/me\/email/, /^\/sync(\/|$)/];
+const FORBIDDEN = [/^\/mcp(\/|$)/, /^\/auth(\/|$)/, /^\/me\/api-keys/, /^\/me\/password/, /^\/me\/email/, /^\/me\/calendar/, /^\/calendar(\/|$)/, /^\/sync(\/|$)/];
 
 export async function callApi<T = Record<string, unknown>>(user: User, method: string, apiPath: string, body?: unknown): Promise<T> {
   const m = method.toUpperCase();
