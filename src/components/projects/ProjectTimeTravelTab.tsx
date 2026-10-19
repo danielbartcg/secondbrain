@@ -7,18 +7,22 @@ import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import type { ProjectAt } from "@/lib/time-travel";
 import { ProgressCurveChart } from "@/components/charts/ProgressCurveChart";
+import { TimeTravelGantt, TimeTravelRisks } from "./TimeTravelPanels";
+import { parisYmd } from "@/lib/shared/activity-period";
 import { Badge, PRIORITY_LABEL, ProgressBar, TASK_STATUS_LABEL, TASK_STATUS_TONE, errorMessage, formatDate, inputClass } from "@/components/ui";
 
 /**
  * Onglet « Voyage dans le temps » : état du projet à une date passée,
  * reconstitué depuis la piste d'audit des tâches (statut, avancement, dates,
  * priorité, responsable, nom). Courbe d'avancement cliquable, curseur de date,
- * indicateurs, avancement par étape et tâches telles qu'elles étaient. En
- * ligne uniquement.
+ * indicateurs, avancement par étape, Gantt à la date (ou actuel comparé),
+ * matrice des risques / opportunités à la date (instantanés `RiskSnapshot`)
+ * et tâches telles qu'elles étaient. En ligne uniquement.
  */
 
 const DAY_MS = 86_400_000;
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
+/** Jour (calendrier de Paris) : les dates choisies sont interprétées à Paris. */
+const ymd = (d: Date) => parisYmd(d);
 const QUICK = [
   { label: "Il y a 7 j", days: 7 },
   { label: "30 j", days: 30 },
@@ -66,8 +70,9 @@ export function ProjectTimeTravelTab({ project }: { project: ProjectDto }) {
       <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          L&apos;état du projet à la date choisie, reconstitué depuis l&apos;historique des tâches (statut, avancement, dates, priorité, responsable, nom).
-          Les tâches supprimées depuis n&apos;apparaissent plus ; les étapes gardent leur nom actuel.
+          L&apos;état du projet à la date choisie, reconstitué depuis l&apos;historique des tâches (statut, avancement, dates, priorité, responsable, nom) et
+          des risques. Les tâches supprimées depuis n&apos;apparaissent plus ; les étapes gardent leur nom actuel. Les risques sont historisés depuis le
+          19/10/2026 (avant : leur état à cette date-là).
         </span>
       </p>
 
@@ -144,7 +149,11 @@ export function ProjectTimeTravelTab({ project }: { project: ProjectDto }) {
             </div>
           )}
 
-          <div className="mt-5">
+          <TimeTravelGantt project={project} state={state} date={date} />
+
+          <TimeTravelRisks project={project} risks={state.risks} date={date} />
+
+          <div className="mt-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">Tâches au {formatDate(date)}</h3>
               <label className="flex items-center gap-2 text-xs text-ink-2">

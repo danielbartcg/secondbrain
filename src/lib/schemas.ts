@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { JOURNAL_BLOCKS } from "@/lib/shared/journal";
 
 /**
  * Schémas de validation de l'API /api/v1 (zod). Partagés entre les route
@@ -71,6 +72,8 @@ export const updateProfileSchema = z.object({
   emailNotifications: z.boolean().optional(),
   /** Fraîcheur : jours sans activité avant qu'une tâche ou un projet soit signalé (1 à 365). */
   staleDays: z.number().int().min(1).max(365).optional(),
+  /** Journal quotidien : blocs affichés (Personnalisation du journal). */
+  journalBlocks: z.array(z.enum(JOURNAL_BLOCKS)).max(JOURNAL_BLOCKS.length).optional(),
 });
 export const adminUpdateUserSchema = z.object({
   role: z.enum(["USER", "ADMIN"]).optional(),

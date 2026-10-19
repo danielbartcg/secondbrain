@@ -216,7 +216,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
       {!tpl && <Backlinks objectRef={`project:${project.id}`} className="mt-4" />}
 
       {/* Onglets */}
-      <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="Sections du projet">
+      <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line md:flex-wrap md:overflow-visible" role="tablist" aria-label="Sections du projet">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -224,7 +224,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
             role="tab"
             aria-selected={tab === key}
             onClick={() => selectTab(key)}
-            className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
               tab === key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-ink"
             }`}
           >

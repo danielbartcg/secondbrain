@@ -4,6 +4,9 @@ import type { TemplatesDto } from "@/lib/templates";
 import { AdminCustomFields } from "@/components/admin/AdminCustomFields";
 import type { CustomFieldDto } from "@/lib/shared/custom-fields";
 import { ActivityView } from "@/components/activity/ActivityView";
+import { JournalView } from "@/components/journal/JournalView";
+import type { JournalDayDto } from "@/lib/shared/journal";
+import { parisYmd } from "@/lib/shared/activity-period";
 import { KnowledgeGraph } from "@/components/graph/KnowledgeGraph";
 import type { KnowledgeGraph as KnowledgeGraphDto } from "@/lib/links";
 import type { ActivityReport } from "@/lib/activity";
@@ -172,6 +175,8 @@ function Screen({ path, runtime }: { path: string; runtime: Runtime }) {
   if (path === "/organize") return <Loaded load={() => api.get<OrganizerDto>("/me/tasks")} render={(d) => <TaskOrganizer initial={d} />} />;
   if (path === "/notes") return <Loaded load={() => api.get<{ children: TreeItem[] }>("/notes/tree?parent=root")} render={(d) => <NotesWorkspace roots={d.children} />} />;
   if (path === "/notifications") return <NotificationsPage />;
+  // Journal quotidien : servi par le serveur (pistes d'audit pour l'activité), en ligne uniquement.
+  if (path === "/journal") return <Loaded load={() => api.get<{ journal: JournalDayDto }>(`/journal/days/${parisYmd()}`)} render={(d) => <JournalView initial={d.journal} />} />;
   // Activité : calculée par le serveur (pistes d'audit), en ligne uniquement.
   if (path === "/activity")
     return (

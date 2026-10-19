@@ -18,6 +18,7 @@ import { hashPassword } from "@/lib/auth";
  */
 
 import { SUPER_ADMIN_EMAIL, isAdmin, isSuperAdmin } from "@/lib/roles";
+import { normalizeJournalBlocks, type JournalBlockKey } from "@/lib/shared/journal";
 export { SUPER_ADMIN_EMAIL, isAdmin, isSuperAdmin };
 
 export const THEMES = ["light", "dark", "sepia", "ocean", "forest"] as const;
@@ -58,6 +59,8 @@ export type ProfileDto = {
   emailNotifications: boolean;
   /** Fraîcheur : seuil (jours) au-delà duquel une tâche ou un projet sans activité est « endormi ». */
   staleDays: number;
+  /** Journal quotidien : blocs affichés (ordre canonique). */
+  journalBlocks: JournalBlockKey[];
   createdAt: string;
 };
 
@@ -79,6 +82,7 @@ export async function getProfile(user: User): Promise<ProfileDto> {
     emailVerified: user.emailVerifiedAt !== null,
     emailNotifications: user.emailNotifications,
     staleDays: user.staleDays,
+    journalBlocks: normalizeJournalBlocks(user.journalBlocks),
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -86,7 +90,7 @@ export async function getProfile(user: User): Promise<ProfileDto> {
 /** Met à jour son profil ; le nom affiché est recopié dans ses fiches membres. */
 export async function updateProfile(
   user: User,
-  input: { firstName?: string; lastName?: string; avatarUrl?: string | null; theme?: Theme; emailNotifications?: boolean; staleDays?: number },
+  input: { firstName?: string; lastName?: string; avatarUrl?: string | null; theme?: Theme; emailNotifications?: boolean; staleDays?: number; journalBlocks?: JournalBlockKey[] },
 ): Promise<ProfileDto> {
   const firstName = input.firstName ?? user.firstName;
   const lastName = input.lastName ?? user.lastName;
@@ -97,7 +101,7 @@ export async function updateProfile(
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.user.update({
       where: { id: user.id },
-      data: { firstName, lastName, name, avatarUrl: input.avatarUrl, theme: input.theme, emailNotifications: input.emailNotifications, staleDays: input.staleDays },
+      data: { firstName, lastName, name, avatarUrl: input.avatarUrl, theme: input.theme, emailNotifications: input.emailNotifications, staleDays: input.staleDays, journalBlocks: input.journalBlocks ? normalizeJournalBlocks(input.journalBlocks) : undefined },
     });
     if (name !== user.name) await tx.projectMember.updateMany({ where: { userId: user.id }, data: { name } });
     return u;

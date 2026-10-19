@@ -40,6 +40,7 @@
     "test:custom-fields": "tsx scripts/custom-fields-test.ts",
     "test:templates": "tsx scripts/templates-test.ts",
     "test:mcp-query": "tsx scripts/mcp-query-test.ts",
+    "test:journal": "tsx scripts/journal-test.ts",
     "test:knowledge": "tsx scripts/knowledge-test.ts",
     "test:knowledge-e2e": "tsx scripts/knowledge-e2e.ts",
     "test:map-shares": "tsx scripts/map-shares-test.ts",

@@ -20,7 +20,9 @@ import { customEntries, type CustomFieldDto } from "@/lib/shared/custom-fields";
 import { listMapEvents } from "@/lib/map-events";
 import { meetingStatus } from "@/lib/meetings";
 import { QUERY_ENTITIES, queryObjects, type QueryArgs } from "@/lib/mcp-query";
-import { ACTIVITY_PRESETS } from "@/lib/shared/activity-period";
+import { ACTIVITY_PRESETS, addDays, parisYmd } from "@/lib/shared/activity-period";
+import { getJournalReport, listJournalEntries } from "@/lib/journal";
+import { JOURNAL_BLOCKS, JOURNAL_BLOCK_LABEL, formatJournalDay, isWrittenBlock, resolveJournalBlock, type JournalBlockKey, type JournalWrittenBlock } from "@/lib/shared/journal";
 
 /**
  * Serveur MCP (Model Context Protocol) de Second Brain : Claude Desktop (ou
@@ -46,7 +48,8 @@ export const MCP_INSTRUCTIONS =
   "Pour toute question « derniers / récents / créés par / modifiés depuis » sur n'importe quel objet (tâches, comptes-rendus, commentaires, risques, documents, nœuds, messages…), utilisez query_objects (createdAt / updatedAt sur chaque objet). " +
   "Récent : list_recent_tasks (dernières tâches créées / modifiées / clôturées), list_meetings (dernières réunions avec leurs comptes-rendus), get_meeting. " +
   "Pour « que s'est-il passé » sur une période (jour, semaine, mois, dates libres), utilisez get_activity : un seul appel consolide tâches, cartes mentales, réunions, risques, livrables et documents ; rédigez ensuite la synthèse. get_map_history donne l'historique détaillé d'une carte. " +
-  "Écriture (clé autorisée) : create_task, update_task, bulk_update_tasks (ex. assigner toutes les tâches d'un projet), delete_task, add_comment, create_project, update_project, create_stage, save_note, create_meeting, update_meeting (compte-rendu), decide_meeting, upsert_risk, edit_mind_map, send_message ; " +
+  "Journal quotidien (personnel) : get_journal lit les saisies (résumé, pensées positives / négatives, réalisations, regrets, habitudes, amélioration continue) et l'activité du jour sur une période — pour « résume mes pensées négatives depuis 2 semaines », appelez-le avec block et from puis rédigez la synthèse ; write_journal consigne un texte dans un bloc (ajout à la suite par défaut, aujourd'hui par défaut). " +
+  "Écriture (clé autorisée) : create_task, write_journal, update_task, bulk_update_tasks (ex. assigner toutes les tâches d'un projet), delete_task, add_comment, create_project, update_project, create_stage, save_note, create_meeting, update_meeting (compte-rendu), decide_meeting, upsert_risk, edit_mind_map, send_message ; " +
   "pour tout le reste, api_request appelle n'importe quelle route de l'API (consultez api_reference). Les personnes se désignent par nom, e-mail ou id. Confirmez avec l'utilisateur avant une suppression ou une modification en masse. " +
   "Les dates sont au format ISO. Statuts de tâche : TODO (à faire), IN_PROGRESS (en cours), DONE (terminée), CLOSED (clôturée). " +
   "Un administrateur peut analyser les projets des autres en passant admin_access: true (à n'utiliser que si l'utilisateur le demande explicitement).";
@@ -236,7 +239,63 @@ function meetingForAi(m: MeetingAiRow, withMinutes: boolean, maxChars = 6000) {
   };
 }
 
+/** Blocs demandés (clés ou libellés) ; null = tous. */
+function journalBlocksArg(args: Record<string, unknown>): JournalBlockKey[] | null {
+  const raw = Array.isArray(args.blocks) ? args.blocks : typeof args.block === "string" ? [args.block] : typeof args.blocks === "string" ? String(args.blocks).split(",") : [];
+  if (!raw.length) return null;
+  return raw.map((r) => {
+    const b = resolveJournalBlock(String(r));
+    if (!b) throw new ApiError(400, "BAD_REQUEST", `Bloc inconnu : « ${String(r)} ». Blocs : ${JOURNAL_BLOCKS.map((k) => `${k} (${JOURNAL_BLOCK_LABEL[k]})`).join(", ")}.`);
+    return b;
+  });
+}
+
 export const TOOLS: Tool[] = [
+  {
+    name: "get_journal",
+    title: "Journal quotidien (lecture)",
+    description:
+      "Mon journal quotidien sur une période : pour chaque jour renseigné, le texte de chaque bloc — " +
+      JOURNAL_BLOCKS.map((b) => `${b} = « ${JOURNAL_BLOCK_LABEL[b]} »`).join(", ") +
+      ". block / blocks : limiter à certains blocs (clé ou libellé, ex. « pensées négatives »). from / to : AAAA-MM-JJ inclus (heure de Paris ; défaut : 7 derniers jours ; day = un seul jour ; 366 jours au plus). " +
+      "ACTIVITY (ou with_activity) ajoute les actions du jour issues des pistes d'audit (tâches, cartes). Chaque saisie porte createdAt / updatedAt. Strictement personnel.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        day: { type: "string", description: "Un seul jour (AAAA-MM-JJ)." },
+        from: { type: "string", description: "Début inclus (AAAA-MM-JJ)." },
+        to: { type: "string", description: "Fin incluse (AAAA-MM-JJ), aujourd'hui par défaut." },
+        block: { type: "string", description: "Un bloc (clé ou libellé)." },
+        blocks: { type: "array", items: { type: "string" }, description: "Plusieurs blocs (clés ou libellés)." },
+        with_activity: { type: "boolean", description: "Ajouter l'activité (pistes d'audit) de chaque jour." },
+      },
+    },
+    run: async (user, args) => {
+      const today = parisYmd();
+      const day = str(args, "day", false);
+      const to = day || str(args, "to", false) || today;
+      const from = day || str(args, "from", false) || addDays(to, -6);
+      const wanted = journalBlocksArg(args);
+      const written = (wanted ?? JOURNAL_BLOCKS).filter(isWrittenBlock) as JournalWrittenBlock[];
+      const withActivity = args.with_activity === true || !!wanted?.includes("ACTIVITY");
+      const [entries, activity] = await Promise.all([
+        written.length ? listJournalEntries(user.id, from, to, written) : Promise.resolve([]),
+        withActivity ? getJournalReport(user.id, "ACTIVITY", from, to) : Promise.resolve(null),
+      ]);
+      const days = new Map<string, { day: string; label: string; blocks: Record<string, { text: string; createdAt: string; updatedAt: string }>; activity?: string[] }>();
+      const at = (d: string) => days.get(d) ?? days.set(d, { day: d, label: formatJournalDay(d), blocks: {} }).get(d)!;
+      for (const e of entries) at(e.day).blocks[JOURNAL_BLOCK_LABEL[e.block]] = { text: text(e.content, 50_000), createdAt: e.createdAt, updatedAt: e.updatedAt };
+      for (const d of activity?.activityDays ?? []) at(d.day).activity = d.items.map((i) => `${new Date(i.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" })} · ${i.objectName}${i.context ? ` (${i.context})` : ""} : ${i.message}`);
+      return {
+        today,
+        from,
+        to,
+        blocks: (wanted ?? JOURNAL_BLOCKS).map((b) => JOURNAL_BLOCK_LABEL[b]),
+        days: [...days.values()].sort((a, b) => b.day.localeCompare(a.day)),
+        empty: days.size === 0 ? "Aucune saisie sur la période." : undefined,
+      };
+    },
+  },
   {
     name: "query_objects",
     title: "Rechercher n'importe quel objet (filtres, tri par date)",

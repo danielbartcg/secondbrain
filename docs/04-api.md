@@ -442,7 +442,7 @@ document sauf auth, clés, mot de passe, e-mail, sync, mcp) ; une erreur
 métier revient en résultat d'outil `isError: true`. Paramètre
 `admin_access: true` (administrateurs) sur `list_projects`, `get_project`,
 `list_tasks`, `get_task`, `query_objects`, `list_recent_tasks`, `list_meetings`,
-`get_meeting`. `query_objects { entity, author?, assignee?, project_id?,
+`get_meeting`, `get_journal` (journal personnel : `day` ou `from` / `to`, `block` / `blocks` par clé ou libellé, `with_activity`) ; écriture `write_journal { block, text \| html, day?, mode?: append (défaut) \| replace }`. `query_objects { entity, author?, assignee?, project_id?,
 map_id?, task_id?, status?, text?, created_after?, created_before?,
 updated_after?, updated_before?, sort?: created|updated, order?, limit?,
 with_content? }` → `{ entity, count, items: { id, …, createdAt, updatedAt }[] }`.
@@ -602,7 +602,13 @@ Toutes en ligne (relayées par l'application native). Schémas :
 | POST | `/me/calendar` | — | `201 { path: "/api/v1/calendar/cal_….ics", feed }` — **montré une seule fois** ; régénérer invalide l'ancienne adresse |
 | DELETE | `/me/calendar` | — | `{ ok: true }` (révocation) |
 | GET | `/calendar/:token.ics` | **public** (jeton secret dans l'URL) | `text/calendar` (RFC 5545) : échéances de mes tâches ouvertes (journée entière), mes sessions de travail (disponible), réunions où je suis rédacteur / participant / validateur (1 h), livrables dont je suis responsable — de J−90 à J+366, 2 000 évènements ; 404 jeton inconnu ; 60 / 15 min par jeton ; `no-store` |
-| GET | `/projects/:id/time-travel?at=` | `at` ISO ou AAAA-MM-JJ (fin de journée, heure de Paris ; défaut maintenant) | `{ state: { at, createdAt, stats: { total, done, inProgress, todo, percent, late }, stages: [{ id, name, total, done, percent }], tasks: [{ id, stageId, name, status, progress, priority, complexity, startDate, dueDate, assignee, changedSince }], since: { created, changed }, curve: [{ date, percent, done, total }] (≤ 41 points) } }` ; 400 date invalide |
+| GET | `/journal/days/:day` | — | `{ journal: { day, entries: JournalEntry[], activity: { at, kind: "task"\|"map", objectId, objectName, context, message }[], blocks } }` — `JournalEntry = { day, block, content (HTML assaini), createdAt, updatedAt }` ; activité calculée seulement si le bloc ACTIVITY est activé |
+| PUT | `/journal/days/:day/blocks/:block` | `{ content? (HTML) \| text? (texte brut), mode?: "replace"\|"append" }` | `{ entry \| null }` (vide ⇒ saisie supprimée) ; bloc ACTIVITY ou inconnu → 400 ; jour au-delà de demain → 400 |
+| GET | `/journal/calendar?from=&to=` | jours AAAA-MM-JJ | `{ days: string[] }` (jours renseignés) |
+| GET | `/journal/report?block=&from=&to=` | 366 j max | `{ report: { block, from, to, entries, activityDays: { day, count, items }[], series: { day, value }[] } }` (mots par jour, ou actions pour ACTIVITY) |
+| GET | `/journal/entries?from=&to=&blocks=` | `blocks` : clés séparées par des virgules | `{ entries }` (plus récentes d'abord) |
+| PATCH | `/me` | `{ journalBlocks?: JournalBlock[] }` (SUMMARY, POSITIVE, NEGATIVE, ACHIEVEMENTS, REGRETS, HABITS, IMPROVEMENT, ACTIVITY) | profil (`journalBlocks` dans `ProfileDto`, ordre canonique) |
+| GET | `/projects/:id/time-travel?at=` | `at` ISO ou AAAA-MM-JJ (fin de journée, heure de Paris ; défaut maintenant) | `{ state: { at, createdAt, stats: { total, done, inProgress, todo, percent, late }, stages: [{ id, name, total, done, percent }], tasks: [{ id, stageId, name, status, progress, priority, complexity, startDate, dueDate, assignee, changedSince }], since: { created, changed }, curve: [{ date, percent, done, total }] (≤ 41 points) } }` ; 400 date invalide ; `risks: TimeRisk[]` (registre à la date : `RiskDto` + `changedSince`, `deletedSince` ; instantanés `RiskSnapshot`) |
 | GET | `/mindmaps/:id/time-travel?at=` | idem | `{ state: { at, createdAt, nodes: [{ id, parentId, title, status, color }], deletedSince: [{ id, title, at }], movedSince: [{ id, title, from }], createdSince } }` ; droit de lecture |
 
 Liens dans le HTML des notes : `<a href="/tasks/…" data-ref="task:…">` ;

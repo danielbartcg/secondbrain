@@ -64,6 +64,8 @@ type Props = {
   onOpen: (taskId: string) => void;
   /** Planning de référence : étendues figées par clé de ligne (barres fantômes, glissements). */
   baseline?: Map<string, Span> | null;
+  /** Consultation seule (voyage dans le temps) : ni glisser, ni redimensionner, ni flèches. */
+  readOnly?: boolean;
 };
 
 const LEFT_W = "w-[170px] md:w-[400px]";
@@ -78,7 +80,7 @@ const DRAG_THRESHOLD = 4;
 
 type Drag = { id: string; mode: DragMode; startX: number; pointerId: number; moved: boolean; delta: number; raf: number };
 
-export function GanttView({ project, scale, cascade, busy = false, onCommit, onOpen, baseline = null }: Props) {
+export function GanttView({ project, scale, cascade, busy = false, onCommit, onOpen, baseline = null, readOnly = false }: Props) {
   const px = SCALE_PX[scale];
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [drafts, setDrafts] = useState<Map<string, Span>>(() => new Map());
@@ -228,6 +230,10 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
       setSelected(null);
       return;
     }
+    if (readOnly) {
+      setSelected(bar.dataset.task!);
+      return;
+    }
     if (busy || e.button !== 0 || dragRef.current) return;
     const mode = ((e.target as Element).closest("[data-mode]")?.getAttribute("data-mode") ?? "move") as DragMode;
     bar.setPointerCapture(e.pointerId);
@@ -280,7 +286,7 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
       open(id);
       return;
     }
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (readOnly || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
     e.preventDefault();
     setSelected(id);
     if (busy) return;
@@ -512,6 +518,7 @@ export function GanttView({ project, scale, cascade, busy = false, onCommit, onO
                         selected={selected === r.key}
                         dragging={dragId === r.key}
                         busy={busy}
+                        readOnly={readOnly}
                       />
                     );
                   }
@@ -652,6 +659,7 @@ const TaskBar = memo(function TaskBar(p: {
   selected: boolean;
   dragging: boolean;
   busy: boolean;
+  readOnly?: boolean;
 }) {
   const label = `${p.done ? "✓ " : ""}${p.name}`;
   const inside = p.width >= label.length * 6.2 + 18;
@@ -671,7 +679,7 @@ const TaskBar = memo(function TaskBar(p: {
           width: p.width,
           height: BAR_H,
           boxShadow: p.dragging ? `${ring ? ring + "," : ""}0 4px 12px rgb(0 0 0 / 0.25)` : ring,
-          cursor: p.busy ? "progress" : p.dragging ? "grabbing" : "grab",
+          cursor: p.readOnly ? "pointer" : p.busy ? "progress" : p.dragging ? "grabbing" : "grab",
           touchAction: "pan-y",
           zIndex: p.dragging ? 5 : undefined,
         }}
@@ -682,22 +690,26 @@ const TaskBar = memo(function TaskBar(p: {
         {inside && (
           <span className="pointer-events-none relative block truncate px-2 text-left text-[11px] font-medium leading-5 text-white">{label}</span>
         )}
-        <span
-          data-mode="start"
-          className="absolute top-0 flex h-full cursor-ew-resize items-center justify-center"
-          style={{ left: -3, width: handle + 3 }}
-          aria-hidden
-        >
-          <span className="h-3 w-[3px] rounded-full bg-white/80 opacity-0 shadow transition-opacity group-hover/bar:opacity-100" />
-        </span>
-        <span
-          data-mode="end"
-          className="absolute top-0 flex h-full cursor-ew-resize items-center justify-center"
-          style={{ right: -3, width: handle + 3 }}
-          aria-hidden
-        >
-          <span className="h-3 w-[3px] rounded-full bg-white/80 opacity-0 shadow transition-opacity group-hover/bar:opacity-100" />
-        </span>
+        {!p.readOnly && (
+          <>
+            <span
+              data-mode="start"
+              className="absolute top-0 flex h-full cursor-ew-resize items-center justify-center"
+              style={{ left: -3, width: handle + 3 }}
+              aria-hidden
+            >
+              <span className="h-3 w-[3px] rounded-full bg-white/80 opacity-0 shadow transition-opacity group-hover/bar:opacity-100" />
+            </span>
+            <span
+              data-mode="end"
+              className="absolute top-0 flex h-full cursor-ew-resize items-center justify-center"
+              style={{ right: -3, width: handle + 3 }}
+              aria-hidden
+            >
+              <span className="h-3 w-[3px] rounded-full bg-white/80 opacity-0 shadow transition-opacity group-hover/bar:opacity-100" />
+            </span>
+          </>
+        )}
       </button>
       {!inside && (
         <span

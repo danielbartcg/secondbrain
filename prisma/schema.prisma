@@ -43,6 +43,8 @@ model User {
   emailNotifications Boolean   @default(true)
   /// Fraîcheur : une tâche ou un projet sans activité depuis ce nombre de jours est signalé « endormi ».
   staleDays          Int       @default(14)
+  /// Journal quotidien : blocs affichés (Préférences → Personnalisation du journal), dans l'ordre canonique.
+  journalBlocks      String[]  @default(["SUMMARY", "POSITIVE", "NEGATIVE", "ACHIEVEMENTS", "REGRETS", "HABITS", "IMPROVEMENT", "ACTIVITY"])
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -70,6 +72,7 @@ model User {
   baselines            ProjectBaseline[]         @relation("BaselineCreator")
   resurfaceCards       ResurfaceCard[]
   calendarFeed         CalendarFeed?
+  journalEntries       JournalEntry[]
 
   @@index([managerId])
 }
@@ -256,15 +259,16 @@ model Project {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  stages       Stage[]
-  members      ProjectMember[]
-  deliverables Deliverable[]
-  documents    Document[]
-  folders      Folder[]
-  risks        Risk[]
-  meetings     Meeting[]
-  tasks        Task[]
-  baselines    ProjectBaseline[]
+  stages        Stage[]
+  members       ProjectMember[]
+  deliverables  Deliverable[]
+  documents     Document[]
+  folders       Folder[]
+  risks         Risk[]
+  riskSnapshots RiskSnapshot[]
+  meetings      Meeting[]
+  tasks         Task[]
+  baselines     ProjectBaseline[]
 
   @@index([ownerId])
 }
@@ -288,17 +292,17 @@ enum CustomOptionSort {
 /// `options` (liste) : [{ id, label }] — les projets stockent l'identifiant :
 /// renommer une valeur la renomme partout.
 model CustomField {
-  id        String          @id @default(cuid())
-  label     String
-  type      CustomFieldType @default(TEXT)
-  options   Json            @default("[]")
+  id         String           @id @default(cuid())
+  label      String
+  type       CustomFieldType  @default(TEXT)
+  options    Json             @default("[]")
   /// ASC / DESC : valeurs toujours rangées par ordre alphabétique (à l'enregistrement).
   optionSort CustomOptionSort @default(MANUAL)
-  order     Int             @default(0)
+  order      Int              @default(0)
   /// Archivé : masqué des fiches projet, valeurs conservées.
-  active    Boolean         @default(true)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  active     Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 }
 
 model ProjectMember {
@@ -956,4 +960,52 @@ model Document {
   @@index([projectId])
   @@index([folderId])
   @@index([deliverableId])
+}
+
+/// Bloc rédigé du journal quotidien (le bloc « Activité » n'est pas stocké :
+/// il est calculé depuis les pistes d'audit).
+enum JournalBlock {
+  SUMMARY
+  POSITIVE
+  NEGATIVE
+  ACHIEVEMENTS
+  REGRETS
+  HABITS
+  IMPROVEMENT
+}
+
+/// Journal quotidien : une saisie par utilisateur, jour (calendrier de Paris) et bloc.
+/// Strictement personnel (jamais visible des administrateurs ni de la hiérarchie).
+model JournalEntry {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Jour (AAAA-MM-JJ, calendrier de Paris), stocké à minuit UTC.
+  day       DateTime     @db.Date
+  block     JournalBlock
+  /// HTML assaini (sanitizeNotes).
+  content   String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([userId, day, block])
+  @@index([userId, block, day])
+}
+
+/// Historique des risques et opportunités (voyage dans le temps) : instantané
+/// complet de la ligne Risk à chaque écriture, posé par le déclencheur
+/// PostgreSQL `sb_risk_snapshot` (aucun code applicatif). `riskId` sans clé
+/// étrangère : l'historique survit à la suppression du risque.
+model RiskSnapshot {
+  id        String   @id
+  riskId    String
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Vrai : le risque a été supprimé à cette date (`data` = dernier état).
+  deleted   Boolean  @default(false)
+  /// Ligne Risk (to_jsonb) : kind, title, probability, impact, status, ownerId, strategy…
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
 }

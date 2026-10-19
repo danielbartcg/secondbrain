@@ -139,3 +139,27 @@ export function rewindMap(current: MapNodeLite[], events: MapEventLite[], at: Da
   for (const n of nodes) if (n.parentId && !byId.has(n.parentId) && root) n.parentId = root.id;
   return { nodes, deletedSince: deletedSince.reverse(), movedSince: [...moved.values()].map((m) => ({ ...m, title: byId.get(m.id)?.title ?? m.title })) };
 }
+
+export type RiskSnapshotLite = { riskId: string; deleted: boolean; createdAt: Date; data: Record<string, unknown> };
+export type RiskAtState = { riskId: string; data: Record<string, unknown>; changedSince: boolean; deletedSince: boolean };
+
+/**
+ * Risques existant à la date `at` : dernier instantané de chaque risque
+ * jusqu'à cette date (absent s'il était supprimé), avec « modifié depuis » et
+ * « supprimé depuis » d'après les instantanés postérieurs.
+ */
+export function risksAt(snapshots: RiskSnapshotLite[], at: Date): RiskAtState[] {
+  const t = at.getTime();
+  const last = new Map<string, RiskSnapshotLite>();
+  const later = new Map<string, RiskSnapshotLite[]>();
+  for (const s of [...snapshots].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
+    if (s.createdAt.getTime() <= t) last.set(s.riskId, s);
+    else later.set(s.riskId, [...(later.get(s.riskId) ?? []), s]);
+  }
+  return [...last.values()]
+    .filter((s) => !s.deleted)
+    .map((s) => {
+      const after = later.get(s.riskId) ?? [];
+      return { riskId: s.riskId, data: s.data, changedSince: after.some((x) => !x.deleted), deletedSince: after.some((x) => x.deleted) };
+    });
+}

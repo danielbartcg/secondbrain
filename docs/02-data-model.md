@@ -147,6 +147,12 @@ Non synchronisés (en ligne uniquement dans l'application native).
 | `ResurfaceCard` | `userId` + `ref` (clé ; « kind:id » de Prise de notes), `box` 1–5, `dueAt`, `lastReviewedAt?`, `archived`, `createdAt` | créée à la première réponse ; supprimée si la note devient inaccessible ou vide ; index `(userId, dueAt)` |
 | `CalendarFeed` | `userId` (clé), `tokenHash` (unique, SHA-256 du jeton `cal_…`), `createdAt`, `lastUsedAt?` (mis à jour au plus une fois par heure) | régénérer remplace l'empreinte (l'ancienne adresse cesse) ; supprimé avec le compte |
 
+| `JournalEntry` | `userId`, `day` (`DATE`, jour de Paris), `block` (enum `JournalBlock` : SUMMARY · POSITIVE · NEGATIVE · ACHIEVEMENTS · REGRETS · HABITS · IMPROVEMENT), `content` (HTML assaini), timestamps | unique (`userId`, `day`, `block`) ; cascade sur l'utilisateur ; le bloc « Activité » n'est pas stocké ; migration `20261019120000_journal_risk_history` |
+| `RiskSnapshot` | `id` (uuid posé par le déclencheur), `riskId` (sans clé étrangère : survit à la suppression), `projectId` (cascade), `deleted`, `data` (JSON = ligne `Risk`), `createdAt` (UTC) | écrit **uniquement** par le déclencheur `sb_risk_snapshot` (insert / update / delete sur `Risk` ; rien lors de la suppression en cascade d'un projet) ; voyage dans le temps |
+
+`User.journalBlocks` (`String[]`, défaut : les 8 blocs) : blocs affichés du
+journal quotidien, normalisés dans l'ordre canonique.
+
 Les **liens `[[…]]`** n'ont pas de table : ils sont dans le HTML des notes
 (`data-ref`, voir docs/01). La **fraîcheur** et le **voyage dans le temps**
 sont calculés à la lecture (pistes d'audit, `updatedAt`).

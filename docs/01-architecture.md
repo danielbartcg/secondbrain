@@ -680,6 +680,18 @@ connexion). Tests : `npm run test:knowledge` (pur) et
   titre ; déplacements signalés, non défaits. Courbe d'avancement : 40 points
   de la création du projet à aujourd'hui. Limites : tâche supprimée = son
   historique perdu ; étapes sans piste d'audit (nom actuel).
+  **Gantt à la date** (client, `TimeTravelPanels.ganttAt`) : structure
+  actuelle du plan peuplée des tâches d'alors (dates, statut, avancement
+  défaits), étapes à l'étendue de leurs tâches, `GanttView` en `readOnly` ;
+  mode « Aujourd'hui comparé » = Gantt actuel + version passée en
+  `baseline`. **Risques à la date** : les risques n'ayant pas de piste
+  d'audit, le déclencheur PostgreSQL `sb_risk_snapshot` (AFTER INSERT /
+  UPDATE / DELETE sur `Risk`) enregistre un instantané complet
+  (`RiskSnapshot`, `to_jsonb`, horodaté en UTC explicite) à chaque
+  écriture, sans code applicatif (création de projet depuis un modèle
+  comprise) ; `risksAt` (pur) prend le dernier instantané ≤ date (absent si
+  supprimé) et signale « modifié / supprimé depuis ». Risques antérieurs au
+  19/10/2026 : un instantané de leur état d'alors, daté de leur création.
 - **Flux iCal** (`src/lib/calendar-feed.ts`, générateur pur
   `src/lib/shared/ical.ts`) : URL secrète `cal_` + 256 bits (empreinte
   SHA-256 seule en base, `CalendarFeed`), route publique
@@ -748,3 +760,24 @@ Mesures (build de production local, jeu complet) : tableau de bord 2,9 s →
 3,4 Mo, blocage navigateur 1,1 s → 10 ms ; onglet Plan du projet géant 2,9 s →
 0,4 s ; Gantt 1,6 s → 0,2 s ; clic sur un nœud de la carte géante 1,5 s →
 50 ms ; auto-complétion ≈ 40 ms.
+
+## Journal quotidien (`src/lib/journal.ts`, règles pures `src/lib/shared/journal.ts`)
+
+Menu « Journal quotidien » (`/journal`, sous « Prise de notes ») : une page par
+jour (calendrier de Paris) avec sept blocs rédigés en texte riche (Résumé,
+Pensées positives, Pensées négatives, Réalisations, Regrets, Habitudes et
+routines, Amélioration continue) et un bloc **Activité** calculé à la lecture
+depuis les pistes d'audit (`TaskEvent`, `MapEvent` dont `actorId` = moi,
+ce jour-là). Une saisie = `JournalEntry` (utilisateur, jour, bloc ; unique),
+HTML assaini à l'écriture et à la lecture ; contenu vide = saisie supprimée ;
+`mode: "append"` ajoute à la suite (connecteur MCP) ; jours futurs refusés
+(au-delà de demain). **Strictement personnel** : toutes les requêtes filtrent
+sur `userId`, aucune lecture administrateur ni hiérarchique ; non consolidé
+dans le rapport d'activité. Blocs affichés : `User.journalBlocks`
+(Préférences → Personnalisation du journal, `PATCH /me`). Rapport d'un bloc
+entre deux dates (366 j max) : saisies + série quotidienne (mots, ou actions
+pour Activité). Connecteur MCP : `get_journal` (période, blocs par clé ou
+libellé approximatif — `resolveJournalBlock` —, activité facultative),
+`write_journal` (écriture via l'API REST, ajout à la suite par défaut,
+aujourd'hui par défaut) et `query_objects` (`entity: "journal_entry"`,
+`status` = bloc). En ligne uniquement (relayé dans l'application).

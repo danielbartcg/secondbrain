@@ -1,16 +1,62 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Check, Copy, Loader2, Moon, RefreshCw, Trash2 } from "lucide-react";
+import { BookHeart, CalendarDays, Check, Copy, Loader2, Moon, RefreshCw, Trash2 } from "lucide-react";
 import { api, serverOriginOf } from "@/lib/client";
 import type { ProfileDto } from "@/lib/users";
 import type { CalendarFeedStatus } from "@/lib/calendar-feed";
-import { Button, errorMessage, inputClass, toast } from "@/components/ui";
+import { JOURNAL_BLOCKS, JOURNAL_BLOCK_HINT, JOURNAL_BLOCK_LABEL, type JournalBlockKey } from "@/lib/shared/journal";
+import { Button, Toggle, errorMessage, inputClass, toast } from "@/components/ui";
 
 /**
  * Préférences — « Fraîcheur » (seuil d'inactivité des tâches et projets
- * endormis) et « Calendrier » (abonnement iCal : Outlook, iPhone, Google).
+ * endormis), « Personnalisation du journal » (blocs affichés) et
+ * « Calendrier » (abonnement iCal : Outlook, iPhone, Google).
  */
+
+/** Blocs du journal quotidien affichés (enregistré à chaque bascule). */
+export function JournalSection({ profile, onProfile }: { profile: ProfileDto; onProfile: (p: ProfileDto) => void }) {
+  const [busy, setBusy] = useState<JournalBlockKey | null>(null);
+  const enabled = new Set(profile.journalBlocks);
+
+  async function toggle(block: JournalBlockKey, on: boolean) {
+    const next = JOURNAL_BLOCKS.filter((b) => (b === block ? on : enabled.has(b)));
+    setBusy(block);
+    try {
+      const { profile: p } = await api.patch<{ profile: ProfileDto }>("/me", { journalBlocks: next });
+      onProfile(p);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section id="journal" className="mt-6 scroll-mt-20 rounded-2xl border border-line bg-surface p-5">
+      <h2 className="flex items-center gap-2 font-semibold">
+        <BookHeart className="h-5 w-5 text-brand-600" /> Personnalisation du journal
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        Blocs affichés dans le <a href="/journal" className="text-brand-600 hover:underline">journal quotidien</a>. Désactiver un bloc le masque sans effacer ce que vous y avez écrit.
+      </p>
+      <ul className="mt-3 divide-y divide-line">
+        {JOURNAL_BLOCKS.map((b) => (
+          <li key={b} className="flex items-center justify-between gap-3 py-2.5">
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{JOURNAL_BLOCK_LABEL[b]}</span>
+              <span className="block text-xs text-muted">{JOURNAL_BLOCK_HINT[b]}</span>
+            </span>
+            <span className="flex items-center gap-2">
+              {busy === b && <Loader2 className="h-4 w-4 animate-spin text-muted" />}
+              <Toggle checked={enabled.has(b)} onChange={(v) => void toggle(b, v)} label={`Afficher « ${JOURNAL_BLOCK_LABEL[b]} »`} disabled={busy !== null} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export function FreshnessSection({ profile, onProfile }: { profile: ProfileDto; onProfile: (p: ProfileDto) => void }) {
   const [days, setDays] = useState(String(profile.staleDays));

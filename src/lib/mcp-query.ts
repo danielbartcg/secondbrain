@@ -7,6 +7,7 @@ import { projectAccessWhere, taskAccessWhere } from "@/lib/projects";
 import { mapAccessWhere } from "@/lib/map-access";
 import { meetingStatus } from "@/lib/meetings";
 import { fileTypeLabel } from "@/lib/shared/file-types";
+import { JOURNAL_BLOCK_LABEL, JOURNAL_WRITTEN_BLOCKS, isWrittenBlock, resolveJournalBlock } from "@/lib/shared/journal";
 import { STRATEGY_LABEL } from "@/lib/shared/risks";
 
 /**
@@ -38,6 +39,7 @@ export const QUERY_ENTITIES = [
   "conversation",
   "message",
   "notification",
+  "journal_entry",
 ] as const;
 export type QueryEntity = (typeof QUERY_ENTITIES)[number];
 
@@ -298,6 +300,17 @@ export async function queryObjects(user: Pick<User, "id" | "name">, a: QueryArgs
         take: limit,
       });
       return { entity: a.entity, count: rows.length, items: rows.map((n) => ({ id: n.id, type: n.type, title: n.title, body: n.body || undefined, actor: n.actorName ?? undefined, href: n.href, read: !!n.readAt, createdAt: iso(n.createdAt) })) };
+    }
+    case "journal_entry": {
+      // Journal quotidien : toujours personnel ; status = bloc (clé ou libellé).
+      const block = a.status ? resolveJournalBlock(a.status) : null;
+      if (a.status && (!block || !isWrittenBlock(block))) throw new ApiError(400, "BAD_ARGUMENT", `status : un bloc du journal (${JOURNAL_WRITTEN_BLOCKS.map((b) => JOURNAL_BLOCK_LABEL[b]).join(", ")}).`);
+      const rows = await prisma.journalEntry.findMany({
+        where: { userId: user.id, ...(block && isWrittenBlock(block) ? { block } : {}), ...(a.text ? { content: ci(a.text) } : {}), ...dates },
+        orderBy: by === "updated" ? { updatedAt: dir } : [{ day: dir }, { createdAt: dir }],
+        take: limit,
+      });
+      return { entity: a.entity, count: rows.length, items: rows.map((e) => ({ id: e.id, day: e.day.toISOString().slice(0, 10), block: JOURNAL_BLOCK_LABEL[e.block], text: content(e.content, full), createdAt: iso(e.createdAt), updatedAt: iso(e.updatedAt) })) };
     }
   }
 }

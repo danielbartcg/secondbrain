@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "@/lib/api";
 import { requireMapAccess } from "@/lib/map-access";
 import { projectAccessWhere } from "@/lib/projects";
-import { rewindMap, rewindTask, type TaskEventLite, type TaskState } from "@/lib/shared/time-travel";
+import { rewindMap, rewindTask, risksAt, type TaskEventLite, type TaskState } from "@/lib/shared/time-travel";
+import { levelLabel, riskLevel, riskScore } from "@/lib/shared/risks";
+import type { RiskDto } from "@/lib/risks";
 
 /**
  * Voyage dans le temps : état d'un projet ou d'une carte à une date passée,
@@ -20,6 +22,9 @@ const pct = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b,
 
 export type TimeTask = TaskState & { id: string; stageId: string | null; changedSince: boolean };
 export type TimeStage = { id: string; name: string; total: number; done: number; percent: number };
+/** Risque ou opportunité tel qu'il était (instantanés `RiskSnapshot`). */
+export type TimeRisk = RiskDto & { changedSince: boolean; deletedSince: boolean };
+
 export type ProjectAt = {
   at: string;
   createdAt: string;
@@ -30,6 +35,8 @@ export type ProjectAt = {
   since: { created: number; changed: number };
   /** Courbe d'avancement (moyenne des tâches existantes), de la création du projet à aujourd'hui. */
   curve: { date: string; percent: number; done: number; total: number }[];
+  /** Registre des risques et opportunités à cette date (tous statuts). */
+  risks: TimeRisk[];
 };
 
 export async function getProjectAt(userId: string, projectId: string, at: Date): Promise<ProjectAt> {
@@ -123,7 +130,58 @@ export async function getProjectAt(userId: string, projectId: string, at: Date):
     tasks: timeTasks,
     since: { created: tasks.length - rows.length, changed: timeTasks.filter((t) => t.changedSince).length },
     curve,
+    risks: await risksOfProjectAt(projectId, when),
   };
+}
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+const int = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+const ts = (v: unknown) => (typeof v === "string" ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : `${v}Z`).toISOString() : new Date(0).toISOString());
+
+/** Registre des risques à une date, d'après les instantanés (déclencheur `sb_risk_snapshot`). */
+async function risksOfProjectAt(projectId: string, when: Date): Promise<TimeRisk[]> {
+  const snaps = await prisma.riskSnapshot.findMany({ where: { projectId }, orderBy: { createdAt: "asc" }, select: { riskId: true, deleted: true, createdAt: true, data: true } });
+  const states = risksAt(
+    snaps.map((s) => ({ ...s, data: (s.data ?? {}) as Record<string, unknown> })),
+    when,
+  );
+  const ownerIds = [...new Set(states.map((s) => str(s.data.ownerId)).filter(Boolean))];
+  const owners = new Map((await prisma.projectMember.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } })).map((m) => [m.id, m.name]));
+  return states
+    .map(({ riskId, data, changedSince, deletedSince }): TimeRisk => {
+      const kind = data.kind === "OPPORTUNITY" ? "OPPORTUNITY" : "RISK";
+      const probability = int(data.probability, 3);
+      const impact = int(data.impact, 3);
+      const score = riskScore(probability, impact);
+      const level = riskLevel(score);
+      const ownerId = str(data.ownerId) || null;
+      return {
+        id: riskId,
+        projectId,
+        kind,
+        title: str(data.title) || "Sans titre",
+        description: str(data.description),
+        category: str(data.category),
+        probability,
+        impact,
+        score,
+        level,
+        levelLabel: levelLabel(kind, level),
+        status: (["OPEN", "MONITORING", "TREATED", "CLOSED"].includes(str(data.status)) ? str(data.status) : "OPEN") as RiskDto["status"],
+        ownerId,
+        ownerName: ownerId ? (owners.get(ownerId) ?? null) : null,
+        response: str(data.response),
+        strategy: (["ACCEPT", "MITIGATE", "TRANSFER", "ELIMINATE"].includes(str(data.strategy)) ? str(data.strategy) : null) as RiskDto["strategy"],
+        order: int(data.order, 0),
+        taskIds: [],
+        tasks: [],
+        createdAt: ts(data.createdAt),
+        updatedAt: ts(data.updatedAt),
+        changedSince,
+        deletedSince,
+      };
+    })
+    .sort((a, b) => b.score - a.score || a.order - b.order);
 }
 
 export type MapAt = {

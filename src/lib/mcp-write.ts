@@ -9,6 +9,8 @@ import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/api";
 import { hashSessionToken } from "@/lib/auth";
 import { getProject, type ProjectDto, type TaskDto } from "@/lib/projects";
+import { JOURNAL_BLOCK_LABEL, JOURNAL_WRITTEN_BLOCKS, resolveJournalBlock } from "@/lib/shared/journal";
+import { parisYmd } from "@/lib/shared/activity-period";
 import { listContacts } from "@/lib/messages";
 
 /**
@@ -192,6 +194,34 @@ async function templateIdOf(kind: "project" | "map", ref: string | undefined | n
 }
 
 export const WRITE_TOOLS: WriteTool[] = [
+  {
+    name: "write_journal",
+    title: "Écrire dans mon journal quotidien",
+    description:
+      "Consigne un texte dans un bloc de mon journal quotidien : " +
+      JOURNAL_WRITTEN_BLOCKS.map((b) => `${b} = « ${JOURNAL_BLOCK_LABEL[b]} »`).join(", ") +
+      " (block : clé ou libellé, ex. « pensées positives »). day : AAAA-MM-JJ (aujourd'hui par défaut, heure de Paris). mode : append (défaut, ajoute à la suite de la saisie existante) ou replace (remplace ; texte vide = effacer). text (texte brut) ou html.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        block: { type: "string" },
+        text: { type: "string" },
+        html: { type: "string" },
+        day: { type: "string" },
+        mode: { type: "string", enum: ["append", "replace"] },
+      },
+      required: ["block"],
+    },
+    run: async (user, args) => {
+      const block = resolveJournalBlock(s(args, "block", true)!);
+      if (!block || block === "ACTIVITY") throw new ApiError(400, "BAD_REQUEST", block === "ACTIVITY" ? "Le bloc « Activité » est calculé automatiquement : choisissez un autre bloc." : `Bloc inconnu. Blocs : ${JOURNAL_WRITTEN_BLOCKS.map((b) => JOURNAL_BLOCK_LABEL[b]).join(", ")}.`);
+      const day = s(args, "day") ?? parisYmd();
+      const mode = s(args, "mode") === "replace" ? "replace" : "append";
+      const html = typeof args.html === "string" ? args.html : undefined;
+      const r = await callApi<{ entry: { day: string; updatedAt: string } | null }>(user, "PUT", `/journal/days/${encodeURIComponent(day)}/blocks/${block}`, html !== undefined ? { content: html, mode } : { text: s(args, "text") ?? "", mode });
+      return { ok: true, day, block: JOURNAL_BLOCK_LABEL[block], mode, saved: r.entry ? "enregistré" : "bloc vide (saisie effacée)", updatedAt: r.entry?.updatedAt };
+    },
+  },
   {
     name: "api_reference",
     title: "Documentation de l'API",

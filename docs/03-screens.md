@@ -101,7 +101,9 @@ selon la priorité (rouge critique, ambre haute, indigo moyenne, gris basse).
 ## Espace projet (`ProjectWorkspace`)
 
 En-tête commun (couleur, statut, nom, description, dates, compteurs, jauge)
-puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) :
+puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) ;
+libellés jamais coupés : défilement horizontal sur mobile, retour à la ligne
+à partir de `md` :
 
 | Onglet | Composant | Contenu |
 | --- | --- | --- |
@@ -313,6 +315,10 @@ mot de passe), réinitialisation, changement dans les Préférences. Indicative.
 - **Thème** : 5 vignettes (Clair, Sombre, Sépia, Océan, Forêt), appliqué
   immédiatement et mémorisé sur le compte.
 
+**Personnalisation du journal** (`preferences/FeatureSections.tsx`,
+`JournalSection`, ancre `#journal`) : un interrupteur par bloc du journal
+(libellé et aide), enregistré à chaque bascule (`PATCH /me`).
+
 Sections ajoutées (`preferences/AccountSections.tsx`) : **Adresse e-mail**
 (adresse, pastille Validée / Non validée, « Envoyer le lien de validation »
 si l'envoi est configuré, « Changer d'adresse » avec mot de passe actuel,
@@ -490,7 +496,9 @@ desktop : « Rechercher une mise à jour ».
   en bas, pleine largeur) : même matrice 5 × 5 que l'onglet Risques
   (`RiskMatrix`, références R1, R2… par criticité décroissante), synthèse
   par niveau et registre (référence, titre, projet, statut, responsable en
-  vue projets, criticité ; clic = registre du projet `#risks`). Bascule
+  vue projets, criticité ; clic = registre du projet `#risques`). Composant
+  partagé `projects/risks/RiskBoard.tsx` (matrice + synthèse + registre),
+  aussi utilisé par le voyage dans le temps. Bascule
   « Risques dont je suis propriétaire » / « Tous les risques de mes
   projets », mémorisée sur l'appareil, affichée seulement si je possède au
   moins un projet actif. Risques non clos des projets actifs ou en pause ;
@@ -510,8 +518,13 @@ desktop : « Rechercher une mise à jour ».
   en mode modèle) — date (champ, curseur, raccourcis 7 / 30 / 90 j,
   « Création »), courbe d'avancement cliquable
   (`charts/ProgressCurveChart.tsx` : avancement moyen + tâches terminées,
-  ligne « Consulté »), indicateurs, avancement par étape, tableau des tâches
-  d'alors (filtre « modifiées depuis »). Carte : `/mindmaps/:id/time-travel`
+  ligne « Consulté »), indicateurs, avancement par étape, **Gantt à la date**
+  (`projects/TimeTravelPanels.tsx` : `GanttView` en consultation seule,
+  bascule « Au JJ/MM » / « Aujourd'hui comparé » — barres fantômes = version
+  passée —, échelle Jour / Semaine / Mois), **matrice des risques /
+  opportunités à la date** (`RiskBoard`, bascule Risques / Opportunités,
+  « modifié depuis » / « supprimé depuis »), tableau des tâches d'alors
+  (filtre « modifiées depuis »). Dates au calendrier de Paris. Carte : `/mindmaps/:id/time-travel`
   (`mindmap/MapTimeTravel.tsx`, lien « Voyage dans le temps » du panneau
   Historique) — arborescence d'alors, supprimés et déplacés depuis.
 - **Préférences** (`preferences/FeatureSections.tsx`) : « Fraîcheur » (seuil
@@ -522,3 +535,27 @@ desktop : « Rechercher une mise à jour ».
   ajoutés à `native/src/App.tsx` ; tout ce qui précède est **en ligne**
   (routes relayées au serveur) et se masque ou affiche « Disponible
   uniquement en ligne » hors connexion.
+
+## Journal quotidien (`/journal` — `journal/JournalView`)
+
+Menu « Journal quotidien » (icône livre-cœur), sous « Prise de notes ».
+- **Barre de date** (collante) : jour en toutes lettres, « Aujourd'hui » /
+  « Hier » / « Il y a N jours », flèches jour précédent / suivant (suivant
+  désactivé aujourd'hui ; Alt+← / Alt+→), icône calendrier
+  (`journal/JournalCalendar` : mois par mois, pastille sur les jours
+  renseignés, jours futurs désactivés, « Aujourd'hui »), bouton
+  « Aujourd'hui » (≥ sm). Changer de jour enregistre d'abord ce qui est en
+  attente.
+- **Blocs** (ordre canonique, seulement ceux activés) : icône colorée,
+  titre, aide, état « Enregistré » / enregistrement / « Non enregistré » ;
+  éditeur riche compact (`RichTextEditor`, collage d'image optimiste,
+  `EmojiButton`), enregistrement automatique (800 ms, et à la sortie de page).
+  **Activité** : actions du jour regroupées par tâche / carte (lien), heure et
+  message de la piste d'audit.
+- **Rapport** (icône courbe de chaque bloc → `journal/JournalReportDialog`,
+  modale / tiroir bas) : dates Du / Au (défaut : J-30 → aujourd'hui),
+  raccourcis 7 / 30 / 90 j, graphique amCharts `charts/JournalTrendChart`
+  (mots par jour, ou actions ; clic = ouvrir le jour), puis toutes les saisies
+  de la période (ou l'activité par jour), la plus récente d'abord.
+- Aucun bloc activé : lien vers Préférences → Personnalisation du journal.
+- Application native : même écran (`/journal` dans `App.tsx`), **en ligne**.
