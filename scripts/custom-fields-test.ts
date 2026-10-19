@@ -108,6 +108,26 @@ async function main() {
     await call(admin, "PATCH", `/admin/custom-fields/${code.id}`, { order: 0 });
     const ordered = (await call(admin, "GET", "/admin/custom-fields")).data.fields as Any[];
     check("réordonner", ordered[0].id === code.id, ordered.map((f) => f.label));
+    const labels = (r: Any) => ((r.data.fields as Any[]).find((f) => f.id === client.id).options as Any[]).map((o) => o.label).join("|");
+    check("tri manuel par défaut", (ordered.find((f) => f.id === client.id) as Any).optionSort === "MANUAL");
+    const cur = (ordered.find((f) => f.id === client.id) as Any).options as Any[];
+    const asc = await call(admin, "PATCH", `/admin/custom-fields/${client.id}`, { optionSort: "ASC" });
+    check("tri forcé A → Z : valeurs rangées", asc.status === 200 && labels(asc) === "Globex|Initech", labels(asc));
+    const added = await call(admin, "PATCH", `/admin/custom-fields/${client.id}`, { options: [...cur, { label: "Zeta" }, { label: "alpha" }, { label: "Beta 10" }, { label: "Beta 9" }] });
+    check("tri forcé : nouvelles valeurs rangées (casse, nombres)", labels(added) === "alpha|Beta 9|Beta 10|Globex|Initech|Zeta", labels(added));
+    const desc = await call(admin, "PATCH", `/admin/custom-fields/${client.id}`, { optionSort: "DESC" });
+    check("tri forcé Z → A", labels(desc) === "Zeta|Initech|Globex|Beta 10|Beta 9|alpha", labels(desc));
+    const descOpts = (desc.data.fields as Any[]).find((f) => f.id === client.id).options as Any[];
+    const manual = await call(admin, "PATCH", `/admin/custom-fields/${client.id}`, { optionSort: "MANUAL", options: [descOpts[2], ...descOpts.filter((_, i) => i !== 2)] });
+    check("glisser-déposer : ordre manuel conservé", labels(manual) === "Globex|Zeta|Initech|Beta 10|Beta 9|alpha" && (manual.data.fields as Any[]).find((f) => f.id === client.id).optionSort === "MANUAL", labels(manual));
+    check("identifiants conservés au tri", descOpts.every((o) => ((manual.data.fields as Any[]).find((f) => f.id === client.id).options as Any[]).some((x) => x.id === o.id)));
+    check("tri sur un texte libre refusé", (await call(admin, "PATCH", `/admin/custom-fields/${code.id}`, { optionSort: "ASC" })).status === 400);
+    check("tri invalide refusé", (await call(admin, "PATCH", `/admin/custom-fields/${client.id}`, { optionSort: "RANDOM" })).status === 400);
+    const globex = descOpts[2].id;
+    await call(bob, "PATCH", `/projects/${pid}`, { customFields: { [client.id]: globex } });
+    const u2 = await call(admin, "GET", "/admin/custom-fields");
+    check("usage par valeur", u2.data.usage[`${client.id}/${globex}`] === 1 && u2.data.usage[client.id] === 1, u2.data.usage);
+    check("ordre public = ordre administré", ((await call(bob, "GET", "/custom-fields")).data.fields as Any[]).find((f) => f.id === client.id).options.map((o: Any) => o.label).join("|") === "Globex|Zeta|Initech|Beta 10|Beta 9|alpha");
 
     console.log("\n4. Archivage et suppression");
     await call(admin, "PATCH", `/admin/custom-fields/${code.id}`, { active: false });

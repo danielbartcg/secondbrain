@@ -328,9 +328,15 @@ Onglets Utilisateurs · Tous les projets · Toutes les tâches · Champs personn
 - **Champs personnalisés** (`admin/AdminCustomFields`) : ajout (libellé, liste
   de valeurs ou texte libre) ; par champ : libellé modifiable, type, nombre de
   projets renseignés, monter / descendre, archiver / réactiver, supprimer
-  (confirmation avec le nombre de projets touchés) ; liste : valeurs en
-  pastilles renommables en place, déplaçables, retirables, ajout (plusieurs
-  séparées par « ; »). Fiche projet : bloc « Informations » sous les dates
+  (confirmation avec le nombre de projets touchés) ; liste : gestionnaire de
+  valeurs (`OptionsManager`) — tri « Ordre manuel · A → Z · Z → A » (tri
+  forcé : valeurs rangées, nouvelles valeurs insérées à leur place),
+  lignes numérotées avec poignée de glisser-déposer (pointeur : souris et
+  tactile ; glisser alors qu'un tri est forcé repasse en ordre manuel),
+  monter / descendre (clavier), renommage en place, nombre de projets par
+  valeur, retrait (confirmation si utilisée), filtre au-delà de 8 valeurs
+  (suspend le glisser-déposer), ajout unitaire ou « Ajout en masse » (une
+  valeur par ligne, doublons ignorés). Fiche projet : bloc « Informations » sous les dates
   (`projects/ProjectCustomFields` : liste déroulante ou texte enregistré à la
   sortie) ; liste des projets et vue d'administration : pastilles
   « Libellé : valeur ».
@@ -480,6 +486,15 @@ desktop : « Rechercher une mise à jour ».
   le seuil ») et « À relire aujourd'hui » (`dashboard/ResurfacePanel.tsx` :
   3 notes au plus, type et boîte, extrait, « Toujours utile » / « À revoir
   bientôt » / « Ne plus proposer » ; « C'est tout pour aujourd'hui »).
+- **Tableau de bord — matrice des risques** (`dashboard/RisksPanel.tsx`, tout
+  en bas, pleine largeur) : même matrice 5 × 5 que l'onglet Risques
+  (`RiskMatrix`, références R1, R2… par criticité décroissante), synthèse
+  par niveau et registre (référence, titre, projet, statut, responsable en
+  vue projets, criticité ; clic = registre du projet `#risks`). Bascule
+  « Risques dont je suis propriétaire » / « Tous les risques de mes
+  projets », mémorisée sur l'appareil, affichée seulement si je possède au
+  moins un projet actif. Risques non clos des projets actifs ou en pause ;
+  masqué si le serveur est injoignable (application hors ligne).
 - **Plan du projet** : pastille ambrée lune « N j » sur les tâches ouvertes
   endormies (`ProjectBoard`, contexte `StaleContext`) ; **liste des
   projets** : pastille « Endormi · N j ».

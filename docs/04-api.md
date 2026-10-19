@@ -188,7 +188,7 @@ complet recalculé** (`{ project }`).
 | POST | `/admin/templates/maps` | `{ title, fromMapId? }` | `201 { mindmap }` (administrateurs) ; édition par les routes `/mindmaps/:id/**` |
 | GET | `/projects/:id` | → `{ project }` |
 | PATCH | `/projects/:id` | champs du POST, optionnels ; `customFields?: { fieldId: valeur \| null }` (fusion ; liste : id d'option ou libellé exact ; texte ≤ 500 ; 400 si champ inconnu, archivé ou valeur hors liste) |
-| GET | `/custom-fields` | — | `{ fields: { id, label, type, options: { id, label }[], order, active }[] }` (actifs) |
+| GET | `/custom-fields` | — | `{ fields: { id, label, type, options: { id, label }[] (dans l'ordre administré), optionSort, order, active }[] }` (actifs) |
 | DELETE 👑 | `/projects/:id` | → `{ ok: true }` |
 
 ### Équipe
@@ -561,9 +561,9 @@ Réponses : `{ risks: Risk[] }` (liste complète du projet, triée par `order` p
 
 | Méthode | Route | Corps | Réponse |
 | --- | --- | --- | --- |
-| GET | `/admin/custom-fields` | — | `{ fields (archivés compris), usage: { fieldId: nb de projets } }` |
-| POST | `/admin/custom-fields` | `{ label, type: "TEXT"\|"LIST", options?: { label }[] }` | `201 { fields }` ; 50 champs, 500 valeurs max ; doublons refusés |
-| PATCH | `/admin/custom-fields/:id` | `{ label?, active?, options?: { id?, label }[] (liste complète), order? }` | `{ fields }` ; valeurs retirées effacées des projets |
+| GET | `/admin/custom-fields` | — | `{ fields (archivés compris), usage: { fieldId: nb de projets, "fieldId/optionId": nb de projets par valeur } }` |
+| POST | `/admin/custom-fields` | `{ label, type: "TEXT"\|"LIST", options?: { label }[], optionSort? }` | `201 { fields }` ; 50 champs, 500 valeurs max ; doublons refusés |
+| PATCH | `/admin/custom-fields/:id` | `{ label?, active?, options?: { id?, label }[] (liste complète), optionSort?: "MANUAL"\|"ASC"\|"DESC", order? }` | `{ fields }` ; valeurs retirées effacées des projets ; tri forcé ⇒ `options` rangées (aussi à chaque ajout) ; `optionSort` sur un texte libre → 400 |
 | DELETE | `/admin/custom-fields/:id` | — | `{ fields }` ; valeurs effacées de tous les projets |
 | GET | `/admin/settings` | — | `{ registration: { enabled, forcedClosed, open } }` |
 | PATCH | `/admin/settings` | `{ registrationEnabled }` | idem ; ferme / ouvre les inscriptions libres |
@@ -590,6 +590,7 @@ Toutes en ligne (relayées par l'application native). Schémas :
 | PATCH | `/projects/:id/baselines/:baselineId` | `{ name }` | `{ baseline }` (résumé) ; auteur ou propriétaire, 403 sinon |
 | DELETE | `/projects/:id/baselines/:baselineId` | — | `{ ok: true }` ; auteur ou propriétaire, 403 sinon |
 | GET | `/me/stale?days=` | `days` 1–365 (défaut : `staleDays` du profil) | `{ stale: { days, tasks: [{ id, name, status, dueDate, projectId, projectName, lastActivityAt, idleDays }] (50 au plus, plus anciennes d'abord), taskCount, projects: [{ id, name, color, lastActivityAt, idleDays }] } }` — mes tâches ouvertes (projets actifs / en pause, sans projet) et mes projets **actifs** sans activité |
+| GET | `/me/risks?scope=mine\|projects` | `mine` (défaut) : risques dont je suis responsable ; `projects` : tous les risques des projets dont je suis propriétaire (retombe sur `mine` sans projet possédé) | `{ overview: { scope, ownsProjects, risks: (Risk & { projectName, projectColor })[] } }` — `kind = RISK`, non clos, projets actifs ou en pause, criticité décroissante, 500 max (tableau de bord ; relayée en ligne par l'application) |
 | GET | `/projects/:id/stale?days=` | idem | `{ stale: { days, lastActivityAt, tasks: { [taskId]: lastActivityAt } } }` — toutes les tâches ouvertes endormies du projet |
 | PATCH | `/me` | `{ staleDays? (1–365) }` | profil (`staleDays` ajouté à `ProfileDto`) |
 | GET | `/links/suggest?q=` | `q` ≤ 100 (vide = récents) | `{ items: [{ ref, kind, title, context, href }] }` — 4 par type (tâches, projets, nœuds, cartes, réunions, étapes, activités, documents), périmètre de l'utilisateur ; 300 / 15 min |

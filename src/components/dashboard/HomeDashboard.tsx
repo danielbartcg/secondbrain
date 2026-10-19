@@ -11,6 +11,7 @@ import { DesktopAppPromo } from "@/components/DesktopAppPromo";
 import { IosInstallHint } from "@/components/IosInstallHint";
 import { StalePanel } from "./StalePanel";
 import { ResurfacePanel } from "./ResurfacePanel";
+import { RisksPanel } from "./RisksPanel";
 import {
   Badge,
   DELIVERABLE_STATUS_COLOR,
@@ -216,6 +217,7 @@ export function HomeDashboard({ data, maps, userName }: { data: DashboardDto; ma
 
         <StalePanel />
         <ResurfacePanel />
+        <RisksPanel />
       </div>
     </div>
   );

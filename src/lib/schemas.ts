@@ -149,11 +149,13 @@ export const customFieldSchema = z.object({
   label: z.string().trim().min(1, "Libellé requis").max(60),
   type: z.enum(["TEXT", "LIST"]),
   options: z.array(customOption).max(500).optional(),
+  optionSort: z.enum(["MANUAL", "ASC", "DESC"]).optional(),
 });
 export const customFieldUpdateSchema = z.object({
   label: z.string().trim().min(1, "Libellé requis").max(60).optional(),
   active: z.boolean().optional(),
   options: z.array(customOption).max(500).optional(),
+  optionSort: z.enum(["MANUAL", "ASC", "DESC"]).optional(),
   order: z.number().int().min(0).max(1000).optional(),
 });
 export type CustomFieldInput = z.infer<typeof customFieldSchema>;

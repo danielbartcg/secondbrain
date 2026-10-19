@@ -7,11 +7,22 @@
 
 export type CustomFieldTypeValue = "TEXT" | "LIST";
 export type CustomFieldOption = { id: string; label: string };
-export type CustomFieldDto = { id: string; label: string; type: CustomFieldTypeValue; options: CustomFieldOption[]; order: number; active: boolean };
+/** Tri des valeurs d'une liste : manuel (glisser-déposer) ou forcé A → Z / Z → A. */
+export type CustomOptionSortValue = "MANUAL" | "ASC" | "DESC";
+export type CustomFieldDto = { id: string; label: string; type: CustomFieldTypeValue; options: CustomFieldOption[]; optionSort: CustomOptionSortValue; order: number; active: boolean };
 export type CustomValues = Record<string, string>;
 
 export const CUSTOM_FIELD_TYPE_LABEL: Record<CustomFieldTypeValue, string> = { TEXT: "Texte libre", LIST: "Liste de valeurs" };
+export const OPTION_SORT_LABEL: Record<CustomOptionSortValue, string> = { MANUAL: "Ordre manuel", ASC: "A → Z", DESC: "Z → A" };
 export const MAX_CUSTOM_FIELDS = 50;
+
+const collator = new Intl.Collator("fr", { sensitivity: "base", numeric: true });
+/** Valeurs rangées selon le tri du champ (MANUAL : ordre inchangé). */
+export function sortOptions<T extends { label: string }>(options: T[], sort: CustomOptionSortValue): T[] {
+  if (sort === "MANUAL") return options;
+  const sorted = [...options].sort((a, b) => collator.compare(a.label, b.label));
+  return sort === "DESC" ? sorted.reverse() : sorted;
+}
 export const MAX_CUSTOM_OPTIONS = 500;
 export const MAX_CUSTOM_TEXT = 500;
 

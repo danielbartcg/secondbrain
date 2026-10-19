@@ -265,3 +265,39 @@ export async function setRiskTasks(userId: string, riskId: string, taskIds: stri
     await recordTaskEvents(tx, events);
   });
 }
+
+// --- Tableau de bord ------------------------------------------------------------
+
+/** Risque vu du tableau de bord : avec son projet. */
+export type RiskOverviewItem = RiskDto & { projectName: string; projectColor: string | null };
+export type RiskOverviewScope = "mine" | "projects";
+export type RiskOverview = {
+  scope: RiskOverviewScope;
+  /** Vrai si l'utilisateur possède au moins un projet actif : l'option « Tous les risques de mes projets » est alors disponible. */
+  ownsProjects: boolean;
+  risks: RiskOverviewItem[];
+};
+
+/**
+ * Matrice des risques du tableau de bord (risques non clos des projets actifs
+ * ou en pause) : `mine` = risques dont je suis responsable (membre rattaché à
+ * mon compte), dans mon périmètre ; `projects` = tous les risques des projets
+ * dont je suis propriétaire. Sans projet possédé, `projects` retombe sur `mine`.
+ */
+export async function getRiskOverview(userId: string, scope: RiskOverviewScope): Promise<RiskOverview> {
+  const liveProject: Prisma.ProjectWhereInput = { isTemplate: false, status: { in: ["ACTIVE", "ON_HOLD"] } };
+  const ownsProjects = (await prisma.project.count({ where: { ...liveProject, ownerId: userId } })) > 0;
+  const effective: RiskOverviewScope = scope === "projects" && ownsProjects ? "projects" : "mine";
+  const project: Prisma.ProjectWhereInput =
+    effective === "projects" ? { ...liveProject, ownerId: userId } : { ...liveProject, OR: [{ ownerId: userId }, { members: { some: { userId } } }] };
+  const rows = await prisma.risk.findMany({
+    where: { kind: "RISK", status: { not: "CLOSED" }, project, ...(effective === "mine" ? { owner: { userId } } : {}) },
+    include: { ...RISK_INCLUDE, project: { select: { name: true, color: true } } },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 500,
+  });
+  const risks = rows
+    .map((r) => ({ ...toRiskDto(r), projectName: r.project.name, projectColor: r.project.color }))
+    .sort((a, b) => b.score - a.score || a.projectName.localeCompare(b.projectName, "fr") || a.title.localeCompare(b.title, "fr"));
+  return { scope: effective, ownsProjects, risks };
+}

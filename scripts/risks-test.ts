@@ -187,6 +187,33 @@ async function main() {
     const adminPatch = await call(admin, "PATCH", `/risks/${r1.id}`, { title: "Admin" });
     check("administrateur : pas d'écriture → 404", adminPatch.status === 404, adminPatch);
 
+    console.log("Tableau de bord : matrice des risques");
+    {
+      type Ov = { overview: { scope: string; ownsProjects: boolean; risks: (Risk & { projectId: string; projectName: string })[] } };
+      const all = (await call<RisksResp>(alice, "GET", `/projects/${projectId}/risks`)).data.risks;
+      const top = await call<RisksResp>(alice, "POST", `/projects/${projectId}/risks`, { title: "Risque majeur de Bob", probability: 5, impact: 5, ownerId: bobMember!.id });
+      const major = top.data.risks.find((r) => r.title === "Risque majeur de Bob")!;
+      await call(alice, "POST", `/projects/${projectId}/risks`, { title: "Risque clos", probability: 5, impact: 4, ownerId: bobMember!.id, status: "CLOSED" });
+      const openRisks = [...all, major].filter((r) => r.kind === "RISK" && r.status !== "CLOSED");
+      const bobMine = await call<Ov>(bob, "GET", "/me/risks");
+      const bobExpected = openRisks.filter((r) => r.ownerId === bobMember!.id).map((r) => r.id).sort();
+      check("mes risques : ceux dont je suis responsable, non clos", bobMine.status === 200 && bobMine.data.overview.scope === "mine" && JSON.stringify(bobMine.data.overview.risks.map((r) => r.id).sort()) === JSON.stringify(bobExpected), [bobMine.data.overview?.risks.map((r) => r.title), bobExpected]);
+      check("tri par criticité, projet indiqué", bobMine.data.overview.risks[0]?.id === major.id && bobMine.data.overview.risks[0].projectName === `Projet risques ${tag}`);
+      check("sans projet possédé : option « mes projets » indisponible", bobMine.data.overview.ownsProjects === false);
+      const bobProjects = await call<Ov>(bob, "GET", "/me/risks?scope=projects");
+      check("sans projet possédé : « mes projets » retombe sur mes risques", bobProjects.data.overview.scope === "mine" && bobProjects.data.overview.risks.length === bobExpected.length);
+      const aliceProjects = await call<Ov>(alice, "GET", "/me/risks?scope=projects");
+      check("propriétaire : tous les risques ouverts de mes projets (sans opportunités)", aliceProjects.data.overview.scope === "projects" && aliceProjects.data.overview.ownsProjects && aliceProjects.data.overview.risks.length === openRisks.length && aliceProjects.data.overview.risks.every((r) => r.kind === "RISK" && r.status !== "CLOSED"), aliceProjects.data.overview?.risks.map((r) => r.title));
+      const aliceMine = await call<Ov>(alice, "GET", "/me/risks");
+      check("propriétaire : « mes risques » exclut ceux des autres", aliceMine.data.overview.risks.every((r) => r.ownerId !== bobMember!.id));
+      const eveProjects = await call<Ov>(eve, "GET", "/me/risks?scope=projects");
+      check("autre propriétaire : ne voit pas ces risques", !eveProjects.data.overview.risks.some((r) => r.projectId === projectId));
+      check("sans session : 401", (await call(null, "GET", "/me/risks")).status === 401);
+      // Remise en l'état pour la suite (décomptes du registre).
+      const extra = (await call<RisksResp>(alice, "GET", `/projects/${projectId}/risks`)).data.risks.filter((r) => r.title === "Risque majeur de Bob" || r.title === "Risque clos");
+      for (const r of extra) await call(alice, "DELETE", `/risks/${r.id}`);
+    }
+
     console.log("Cascade et suppression");
     const del = await call(alice, "DELETE", `/tasks/${task2}`);
     check("suppression de la tâche", del.status === 200, del);

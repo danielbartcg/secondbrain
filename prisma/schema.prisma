@@ -277,6 +277,13 @@ enum CustomFieldType {
   LIST
 }
 
+/// Tri des valeurs d'une liste : manuel (glisser-déposer) ou forcé.
+enum CustomOptionSort {
+  MANUAL
+  ASC
+  DESC
+}
+
 /// Champ personnalisé des projets, défini dans l'administration (ex. « Client »).
 /// `options` (liste) : [{ id, label }] — les projets stockent l'identifiant :
 /// renommer une valeur la renomme partout.
@@ -285,6 +292,8 @@ model CustomField {
   label     String
   type      CustomFieldType @default(TEXT)
   options   Json            @default("[]")
+  /// ASC / DESC : valeurs toujours rangées par ordre alphabétique (à l'enregistrement).
+  optionSort CustomOptionSort @default(MANUAL)
   order     Int             @default(0)
   /// Archivé : masqué des fiches projet, valeurs conservées.
   active    Boolean         @default(true)

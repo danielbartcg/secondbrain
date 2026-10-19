@@ -115,7 +115,7 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:migrate` / `db:deploy` / `db:studio` | Prisma |
 | `npm run user:create -- --email=… --password=… [--name=…]` | créer / réinitialiser un utilisateur |
-| `npm run test:risks` / `test:admin-users` | tests de bout en bout des risques et opportunités / de la création de comptes et réinitialisation par l'administrateur (serveur de dev lancé) |
+| `npm run test:risks` / `test:admin-users` | tests de bout en bout des risques et opportunités (y compris la matrice du tableau de bord `/me/risks`) / de la création de comptes et réinitialisation par l'administrateur (serveur de dev lancé) |
 | `npm run test:gantt` | tests de la logique du diagramme de Gantt (dates, déplacement, redimensionnement, cascade, flèches) — sans serveur |
 | `npm run test:features` | tests de bout en bout des e-mails (faux serveur SMTP local), de la messagerie, des comptes (mot de passe oublié, validation, changement d'adresse) et du connecteur MCP (serveur de dev lancé) |
 | `npm run test:native` | tests de bout en bout du client hors ligne de l'application (serveur de dev lancé) |
@@ -129,7 +129,7 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run test:knowledge` | tests purs des liens `[[…]]` (assainissement, extraction), de la répétition espacée, de l'iCalendar et du voyage dans le temps — sans serveur |
 | `npm run test:knowledge-e2e` | tests de bout en bout des plannings de référence, de la fraîcheur, des liens (rétroliens, graphe, suggestions), de la résurgence, du flux iCal et du voyage dans le temps, droits compris — serveur de dev lancé, `BASE_URL` facultatif |
 | `npm run test:templates` | tests de bout en bout des modèles (projets types, cartes types : édition par les administrateurs, exclusion des périmètres, création et application, outils MCP) — serveur de dev lancé |
-| `npm run test:custom-fields` | tests de bout en bout des champs personnalisés des projets (administration, valeurs, renommage / retrait / archivage / suppression, synchro, outils MCP) — serveur de dev lancé |
+| `npm run test:custom-fields` | tests de bout en bout des champs personnalisés des projets (administration, valeurs, tri forcé A → Z / Z → A et ordre manuel, usage par valeur, renommage / retrait / archivage / suppression, synchro, outils MCP) — serveur de dev lancé |
 | `npm run test:activity` | tests de bout en bout de la piste d'audit des cartes et du rapport d'activité (API, filtres, droits, outils MCP) et des fenêtres de temps — serveur de dev lancé |
 | `npm run test:map-shares` | tests de bout en bout du partage des cartes mentales (lecture / écriture, notifications, notes, épingles, recherche, synchro) — serveur de dev lancé, `BASE_URL` facultatif |
 | `npm run perf:seed` | jeu de données volumineux **conservé** pour les tests de performance (200 comptes, ~20 000 tâches, cartes de 5 000 nœuds, messages, notifications ; `--reset`, `--drop`, `SCALE=`) — base locale uniquement ; connexion `perf-000@perf.local` / `PerfTest!2026` |

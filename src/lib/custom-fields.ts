@@ -4,7 +4,7 @@ import type { CustomField, Prisma, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, notFound } from "@/lib/api";
 import { requireAdmin } from "@/lib/users";
-import { MAX_CUSTOM_FIELDS, MAX_CUSTOM_OPTIONS, readOptions, type CustomFieldDto } from "@/lib/shared/custom-fields";
+import { MAX_CUSTOM_FIELDS, MAX_CUSTOM_OPTIONS, readOptions, sortOptions, type CustomFieldDto } from "@/lib/shared/custom-fields";
 import type { CustomFieldInput, CustomFieldUpdateInput } from "@/lib/schemas";
 
 /**
@@ -21,7 +21,7 @@ type Db = Prisma.TransactionClient | typeof prisma;
 const newOptionId = () => "o" + randomBytes(6).toString("hex");
 
 export function toCustomFieldDto(f: CustomField): CustomFieldDto {
-  return { id: f.id, label: f.label, type: f.type, options: readOptions(f.options), order: f.order, active: f.active };
+  return { id: f.id, label: f.label, type: f.type, options: readOptions(f.options), optionSort: f.optionSort, order: f.order, active: f.active };
 }
 
 /** Définitions (actives seulement, sauf pour l'administration). */
@@ -60,7 +60,8 @@ export async function createCustomField(admin: Pick<User, "email" | "role">, inp
     data: {
       label: input.label.trim(),
       type: input.type,
-      options: input.type === "LIST" ? normalizeOptions(input.options ?? []) : [],
+      options: input.type === "LIST" ? sortOptions(normalizeOptions(input.options ?? []), input.optionSort ?? "MANUAL") : [],
+      optionSort: input.optionSort ?? "MANUAL",
       order: (last._max.order ?? -1) + 1,
     },
   });
@@ -75,10 +76,17 @@ export async function updateCustomField(admin: Pick<User, "email" | "role">, id:
     const data: Prisma.CustomFieldUpdateInput = {};
     if (input.label !== undefined) data.label = input.label.trim();
     if (input.active !== undefined) data.active = input.active;
+    const sort = input.optionSort ?? field.optionSort;
+    if (input.optionSort !== undefined) {
+      if (field.type !== "LIST") throw badRequest("Seul un champ « liste » a des valeurs.");
+      data.optionSort = input.optionSort;
+      // Tri forcé : les valeurs existantes sont rangées tout de suite.
+      if (input.options === undefined) data.options = sortOptions(readOptions(field.options), sort);
+    }
     if (input.options !== undefined) {
       if (field.type !== "LIST") throw badRequest("Seul un champ « liste » a des valeurs.");
       const previous = readOptions(field.options);
-      const next = normalizeOptions(input.options, previous);
+      const next = sortOptions(normalizeOptions(input.options, previous), sort);
       data.options = next;
       // Valeurs retirées : effacées des projets (synchronisé : déclencheur sur Project).
       const removed = previous.map((o) => o.id).filter((oid) => !next.some((n) => n.id === oid));
@@ -110,8 +118,16 @@ export async function deleteCustomField(admin: Pick<User, "email" | "role">, id:
   return listCustomFields({ includeArchived: true });
 }
 
-/** Nombre de projets renseignés par champ (administration). */
+/**
+ * Nombre de projets renseignés (administration) : par champ (`fieldId`) et,
+ * pour les listes, par valeur (`fieldId/optionId`).
+ */
 export async function customFieldUsage(): Promise<Record<string, number>> {
-  const rows = await prisma.$queryRaw<Array<{ key: string; n: bigint }>>`SELECT k AS "key", COUNT(*) AS n FROM "Project", jsonb_object_keys("customFields") AS k GROUP BY k`;
-  return Object.fromEntries(rows.map((r) => [r.key, Number(r.n)]));
+  const rows = await prisma.$queryRaw<Array<{ key: string; value: string; n: bigint }>>`SELECT e.key AS "key", e.value AS "value", COUNT(*) AS n FROM "Project", jsonb_each_text("customFields") AS e GROUP BY e.key, e.value`;
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    out[r.key] = (out[r.key] ?? 0) + Number(r.n);
+    out[`${r.key}/${r.value}`] = Number(r.n);
+  }
+  return out;
 }

@@ -225,7 +225,7 @@ politique de confidentialité obligatoires.
 
 Toute fonction du site existe dans l'application, à l'identique ; seules
 différences voulues : le site reste strictement en ligne, la messagerie et les
-fonctions « serveur » (risques, réunions, historique, partage de cartes,
+fonctions « serveur » (risques — y compris la matrice du tableau de bord —, réunions, historique, partage de cartes,
 équipe, livrables, dossiers, administration, clés, mot de passe, e-mail) sont
 **relayées en ligne** et affichent « Disponible uniquement en ligne » hors
 connexion ; l'application ajoute synchro, conflits et mises à jour.

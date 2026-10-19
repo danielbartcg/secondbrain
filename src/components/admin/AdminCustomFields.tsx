@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Archive, ArchiveRestore, ArrowDown, ArrowUp, GripVertical, List, Loader2, Plus, SlidersHorizontal, Trash2, Type, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowDownAZ, ArrowDownZA, ArrowUp, GripVertical, List, ListPlus, Loader2, Plus, Search, SlidersHorizontal, Trash2, Type, X } from "lucide-react";
 import { api } from "@/lib/client";
-import { CUSTOM_FIELD_TYPE_LABEL, type CustomFieldDto, type CustomFieldTypeValue } from "@/lib/shared/custom-fields";
+import { CUSTOM_FIELD_TYPE_LABEL, OPTION_SORT_LABEL, sortOptions, type CustomFieldDto, type CustomFieldOption, type CustomFieldTypeValue, type CustomOptionSortValue } from "@/lib/shared/custom-fields";
 import { Badge, Button, InlineEdit, errorMessage, inputClass, toast } from "@/components/ui";
 
 /**
  * Administration → Champs personnalisés des projets (ex. « Client ») : texte
- * libre ou liste de valeurs gérée ici. Renommer une valeur la renomme dans
+ * libre ou liste de valeurs gérée ici (`OptionsManager` : tri forcé A → Z /
+ * Z → A ou ordre manuel par glisser-déposer, recherche, ajout en masse). Renommer une valeur la renomme dans
  * tous les projets ; supprimer une valeur ou un champ efface ces valeurs des
  * projets (confirmation). Archiver masque le champ des fiches projet en
  * conservant les valeurs.
@@ -87,6 +88,7 @@ export function AdminCustomFields({ initial, usage: initialUsage }: { initial: C
           index={i}
           count={fields.length}
           used={usage[f.id] ?? 0}
+          usage={usage}
           busy={busy}
           onPatch={(body, ok) => patch(f, body, ok)}
           onDelete={() => {
@@ -105,6 +107,7 @@ function FieldCard({
   index,
   count,
   used,
+  usage,
   busy,
   onPatch,
   onDelete,
@@ -113,28 +116,14 @@ function FieldCard({
   index: number;
   count: number;
   used: number;
+  usage: Record<string, number>;
   busy: boolean;
   onPatch: (body: Record<string, unknown>, ok?: string) => Promise<boolean>;
   onDelete: () => void;
 }) {
-  const [newValue, setNewValue] = useState("");
-  const options = f.options;
-  const saveOptions = (next: { id?: string; label: string }[], ok?: string) => onPatch({ options: next }, ok);
-
-  async function addValue(e: React.FormEvent) {
-    e.preventDefault();
-    const values = newValue
-      .split(/\n|;/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (!values.length) return;
-    if (await saveOptions([...options, ...values.map((label) => ({ label }))], values.length > 1 ? `${values.length} valeurs ajoutées.` : undefined)) setNewValue("");
-  }
-
   return (
     <section className={`rounded-2xl border border-line bg-surface ${f.active ? "" : "opacity-70"}`}>
       <header className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
-        <GripVertical className="h-4 w-4 text-faint" aria-hidden />
         <span className="text-muted">{f.type === "LIST" ? <List className="h-4 w-4" /> : <Type className="h-4 w-4" />}</span>
         <InlineEdit value={f.label} onSave={(label) => void onPatch({ label: label.slice(0, 60) }, "Libellé modifié.")} className="-mx-1.5 min-w-0 flex-1 font-semibold" />
         <Badge tone="neutral">{CUSTOM_FIELD_TYPE_LABEL[f.type]}</Badge>
@@ -165,62 +154,261 @@ function FieldCard({
         </div>
       </header>
       {f.type === "LIST" ? (
-        <div className="px-4 py-3">
-          {options.length === 0 && <p className="text-sm text-muted">Aucune valeur : ajoutez-en ci-dessous.</p>}
-          <ul className="flex flex-wrap gap-1.5">
-            {options.map((o, i) => (
-              <li key={o.id} className="group inline-flex items-center gap-0.5 rounded-full border border-line bg-surface-2 py-0.5 pl-2.5 pr-1 text-sm">
-                <InlineEdit
-                  value={o.label}
-                  onSave={(label) => void saveOptions(options.map((x) => (x.id === o.id ? { id: x.id, label: label.slice(0, 100) } : x)), "Valeur renommée dans tous les projets.")}
-                  className="-mx-1 min-w-0"
-                />
-                <button
-                  type="button"
-                  disabled={busy || i === 0}
-                  onClick={() => {
-                    const next = [...options];
-                    [next[i - 1], next[i]] = [next[i], next[i - 1]];
-                    void saveOptions(next);
-                  }}
-                  className="hidden rounded-full p-0.5 text-faint hover:bg-surface-3 hover:text-ink group-hover:inline-flex disabled:opacity-30"
-                  title="Avancer"
-                  aria-label={`Avancer ${o.label}`}
-                >
-                  <ArrowUp className="h-3 w-3 -rotate-90" />
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (used && !window.confirm(`Retirer la valeur « ${o.label} » ? Elle sera effacée des projets qui l'utilisent.`)) return;
-                    void saveOptions(options.filter((x) => x.id !== o.id));
-                  }}
-                  className="rounded-full p-0.5 text-faint hover:bg-red-50 hover:text-danger"
-                  title="Retirer la valeur"
-                  aria-label={`Retirer ${o.label}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <form onSubmit={addValue} className="mt-3 flex flex-wrap gap-2">
-            <input
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              placeholder="Nouvelle valeur (plusieurs : séparées par « ; »)"
-              maxLength={5000}
-              className={`${inputClass} min-w-[14rem] flex-1 py-1.5`}
-            />
-            <Button type="submit" size="sm" variant="outline" disabled={busy || !newValue.trim()}>
-              <Plus className="h-4 w-4" /> Ajouter
-            </Button>
-          </form>
-        </div>
+        <OptionsManager field={f} usage={usage} busy={busy} onPatch={onPatch} />
       ) : (
         <p className="px-4 py-3 text-sm text-muted">Texte libre, saisi dans chaque projet (500 caractères au plus).</p>
       )}
     </section>
+  );
+}
+
+type DragState = { id: string; from: number; over: number; dy: number; startY: number; rects: { top: number; height: number }[] };
+
+/**
+ * Gestion des valeurs d'une liste : tri forcé (A → Z, Z → A) ou ordre manuel
+ * par glisser-déposer (souris et tactile, poignée) et boutons monter /
+ * descendre (clavier). Glisser une valeur alors qu'un tri est forcé repasse
+ * en ordre manuel. Recherche (au-delà de 8 valeurs), nombre de projets par
+ * valeur, renommage en place, ajout unitaire ou en masse (une par ligne).
+ */
+function OptionsManager({ field: f, usage, busy, onPatch }: { field: CustomFieldDto; usage: Record<string, number>; busy: boolean; onPatch: (body: Record<string, unknown>, ok?: string) => Promise<boolean> }) {
+  const [items, setItems] = useState<CustomFieldOption[]>(f.options);
+  const [sort, setSort] = useState<CustomOptionSortValue>(f.optionSort);
+  const [query, setQuery] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [bulk, setBulk] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Le serveur fait foi après chaque enregistrement.
+  useEffect(() => {
+    setItems(f.options);
+    setSort(f.optionSort);
+  }, [f.options, f.optionSort]);
+
+  const q = query.trim().toLowerCase();
+  const visible = useMemo(() => (q ? items.filter((o) => o.label.toLowerCase().includes(q)) : items), [items, q]);
+  const canDrag = !q && !busy && items.length > 1;
+
+  async function save(next: CustomFieldOption[], extra: Record<string, unknown> = {}, ok?: string) {
+    const nextSort = (extra.optionSort as CustomOptionSortValue | undefined) ?? sort;
+    setItems(sortOptions(next, nextSort));
+    if (!(await onPatch({ options: next.map((o) => (o.id ? o : { label: o.label })), ...extra }, ok))) setItems(f.options);
+  }
+
+  function move(from: number, to: number) {
+    if (from === to || to < 0 || to >= items.length) return;
+    const next = [...items];
+    const [it] = next.splice(from, 1);
+    next.splice(to, 0, it);
+    const forced = sort !== "MANUAL";
+    if (forced) setSort("MANUAL");
+    void save(next, forced ? { optionSort: "MANUAL" } : {}, forced ? "Ordre manuel activé : la liste n'est plus triée automatiquement." : undefined);
+  }
+
+  function changeSort(next: CustomOptionSortValue) {
+    if (next === sort) return;
+    setSort(next);
+    setItems(sortOptions(items, next));
+    void onPatch({ optionSort: next }, next === "MANUAL" ? "Ordre manuel : glissez les valeurs pour les réorganiser." : `Valeurs triées ${OPTION_SORT_LABEL[next]}.`).then((ok) => {
+      if (!ok) {
+        setSort(f.optionSort);
+        setItems(f.options);
+      }
+    });
+  }
+
+  // --- Glisser-déposer (pointeur : souris, stylet, doigt) ---
+  function onGripDown(e: React.PointerEvent, id: string, index: number) {
+    if (!canDrag || e.button > 0) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const rows = Array.from(listRef.current?.children ?? []) as HTMLElement[];
+    const rects = rows.map((r) => {
+      const b = r.getBoundingClientRect();
+      return { top: b.top, height: b.height };
+    });
+    setDrag({ id, from: index, over: index, dy: 0, startY: e.clientY, rects });
+  }
+  function onGripMove(e: React.PointerEvent) {
+    if (!drag) return;
+    const dy = e.clientY - drag.startY;
+    const r = drag.rects[drag.from];
+    const center = r.top + r.height / 2 + dy;
+    let over = drag.rects.findIndex((x) => center < x.top + x.height);
+    if (over < 0) over = drag.rects.length - 1;
+    setDrag({ ...drag, dy, over: Math.max(0, over) });
+  }
+  function onGripUp() {
+    if (!drag) return;
+    const { from, over } = drag;
+    setDrag(null);
+    move(from, over);
+  }
+  function shiftFor(index: number): number {
+    if (!drag || index === drag.from) return 0;
+    const h = drag.rects[drag.from]?.height ?? 0;
+    if (drag.from < drag.over && index > drag.from && index <= drag.over) return -h;
+    if (drag.from > drag.over && index < drag.from && index >= drag.over) return h;
+    return 0;
+  }
+
+  async function addOne(e: React.FormEvent) {
+    e.preventDefault();
+    const label = newValue.trim();
+    if (!label) return;
+    if (items.some((o) => o.label.toLowerCase() === label.toLowerCase())) {
+      toast(`La valeur « ${label} » existe déjà.`, "error");
+      return;
+    }
+    setNewValue("");
+    await save([...items, { id: "", label }]);
+  }
+
+  async function addBulk() {
+    const known = new Set(items.map((o) => o.label.toLowerCase()));
+    const seen = new Set<string>();
+    const values = (bulk ?? "")
+      .split(/\n|;/)
+      .map((v) => v.trim())
+      .filter((v) => v && !known.has(v.toLowerCase()) && !seen.has(v.toLowerCase()) && seen.add(v.toLowerCase()));
+    if (!values.length) {
+      toast("Aucune nouvelle valeur à ajouter.", "error");
+      return;
+    }
+    const n = values.length;
+    if (await onPatch({ options: [...items, ...values.map((label) => ({ label }))] }, `${n} valeur${n > 1 ? "s" : ""} ajoutée${n > 1 ? "s" : ""}.`)) setBulk(null);
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-lg border border-line-strong p-0.5" role="radiogroup" aria-label="Tri des valeurs">
+          {(["MANUAL", "ASC", "DESC"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={sort === m}
+              disabled={busy}
+              onClick={() => changeSort(m)}
+              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition ${sort === m ? "bg-brand-600 text-on-brand" : "text-ink-2 hover:bg-surface-2"}`}
+            >
+              {m === "MANUAL" ? <GripVertical className="h-3.5 w-3.5" /> : m === "ASC" ? <ArrowDownAZ className="h-3.5 w-3.5" /> : <ArrowDownZA className="h-3.5 w-3.5" />}
+              {OPTION_SORT_LABEL[m]}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-muted">
+          {items.length} valeur{items.length > 1 ? "s" : ""}
+        </span>
+        {items.length > 8 && (
+          <label className="relative ml-auto min-w-[10rem] flex-1 sm:max-w-[16rem]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" aria-hidden />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filtrer les valeurs" aria-label="Filtrer les valeurs" className={`${inputClass} w-full py-1 pl-8 text-sm`} />
+          </label>
+        )}
+      </div>
+      <p className="mt-1.5 text-xs text-muted">
+        {sort === "MANUAL"
+          ? "Glissez une valeur par sa poignée pour changer l'ordre proposé dans les projets."
+          : `Tri automatique ${OPTION_SORT_LABEL[sort]} : les nouvelles valeurs se rangent d'elles-mêmes. Glisser une valeur repasse en ordre manuel.`}
+        {q && " Le filtre suspend le glisser-déposer."}
+      </p>
+
+      {items.length === 0 ? (
+        <p className="mt-3 rounded-xl border border-dashed border-line-strong p-4 text-center text-sm text-muted">Aucune valeur : ajoutez-en ci-dessous.</p>
+      ) : visible.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">Aucune valeur ne correspond au filtre.</p>
+      ) : (
+        <ul ref={listRef} className="mt-3 divide-y divide-line rounded-xl border border-line" aria-label={`Valeurs de ${f.label}`}>
+          {visible.map((o) => {
+            const i = items.indexOf(o);
+            const n = usage[`${f.id}/${o.id}`] ?? 0;
+            const dragging = drag?.id === o.id;
+            return (
+              <li
+                key={o.id || `new-${o.label}`}
+                className={`flex items-center gap-2 bg-surface px-2 py-1.5 first:rounded-t-xl last:rounded-b-xl ${dragging ? "relative z-10 shadow-lg ring-1 ring-brand-500" : drag ? "transition-transform" : ""}`}
+                style={{ transform: dragging ? `translateY(${drag.dy}px)` : `translateY(${shiftFor(i)}px)` }}
+              >
+                <button
+                  type="button"
+                  disabled={!canDrag}
+                  onPointerDown={(e) => onGripDown(e, o.id, i)}
+                  onPointerMove={onGripMove}
+                  onPointerUp={onGripUp}
+                  onPointerCancel={() => setDrag(null)}
+                  className="cursor-grab touch-none rounded p-1 text-faint hover:bg-surface-2 hover:text-ink active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
+                  title="Glisser pour déplacer"
+                  aria-label={`Déplacer ${o.label}`}
+                >
+                  <GripVertical className="h-4 w-4" />
+                </button>
+                <span className="w-6 shrink-0 text-right text-xs tabular-nums text-faint">{i + 1}</span>
+                <InlineEdit
+                  value={o.label}
+                  onSave={(label) => void save(items.map((x) => (x.id === o.id ? { id: x.id, label: label.slice(0, 100) } : x)), {}, "Valeur renommée dans tous les projets.")}
+                  className="-mx-1 min-w-0 flex-1 text-sm"
+                />
+                {n > 0 && (
+                  <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted" title={`Utilisée par ${n} projet${n > 1 ? "s" : ""}`}>
+                    {n} projet{n > 1 ? "s" : ""}
+                  </span>
+                )}
+                <div className="flex shrink-0 items-center">
+                  <button type="button" disabled={busy || !!q || i === 0} onClick={() => move(i, i - 1)} className="rounded p-1 text-faint hover:bg-surface-2 hover:text-ink disabled:opacity-30" title="Monter" aria-label={`Monter ${o.label}`}>
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" disabled={busy || !!q || i === items.length - 1} onClick={() => move(i, i + 1)} className="rounded p-1 text-faint hover:bg-surface-2 hover:text-ink disabled:opacity-30" title="Descendre" aria-label={`Descendre ${o.label}`}>
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (n && !window.confirm(`Retirer la valeur « ${o.label} » ? Elle sera effacée de ${n} projet${n > 1 ? "s" : ""}.`)) return;
+                      void save(items.filter((x) => x !== o));
+                    }}
+                    className="rounded p-1 text-faint hover:bg-red-50 hover:text-danger"
+                    title="Retirer la valeur"
+                    aria-label={`Retirer ${o.label}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {bulk === null ? (
+        <form onSubmit={addOne} className="mt-3 flex flex-wrap gap-2">
+          <input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Nouvelle valeur" maxLength={100} aria-label="Nouvelle valeur" className={`${inputClass} min-w-[12rem] flex-1 py-1.5`} />
+          <Button type="submit" size="sm" variant="outline" disabled={busy || !newValue.trim()}>
+            <Plus className="h-4 w-4" /> Ajouter
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setBulk("")} disabled={busy}>
+            <ListPlus className="h-4 w-4" /> Ajout en masse
+          </Button>
+        </form>
+      ) : (
+        <div className="mt-3 rounded-xl border border-line bg-surface-2 p-3">
+          <label className="text-xs font-medium text-ink-2" htmlFor={`bulk-${f.id}`}>
+            Une valeur par ligne (les doublons sont ignorés)
+          </label>
+          <textarea id={`bulk-${f.id}`} value={bulk} onChange={(e) => setBulk(e.target.value)} rows={6} maxLength={20000} autoFocus className={`${inputClass} mt-1 w-full font-mono text-sm`} placeholder={"Valeur 1\nValeur 2\nValeur 3"} />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setBulk(null)}>
+              Annuler
+            </Button>
+            <Button size="sm" onClick={() => void addBulk()} disabled={busy || !bulk.trim()}>
+              <ListPlus className="h-4 w-4" /> Ajouter les valeurs
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
