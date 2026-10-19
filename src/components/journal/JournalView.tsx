@@ -37,6 +37,7 @@ import {
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { errorMessage, toast } from "@/components/ui";
 import { JournalCalendar } from "./JournalCalendar";
+import { MentionText } from "@/components/MentionText";
 import { JournalReportDialog } from "./JournalReportDialog";
 
 /**
@@ -335,7 +336,9 @@ export function ActivityList({ items, max = 8 }: { items: JournalActivityItem[];
             {g.items.slice(0, max).map((it, i) => (
               <li key={i} className="flex gap-2 text-xs text-ink-2">
                 <span className="w-10 shrink-0 tabular-nums text-muted">{hhmm(it.at)}</span>
-                <span className="min-w-0">{it.message}</span>
+                <span className="min-w-0">
+                  <MentionText text={it.message} />
+                </span>
               </li>
             ))}
             {g.items.length > max && <li className="pl-12 text-xs text-muted">… et {g.items.length - max} autre{g.items.length - max > 1 ? "s" : ""}</li>}

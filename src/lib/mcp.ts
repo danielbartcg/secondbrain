@@ -22,6 +22,7 @@ import { meetingStatus } from "@/lib/meetings";
 import { QUERY_ENTITIES, queryObjects, type QueryArgs } from "@/lib/mcp-query";
 import { ACTIVITY_PRESETS, addDays, parisYmd } from "@/lib/shared/activity-period";
 import { getJournalReport, listJournalEntries } from "@/lib/journal";
+import { plainMentions } from "@/lib/shared/mentions";
 import { JOURNAL_BLOCKS, JOURNAL_BLOCK_LABEL, formatJournalDay, isWrittenBlock, resolveJournalBlock, type JournalBlockKey, type JournalWrittenBlock } from "@/lib/shared/journal";
 
 /**
@@ -760,7 +761,8 @@ export async function handleRpc(user: User, msg: RpcRequest, canWrite = false): 
       const args = params.arguments && typeof params.arguments === "object" ? (params.arguments as Record<string, unknown>) : {};
       try {
         const result = await tool.run(user, args);
-        const json = JSON.stringify(result, null, 1);
+        // Mentions de commentaires (pistes d'audit, commentaires) : « @Nom », sans identifiant.
+        const json = plainMentions(JSON.stringify(result, null, 1));
         return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: json.length > 400_000 ? json.slice(0, 400_000) + "\n…(tronqué)" : json }], isError: false } };
       } catch (e) {
         // Erreur métier (accès refusé, introuvable…) : renvoyée à l'IA comme résultat d'outil en erreur.

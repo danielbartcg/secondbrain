@@ -146,6 +146,16 @@ async function main() {
     const roWrite = await tool(keyB, "write_journal", { block: "SUMMARY", text: "x" });
     check("clé en lecture seule : écriture refusée", roWrite.isError);
 
+    console.log("\n5 bis. Mentions dans les pistes d'audit");
+    await call(A, "POST", `/tasks/${t.id}/comments`, { body: "@[Alice Test] relis la note stp" });
+    const hist = (await call(A, "GET", `/tasks/${t.id}/history`)).data.events as Any[];
+    const ev = hist.find((e) => e.kind === "comment");
+    check("piste d'audit : mention conservée sous forme structurée (rendue en pastille)", /@\[Alice Test\]\([A-Za-z0-9_-]+\)/.test(ev?.message ?? ""), ev?.message);
+    const act2 = await tool(key, "get_journal", { day: today, with_activity: true });
+    check("MCP : « @Alice Test » sans identifiant", act2.text.includes("@Alice Test relis la note") && !/@\[[^\]]+\]\(/.test(act2.text), act2.text.slice(0, 400));
+    const act3 = await tool(key, "get_activity", { period: "today" });
+    check("MCP get_activity : aucune mention brute", !/@\[[^\]]+\]\(/.test(act3.text) && act3.text.includes("@Alice Test"));
+
     console.log("\n6. Voyage dans le temps : risques à une date");
     const before = new Date();
     await new Promise((r) => setTimeout(r, 50));

@@ -10,6 +10,7 @@ import { isAdmin } from "@/lib/roles";
 import { mapAccessWhere } from "@/lib/map-access";
 import { MEMBER_INCLUDE, TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskEditWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 import { sanitizeNotes } from "@/lib/sanitize";
+import { mentionExcerpt, plainMentions } from "@/lib/shared/mentions";
 import { NO_PROJECT_LABEL, dayString, resolveMentions } from "@/lib/shared/task-model";
 export { NO_PROJECT_LABEL, dayString, resolveMentions };
 
@@ -116,10 +117,8 @@ export async function getTaskHistory(userId: string, taskId: string): Promise<Ta
   return listTaskEventsRaw(taskId);
 }
 
-const commentExcerpt = (s: string, n = 120) => {
-  const t = s.replace(/@\[([^\]]+)\]/g, "@$1").replace(/\s+/g, " ").trim();
-  return t.length > n ? t.slice(0, n - 1) + "…" : t;
-};
+/** Extrait de commentaire pour la piste d'audit : mentions structurées conservées (affichées « @Nom »). */
+const commentExcerpt = (s: string, n = 120) => mentionExcerpt(s, n);
 
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
   const canEdit = (await prisma.task.count({ where: { id: taskId, ...(await taskEditWhere(userId)) } })) > 0;
@@ -203,7 +202,8 @@ export async function addComment(userId: string, taskId: string, body: string, p
     ]);
 
     const href = `${taskHref(taskId)}#comment-${comment.id}`;
-    const excerpt = body.length > 140 ? body.slice(0, 137) + "…" : body;
+    const plain = plainMentions(body);
+    const excerpt = plain.length > 140 ? plain.slice(0, 137) + "…" : plain;
     const common = { actorId: userId, actorName: author.name, href, taskId, projectId: t.projectId };
     const items = [];
     if (parent) {

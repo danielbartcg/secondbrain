@@ -477,7 +477,14 @@ instantané avant / après (`taskSnapshot`, `diffTaskEvents` : nom,
 description, statut, avancement, priorité, complexité, dates, clôture,
 responsable, superviseur, contributeurs, prérequis, rattachement) ;
 commentaires, sessions de travail, nœuds de carte et risques appellent
-`recordTaskEvents`. Les écritures rejouées par la synchro passent par les
+`recordTaskEvents`. **Mentions** (`src/lib/shared/mentions.ts`) : l'extrait
+d'un commentaire garde ses mentions structurées `@[Nom](memberId)`
+(`mentionExcerpt`, jamais coupées) ; l'interface les rend en pastille
+« @Nom » (`components/MentionText` : historique de tâche et de carte,
+Activité, journal, notifications), le connecteur MCP et les notifications /
+e-mails en texte « @Nom » (`plainMentions`, appliqué à toute réponse
+d'outil MCP). L'ancienne forme `@Nom(memberId)` des pistes écrites avant le
+19/10/2026 est reconnue de la même façon. Les écritures rejouées par la synchro passent par les
 mêmes fonctions : l'application hors ligne est auditée aussi. Lecture :
 `GET /tasks/:id/history` (mêmes droits que la fiche).
 

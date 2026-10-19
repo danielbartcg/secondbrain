@@ -5,6 +5,7 @@ import Link from "next/link";
 import { History, X } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MapEventDto } from "@/lib/map-events";
+import { MentionText } from "@/components/MentionText";
 import { Avatar } from "@/components/ui";
 
 /**
@@ -147,7 +148,9 @@ export function MapHistoryPanel({
                 >
                   <Avatar id={e.actorId ?? e.id} name={e.actorName} src={e.actorAvatarUrl} size={22} className="mt-0.5" />
                   <div className="min-w-0 flex-1 text-sm">
-                    <p className="break-words text-ink-2">{e.message}</p>
+                    <p className="break-words text-ink-2">
+                      <MentionText text={e.message} />
+                    </p>
                     <time className="text-[11px] text-faint" dateTime={e.createdAt}>
                       {new Date(e.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                     </time>

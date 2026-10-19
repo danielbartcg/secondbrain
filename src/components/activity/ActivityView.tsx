@@ -7,6 +7,7 @@ import { api } from "@/lib/client";
 import type { ActivityEvent, ActivityMap, ActivityProject, ActivityReport } from "@/lib/activity";
 import { ACTIVITY_PRESETS, type ActivityPreset } from "@/lib/shared/activity-period";
 import { Badge, TASK_STATUS_LABEL, TASK_STATUS_TONE, Toggle, errorMessage, inputClass, selectClassXs } from "@/components/ui";
+import { MentionText } from "@/components/MentionText";
 import { DailyActivityChart } from "@/components/charts/DailyActivityChart";
 
 /**
@@ -261,7 +262,9 @@ function Events({ events, max = 3 }: { events: ActivityEvent[]; max?: number }) 
           <time className="w-28 shrink-0 text-faint" dateTime={e.at}>
             {time(e.at)}
           </time>
-          <span className="min-w-0 break-words">{e.message}</span>
+          <span className="min-w-0 break-words">
+            <MentionText text={e.message} />
+          </span>
         </li>
       ))}
       {events.length > max && (

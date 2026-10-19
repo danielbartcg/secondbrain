@@ -362,6 +362,10 @@ Puces des N-1 (photo, nom, nombre de tâches ouvertes ; clic = filtre) et
 
 ## Composants partagés (`src/components/ui.tsx`)
 
+`MentionText` (`src/components/MentionText.tsx`) : texte de piste d'audit
+ou de notification dont les mentions `@[Nom](id)` s'affichent en pastille
+« @Nom », comme dans le fil de commentaires (jamais l'identifiant).
+
 `PageHeader`, `Button`, `ProgressBar`, `InlineEdit` (clic, ou Entrée / Espace
 au clavier, pour éditer ; `role="button"`), `QuickAdd` (en cas d'erreur, la
 saisie est conservée et un toast s'affiche), `EmptyState`, `Avatar` (photo `src`

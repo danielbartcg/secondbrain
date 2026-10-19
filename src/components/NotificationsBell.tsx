@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AtSign, Bell, ClipboardCheck, Share2, CheckCheck, Circle, MessageSquareReply, MessagesSquare, Pencil, Trash2, UserCheck } from "lucide-react";
 import type { NotificationDto } from "@/lib/notifications";
+import { MentionText } from "@/components/MentionText";
 import { markAllNotificationsRead, refreshNotifications, removeNotification, setRead, useNotifications } from "@/lib/notifications-store";
 
 /**
@@ -49,7 +50,9 @@ export function NotificationItem({ n, onNavigate, compact = false }: { n: Notifi
         </span>
         <span className="min-w-0 flex-1">
           <span className={`block text-sm leading-snug ${n.read ? "text-ink-2" : "font-medium text-ink"}`}>{n.title}</span>
-          {n.body && !compact && <span className="mt-0.5 block truncate text-xs text-muted">{n.body}</span>}
+          {n.body && !compact && <span className="mt-0.5 block truncate text-xs text-muted">
+              <MentionText text={n.body} />
+            </span>}
           <span className={`mt-0.5 block text-[11px] ${n.read ? "text-faint" : "text-brand-700"}`}>{timeAgo(n.createdAt)}</span>
         </span>
         {!n.read && <Circle className="mt-2 h-2.5 w-2.5 shrink-0 fill-brand-600 text-brand-600" aria-label="Non lue" />}
