@@ -12,7 +12,7 @@ import { parisYmd } from "@/lib/shared/activity-period";
 import { Badge, PRIORITY_LABEL, ProgressBar, TASK_STATUS_LABEL, TASK_STATUS_TONE, errorMessage, formatDate, inputClass } from "@/components/ui";
 
 /**
- * Onglet « Voyage dans le temps » : état du projet à une date passée,
+ * Onglet « Historique » (voyage dans le temps) : état du projet à une date passée,
  * reconstitué depuis la piste d'audit des tâches (statut, avancement, dates,
  * priorité, responsable, nom). Courbe d'avancement cliquable, curseur de date,
  * indicateurs, avancement par étape, Gantt à la date (ou actuel comparé),

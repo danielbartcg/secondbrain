@@ -102,12 +102,12 @@ selon la priorité (rouge critique, ambre haute, indigo moyenne, gris basse).
 
 En-tête commun (couleur, statut, nom, description, dates, compteurs, jauge)
 puis onglets, mémorisés dans le hash de l'URL (`#plan`, `#livrables`…) ;
-libellés jamais coupés : défilement horizontal sur mobile, retour à la ligne
+libellés courts (« Vue globale », « Historique ») tenant sur une ligne sur un écran courant ; défilement horizontal sur mobile, retour à la ligne
 à partir de `md` :
 
 | Onglet | Composant | Contenu |
 | --- | --- | --- |
-| Tableau de bord | `ProjectDashboardTab` | KPIs ; **planning Gantt** (`PlanningChart`) des étapes (part réalisée en plein) et livrables 📦 avec ligne « aujourd'hui » ; avancement par étape (`ProgressBarsChart`) ; tâches par statut ; statut des livrables (anneau + liste) ; tâches en retard (20 plus anciennes, « Tout afficher ») |
+| Vue globale | `ProjectDashboardTab` | KPIs ; **planning Gantt** (`PlanningChart`) des étapes (part réalisée en plein) et livrables 📦 avec ligne « aujourd'hui » ; avancement par étape (`ProgressBarsChart`) ; tâches par statut ; statut des livrables (anneau + liste) ; tâches en retard (20 plus anciennes, « Tout afficher ») |
 | Gantt | `ProjectGanttTab` → `charts/GanttChart` | tâches planifiées dans l'ordre du plan (couleur de l'étape, avancement dans la barre), flèches prérequis → tâche (rouges et pointillées si le prérequis finit après le début), échelle **Jour / Semaine / Mois** (week-ends grisés en vue jour, barre de défilement, molette = défilement horizontal), **glisser une barre** = décaler début et échéance au jour près (case « Décaler aussi les tâches qui en dépendent », cochée par défaut), double-clic ou clic sur le nom = fiche tâche ; bandeau des conflits ; liste des tâches sans date |
 | Kanban | `ProjectKanbanTab` → `tasks/KanbanBoard` | toutes les tâches du projet par statut (contexte étape › activité, responsable), glisser pour changer le statut, lien fiche ; même composant que le Kanban de « Mes tâches » ; 50 cartes par colonne puis « Afficher plus » |
 | Plan | `ProjectBoard` | bloc **« Tâches sans étape »** (tâches du projet non rattachées à une étape, ajout rapide) puis étapes › activités › tâches : drapeau de priorité, avancement (curseur, envoi différé 400 ms), statut cliquable, responsable (avatar), échéance, commentaires, réordonnancement, lien fiche tâche ; détails rapides : priorité, complexité, dates, clôture ; gros projet (> 400 tâches) : étapes repliées sauf la première, 100 tâches par liste puis « Afficher plus » |
@@ -518,7 +518,7 @@ desktop : « Rechercher une mise à jour ».
   étape ». Dans `GanttView` (prop `baseline`) : barre fantôme hachurée sous
   chaque barre (tâches et étapes), badge « +3 j » / « −2 j » dans la grille,
   ligne « Référence : … (+3 j) » dans l'infobulle.
-- **Voyage dans le temps** : onglet du projet (`ProjectTimeTravelTab`, masqué
+- **Voyage dans le temps** : onglet « Historique » du projet (`ProjectTimeTravelTab`, masqué
   en mode modèle) — date (champ, curseur, raccourcis 7 / 30 / 90 j,
   « Création »), courbe d'avancement cliquable
   (`charts/ProgressCurveChart.tsx` : avancement moyen + tâches terminées,

@@ -37,7 +37,7 @@ const COLORS = ["#4f5ff0", "#1f9d55", "#d98a0b", "#d13b3b", "#8b5cf6", "#0ea5e9"
 
 type TabKey = "dashboard" | "plan" | "gantt" | "kanban" | "reunions" | "livrables" | "risques" | "documents" | "equipe" | "temps";
 const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> = [
-  { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+  { key: "dashboard", label: "Vue globale", icon: LayoutDashboard },
   { key: "plan", label: "Plan", icon: ListTree },
   { key: "gantt", label: "Gantt", icon: CalendarRange },
   { key: "kanban", label: "Kanban", icon: SquareKanban },
@@ -46,7 +46,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> 
   { key: "risques", label: "Risques", icon: ShieldAlert },
   { key: "documents", label: "Documents", icon: FileText },
   { key: "equipe", label: "Équipe", icon: Users },
-  { key: "temps", label: "Voyage dans le temps", icon: History },
+  { key: "temps", label: "Historique", icon: History },
 ];
 
 /** Projet type : seuls les onglets de structure (pas de dates, d'équipe, de réunions ni de documents). */
@@ -216,7 +216,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
       {!tpl && <Backlinks objectRef={`project:${project.id}`} className="mt-4" />}
 
       {/* Onglets */}
-      <div className="scrollbar-none mt-6 flex gap-1 overflow-x-auto border-b border-line md:flex-wrap md:overflow-visible" role="tablist" aria-label="Sections du projet">
+      <div className="scrollbar-none mt-6 flex gap-0.5 overflow-x-auto border-b border-line md:flex-wrap md:overflow-visible" role="tablist" aria-label="Sections du projet">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -224,7 +224,7 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
             role="tab"
             aria-selected={tab === key}
             onClick={() => selectTab(key)}
-            className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 text-sm font-medium transition-colors ${
               tab === key ? "border-brand-600 text-brand-700" : "border-transparent text-muted hover:text-ink"
             }`}
           >
