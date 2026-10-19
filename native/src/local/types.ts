@@ -107,6 +107,8 @@ export type Meta = {
   /** Définitions des champs personnalisés (dernière liste connue, affichage hors ligne). */
   customFields: import("@/lib/shared/custom-fields").CustomFieldDto[] | null;
   pins: { projects: { id: string; name: string; color: string | null }[]; mindmaps: { id: string; title: string }[] } | null;
+  /** Types de projet personnels (dernière valeur connue, pour l'affichage hors ligne). */
+  projectTypes?: import("@/lib/shared/project-types").ProjectTypesDto | null;
 };
 
 /**

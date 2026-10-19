@@ -806,6 +806,18 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
         throw e;
       }
     }],
+    // Types de projet personnels : serveur, dernière valeur connue hors ligne ;
+    // les modifications sont relayées (et mises en cache via cette lecture).
+    ["GET", /^\/me\/project-types$/, async () => {
+      try {
+        const r = (await online("GET", "/me/project-types")) as { projectTypes: NonNullable<typeof store.meta.projectTypes> };
+        store.setMeta("projectTypes", r.projectTypes);
+        return r;
+      } catch (e) {
+        if (e instanceof ApiClientError && e.status === 503 && store.meta.projectTypes) return { projectTypes: store.meta.projectTypes };
+        throw e;
+      }
+    }],
     // Épingles : serveur (source de vérité), dernière liste connue hors ligne.
     ["GET", /^\/me\/pins$/, async () => {
       try {

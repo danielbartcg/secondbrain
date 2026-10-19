@@ -8,7 +8,7 @@ import { ENTITIES, type ConflictEntry, type Entity, type FieldSeqs, type Meta, t
  * (une transaction par tour d'événements).
  */
 
-const DEFAULT_META: Meta = { serverUrl: "", token: null, user: null, cursor: 0, protocol: 0, lastSyncAt: null, ranks: [], pendingRanks: null, dataVersion: 0, pins: null, customFields: null };
+const DEFAULT_META: Meta = { serverUrl: "", token: null, user: null, cursor: 0, protocol: 0, lastSyncAt: null, ranks: [], pendingRanks: null, dataVersion: 0, pins: null, customFields: null, projectTypes: null };
 
 export class Store {
   tables = new Map<Entity, Map<string, RowRec>>(ENTITIES.map((e) => [e, new Map()]));

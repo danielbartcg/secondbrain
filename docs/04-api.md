@@ -48,6 +48,12 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 | POST | `/me/email` | `{ email, currentPassword }` | `{ email, verificationSent }` ; adresse non validée ensuite ; `400 BAD_PASSWORD`, `409 EMAIL_TAKEN` |
 | POST | `/me/email/verification` | — | `{ ok, to }` (renvoi du lien) ; `409 ALREADY_VERIFIED`, `503 MAIL_DISABLED` |
 | GET | `/me/pins` | — | `{ pins: { projects: { id, name, color }[], mindmaps: { id, title }[] } }` |
+| GET | `/me/project-types` | — | `{ projectTypes: { types: { id, name }[] (ordre choisi), assignments: { [projectId]: typeId } } }` (projets accessibles seulement) |
+| POST | `/me/project-types` | `{ name (1–60) }` | `201 { projectTypes }` ; nom en double (casse ignorée) ou plus de 50 types → 400 |
+| PATCH | `/me/project-types/:id` | `{ name }` | `{ projectTypes }` ; type d'autrui → 404 |
+| DELETE | `/me/project-types/:id` | — | `{ projectTypes }` ; ses projets redeviennent sans type |
+| PUT | `/me/project-types/order` | `{ ids }` (tous mes types, une fois chacun) | `{ projectTypes }` ; liste incomplète → 400 |
+| PUT | `/me/project-types/assign` | `{ projectId, typeId \| null }` | `{ projectTypes }` ; projet non accessible ou type d'autrui → 404 |
 | PUT | `/me/pins` | `{ kind: "PROJECT"\|"MINDMAP", id, pinned: boolean }` | `{ pins }` ; `404` si l'élément n'est pas accessible |
 | GET | `/me/api-keys` | — | `{ apiKeys: { id, name, prefix, canWrite, createdAt, lastUsedAt }[] }` |
 | POST | `/me/api-keys` | `{ name, canWrite? (défaut true) }` | `201 { key, apiKey }` — `key` (`sb_…`) n'est renvoyée **qu'ici** ; 10 clés max |

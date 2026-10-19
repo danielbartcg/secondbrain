@@ -9,7 +9,7 @@ sauf connexion/inscription (`src/app/(auth)/`). UI en français, responsive.
 | `/dashboard` | `dashboard/page.tsx` → `getDashboard` + `listMindMaps` | `dashboard/HomeDashboard` + `GlobalSearch` | tableau de bord personnel, **recherche globale** |
 | `/mindmaps` | `mindmaps/page.tsx` | `mindmap/MindMapList` | liste des cartes (les miennes et celles partagées avec moi) |
 | `/mindmaps/[id]` | `mindmaps/[id]/page.tsx` | `mindmap/MindMapEditor` | éditeur de carte (plein cadre) |
-| `/projects` | `projects/page.tsx` | `projects/ProjectList` | liste, filtre par statut, création |
+| `/projects` | `projects/page.tsx` | `projects/ProjectList` | liste groupée par type de projet, filtre par statut, création, gestion des types |
 | `/projects/[id]` | `projects/[id]/page.tsx` | `projects/ProjectWorkspace` | espace projet à onglets |
 | `/tasks/[taskId]` | `tasks/[taskId]/page.tsx` → `getTaskDetail` | `projects/TaskSheet` | **fiche tâche** (avec ou sans projet) + sessions + fil de commentaires ; l'ancienne adresse `/projects/[id]/tasks/[taskId]` redirige |
 | `/projects/sans-projet` | `projects/sans-projet/page.tsx` → `listOrphanTasks` | `projects/OrphanTasks` | projet virtuel **« Sans projet »** : tâches orphelines (création, statut, fiche, suppression) |
@@ -280,6 +280,23 @@ Safari, site non installé, masquable) : « touchez Partager puis « Sur l'écra
 d'accueil » ». Page `/app` « Second Brain sur vos appareils » : Windows
 (installateur) et iPhone (3 étapes d'installation sur l'écran d'accueil).
 Lien de connexion : « Applications Windows et iPhone ».
+
+## Types de projet (`projects/ProjectList`, menu de gauche)
+
+- Bouton **« Types de projet »** de l'en-tête : explication et ajout d'un type.
+- Liste : projets **sans type tout en haut** (sans cadre), puis **une carte
+  par type** (ordre choisi) : poignée (glisser le type avant un autre ;
+  souris), nom modifiable en place, nombre de projets, monter / descendre,
+  supprimer (confirmation ; projets remis sans type) ; type vide : zone
+  « Glissez un projet ici ».
+- Glisser-déposer (souris) d'une carte de projet vers un autre type, ou vers
+  le haut (« Déposer ici pour retirer le type ») ; au doigt et au clavier :
+  sélecteur **« Type »** au pied de chaque carte de projet. « Sans projet »
+  reste à part (non rangeable). Modifications optimistes, annulées en cas
+  d'erreur.
+- Menu de gauche : au-delà de **5 projets épinglés**, ils sont groupés par
+  type (sans type d'abord, puis un intitulé par type).
+- Application native : mêmes écrans ; dernière valeur connue hors ligne.
 
 ## Épingles (`PinButton`, menu de gauche)
 

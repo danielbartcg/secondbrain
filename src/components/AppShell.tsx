@@ -9,6 +9,8 @@ import { api, ApiClientError } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { useUnreadMessages } from "@/lib/messages-store";
 import { seedPins, usePins } from "@/lib/pins-store";
+import { seedProjectTypes, useProjectTypes } from "@/lib/project-types-store";
+import { PIN_GROUP_THRESHOLD, groupByType, type ProjectTypesDto } from "@/lib/shared/project-types";
 import type { PinsDto } from "@/lib/pins";
 
 const NAV = [
@@ -43,9 +45,23 @@ export type ShellUser = { id: string; name: string; email: string; avatarUrl: st
  * `statusSlot` : encart facultatif affiché au-dessus du menu (l'application
  * native y place l'état de synchronisation). Absent sur le site.
  */
-export function AppShell({ user, children, statusSlot, pins: initialPins }: { user: ShellUser; children: React.ReactNode; statusSlot?: React.ReactNode; pins?: PinsDto }) {
+export function AppShell({
+  user,
+  children,
+  statusSlot,
+  pins: initialPins,
+  projectTypes: initialTypes,
+}: {
+  user: ShellUser;
+  children: React.ReactNode;
+  statusSlot?: React.ReactNode;
+  pins?: PinsDto;
+  projectTypes?: ProjectTypesDto;
+}) {
   seedPins(initialPins);
-  const pins = usePins();
+  seedProjectTypes(initialTypes);
+  const pins = usePins(initialPins);
+  const projectTypes = useProjectTypes(initialTypes);
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -113,6 +129,13 @@ export function AppShell({ user, children, statusSlot, pins: initialPins }: { us
               ? pins.mindmaps.map((m) => ({ href: `/mindmaps/${m.id}`, label: m.title, color: null as string | null }))
               : [];
         const onPinned = pinned.some((p) => pathname === p.href || pathname.startsWith(p.href + "/"));
+        // Plus de 5 projets épinglés : groupés par type de projet (sans type d'abord).
+        const groups =
+          href === "/projects" && pins.projects.length > PIN_GROUP_THRESHOLD && projectTypes.types.length
+            ? groupByType(pins.projects, projectTypes)
+                .filter((g) => g.items.length)
+                .map((g) => ({ label: g.type?.name ?? null, items: g.items.map((p) => ({ href: `/projects/${p.id}`, label: p.name, color: p.color })) }))
+            : [{ label: null as string | null, items: pinned }];
         const active = !onPinned && (pathname === href || pathname.startsWith(href + "/"));
         return (
           <Fragment key={href}>
@@ -130,7 +153,15 @@ export function AppShell({ user, children, statusSlot, pins: initialPins }: { us
           </Link>
           {pinned.length > 0 && (
             <ul className="mb-1 ml-5 flex flex-col gap-0.5 border-l border-line pl-2" aria-label={`${label} épinglés`}>
-              {pinned.map((p) => {
+              {groups.flatMap((g) => [
+                ...(g.label
+                  ? [
+                      <li key={`type:${g.label}`} className="truncate px-2 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint" aria-hidden>
+                        {g.label}
+                      </li>,
+                    ]
+                  : []),
+                ...g.items.map((p) => {
                 const on = pathname === p.href || pathname.startsWith(p.href + "/");
                 return (
                   <li key={p.href}>
@@ -146,7 +177,8 @@ export function AppShell({ user, children, statusSlot, pins: initialPins }: { us
                     </Link>
                   </li>
                 );
-              })}
+                }),
+              ])}
             </ul>
           )}
           </Fragment>

@@ -788,3 +788,27 @@ libellé approximatif — `resolveJournalBlock` —, activité facultative),
 `write_journal` (écriture via l'API REST, ajout à la suite par défaut,
 aujourd'hui par défaut) et `query_objects` (`entity: "journal_entry"`,
 `status` = bloc). En ligne uniquement (relayé dans l'application).
+
+## Types de projet personnels (`src/lib/project-types.ts`, règles pures `src/lib/shared/project-types.ts`)
+
+Chaque utilisateur crée ses types de projet (« Client », « Interne »…, 50 au
+plus, nom unique), les ordonne et y range les projets qu'il voit
+(`ProjectType`, `ProjectTypeLink` : un type par projet **et par
+utilisateur** — le classement ne modifie pas le projet et ne se voit pas des
+autres membres). Projet non accessible ou type d'autrui → 404 ; « Sans
+projet » n'est pas un projet. Lecture filtrée sur le périmètre
+(`projectAccessWhere`) : un projet quitté disparaît du classement. Servi par
+`/api/v1/me/project-types` ; état client partagé
+`src/lib/project-types-store.ts` (menu + liste), semé par le rendu serveur.
+Liste des projets groupée (sans type en haut, puis une carte par type) ;
+épingles du menu groupées au-delà de 5 (`PIN_GROUP_THRESHOLD`). Non
+synchronisé : l'application met en cache la dernière valeur
+(`meta.projectTypes`, comme les épingles) ; les modifications sont relayées
+en ligne.
+
+**Magasins côté client et rendu serveur** (`pins-store`,
+`project-types-store`) : l'état d'un module « use client » est partagé entre
+requêtes côté serveur. Les fonctions `seed…` ne font donc rien côté serveur,
+et les hooks reçoivent la valeur de la requête (`usePins(initial)`,
+`useProjectTypes(initial)`) utilisée pour le rendu serveur et l'hydratation —
+jamais l'état du module.

@@ -21,8 +21,13 @@ function emit(next: PinsDto) {
   for (const l of listeners) l();
 }
 
-/** Valeur fournie par le rendu serveur (à appeler avant le premier rendu client). */
+/**
+ * Valeur fournie par le rendu serveur (à appeler avant le premier rendu
+ * client). Jamais côté serveur : l'état du module y serait partagé entre
+ * requêtes (et donc entre utilisateurs).
+ */
 export function seedPins(initial: PinsDto | undefined) {
+  if (typeof window === "undefined") return;
   if (initial && !loaded) {
     state = initial;
     loaded = true;
@@ -65,9 +70,10 @@ function subscribe(l: () => void) {
   };
 }
 
-export function usePins(): PinsDto {
+/** `initial` : valeur de la requête, rendue côté serveur et à l'hydratation (jamais l'état du module). */
+export function usePins(initial?: PinsDto): PinsDto {
   useEffect(() => {
     if (!loaded) void refreshPins();
   }, []);
-  return useSyncExternalStore(subscribe, () => state, () => state);
+  return useSyncExternalStore(subscribe, () => state, () => initial ?? EMPTY);
 }

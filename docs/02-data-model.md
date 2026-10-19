@@ -157,6 +157,13 @@ Les **liens `[[…]]`** n'ont pas de table : ils sont dans le HTML des notes
 (`data-ref`, voir docs/01). La **fraîcheur** et le **voyage dans le temps**
 sont calculés à la lecture (pistes d'audit, `updatedAt`).
 
+## Types de projet personnels
+
+| Modèle | Champs | Notes |
+| --- | --- | --- |
+| `ProjectType` | `id`, `userId`, `name` (unique par utilisateur, casse ignorée — contrôlé par le code), `order`, timestamps | cascade sur l'utilisateur ; 50 par utilisateur ; migration `20261019180000_project_types` |
+| `ProjectTypeLink` | `userId` + `projectId` (clé), `typeId` | un type par projet et par utilisateur ; cascade sur l'utilisateur, le projet et le type (supprimer un type ⇒ ses projets redeviennent sans type) ; non synchronisé |
+
 ## Épingles du menu
 
 | Modèle | Champs | Notes |

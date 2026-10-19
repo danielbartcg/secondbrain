@@ -73,6 +73,8 @@ model User {
   resurfaceCards       ResurfaceCard[]
   calendarFeed         CalendarFeed?
   journalEntries       JournalEntry[]
+  projectTypes         ProjectType[]
+  projectTypeLinks     ProjectTypeLink[]
 
   @@index([managerId])
 }
@@ -266,6 +268,7 @@ model Project {
   folders       Folder[]
   risks         Risk[]
   riskSnapshots RiskSnapshot[]
+  typeLinks     ProjectTypeLink[]
   meetings      Meeting[]
   tasks         Task[]
   baselines     ProjectBaseline[]
@@ -1008,4 +1011,34 @@ model RiskSnapshot {
   createdAt DateTime @default(now())
 
   @@index([projectId, createdAt])
+}
+
+/// Type de projet personnel (« Client », « Interne », « Marketing »…) : chaque
+/// utilisateur classe à sa façon les projets qu'il voit (liste des projets,
+/// épingles du menu). Non synchronisé (servi par /me/project-types, mis en
+/// cache par l'application comme les épingles).
+model ProjectType {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  order     Int               @default(0)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  links     ProjectTypeLink[]
+
+  @@index([userId, order])
+}
+
+/// Rattachement personnel d'un projet à un de mes types (un seul par projet et par utilisateur).
+model ProjectTypeLink {
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  typeId    String
+  type      ProjectType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([typeId])
 }
