@@ -156,6 +156,8 @@ async function serveMedia(pathname) {
 }
 
 const DOCUMENT_DOWNLOAD = /^\/api\/v1\/documents\/[A-Za-z0-9_-]+\/download$/;
+/** Pièces jointes des commentaires et des nœuds (même relais authentifié). */
+const ATTACHMENT_DOWNLOAD = /^\/api\/v1\/attachments\/[A-Za-z0-9_-]+\/download$/;
 /** Exports Excel et PowerPoint d'un projet (fichiers binaires authentifiés). */
 const PROJECT_EXPORT = /^\/api\/v1\/projects\/[A-Za-z0-9_-]+\/export(-pptx)?$/;
 
@@ -186,7 +188,7 @@ function registerAppProtocol() {
     const raw = url.pathname;
     if (raw.startsWith("/media/")) return serveMedia(raw);
     if (raw.startsWith("/api/")) {
-      if (DOCUMENT_DOWNLOAD.test(raw) || PROJECT_EXPORT.test(raw)) return proxyAuthenticated(raw, url.search);
+      if (DOCUMENT_DOWNLOAD.test(raw) || ATTACHMENT_DOWNLOAD.test(raw) || PROJECT_EXPORT.test(raw)) return proxyAuthenticated(raw, url.search);
       return new Response("Introuvable", { status: 404 });
     }
     let decoded;

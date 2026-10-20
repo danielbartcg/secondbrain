@@ -11,6 +11,8 @@ import { mapAccessWhere } from "@/lib/map-access";
 import { MEMBER_INCLUDE, TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskEditWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { mentionExcerpt, plainMentions } from "@/lib/shared/mentions";
+import { attachmentPaths } from "@/lib/attachments";
+import { deleteDocumentFile } from "@/lib/uploads";
 import { richDescription, richHtml, richText } from "@/lib/rich-text";
 import { NO_PROJECT_LABEL, dayString, resolveMentions } from "@/lib/shared/task-model";
 export { NO_PROJECT_LABEL, dayString, resolveMentions };
@@ -102,7 +104,7 @@ export function tasksOfUsersWhere(userIds: string[]): Prisma.TaskWhereInput {
  * Lecture d'une tâche hors de mes accès : un administrateur lit tout ; un
  * manager lit les tâches de ses N-1 directs. Aucune modification possible.
  */
-async function canConsultTask(userId: string, taskId: string): Promise<boolean> {
+export async function canConsultTask(userId: string, taskId: string): Promise<boolean> {
   const viewer = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, role: true, reports: { select: { id: true } } } });
   if (!viewer) return false;
   if (isAdmin(viewer)) return (await prisma.task.count({ where: { id: taskId } })) > 0;
@@ -235,13 +237,15 @@ export async function deleteComment(userId: string, commentId: string): Promise<
   if (!c) throw notFound("Commentaire");
   const owner = c.task.project?.ownerId ?? c.task.ownerId;
   if (c.authorId !== userId && owner !== userId) throw forbidden();
-  // Les réponses sont supprimées en cascade (fil).
+  // Les réponses sont supprimées en cascade (fil), leurs pièces jointes aussi : fichiers effacés ensuite.
+  const files = await attachmentPaths({ commentId });
   await prisma.$transaction(async (tx) => {
     const body = (await tx.taskComment.findUnique({ where: { id: commentId }, select: { body: true } }))?.body ?? "";
     await tx.taskComment.delete({ where: { id: commentId } });
     const actor = await actorDisplayName(tx, userId);
     await recordTaskEvents(tx, [{ taskId: c.taskId, actorId: userId, actorName: actor, kind: "comment", oldValue: commentExcerpt(body, 500), message: `${actor} a supprimé un commentaire (« ${commentExcerpt(body, 60)} »)` }]);
   });
+  await Promise.all(files.map((p) => deleteDocumentFile(p).catch(() => undefined)));
   return getTaskDetail(userId, c.taskId);
 }
 

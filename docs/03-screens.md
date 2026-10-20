@@ -135,7 +135,11 @@ automatique 800 ms, consultation seule sans droit d'écriture) — aussi dans
 les détails rapides du plan (`ProjectBoard`). **Commentaires** riches :
 éditeur compact avec mentions « @ » (menu des membres, ↑ ↓ Entrée), emoji,
 images collées, Ctrl+Entrée pour envoyer ; corps affiché en HTML assaini avec
-pastilles « @Nom ».
+pastilles « @Nom ». **Pièces jointes** : bouton « Joindre » du composer
+(fichiers en attente retirables, envoyés juste après le commentaire ; un
+commentaire peut ne contenir que des fichiers) ; sous chaque commentaire,
+puces nom · taille · aperçu (images, PDF, texte, HTML) · téléchargement ·
+retrait (`components/Attachments.tsx`).
 
 - Fil d'Ariane : projet (ou « Sans projet ») › étape › activité.
 - **Consultation** (administrateur, manager d'un N-1, `canEdit: false`) :
@@ -177,6 +181,10 @@ pastilles « @Nom ».
   affiche `@Nom` en surbrillance. Ctrl+Entrée envoie.
 
 ## Éditeur de carte (`MindMapEditor`)
+
+Panneau du nœud : bloc **Pièces jointes** (`mindmap/NodeAttachments`) sous
+les notes — « Joindre » ou glisser des fichiers sur le bloc, liste avec
+aperçu / téléchargement / retrait (carte modifiable), lecture seule sinon.
 
 Nœuds plus hauts (54 px, racine 68 px) : le titre tient sur **deux lignes**
 (points de suspension au-delà ; largeur estimée par `estimateWidth`). Icône

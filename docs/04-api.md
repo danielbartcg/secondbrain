@@ -639,3 +639,17 @@ externe. Connecteur MCP : `api_request` refuse `/me/calendar` et
   max ; vide après assainissement → 400 ; mentions `@[Nom]` résolues. `TaskDetailDto.comments[].body` : HTML assaini.
 - Arborescence des notes : `parent=section:projects` renvoie d'abord les types de projet (`kind: "ptype"`),
   `parent=ptype:<id>` leurs projets ; `GET /notes/ptype/:id` : document (non éditable).
+
+### Pièces jointes (20/10/2026)
+
+| Méthode | Route | Corps | Réponse |
+| --- | --- | --- | --- |
+| GET | `/tasks/:id/attachments` | — | `{ attachments: AttachmentDto[] }` (tous les commentaires ; accès de la fiche, 404 sinon) |
+| POST | `/comments/:id/attachments` | multipart `file` | `201 { attachments }` ; auteur du commentaire (403 sinon) ; 20 max ; 415 type refusé ; 413 > 25 Mo |
+| GET | `/mindmaps/:id/nodes/:nodeId/attachments` | — | `{ attachments }` (carte lisible) |
+| POST | `/mindmaps/:id/nodes/:nodeId/attachments` | multipart `file` | `201 { attachments }` (carte modifiable) |
+| DELETE | `/attachments/:id` | — | `{ attachments }` (liste à jour) ; 403 sans droit |
+| GET | `/attachments/:id/download` | `?inline=1` | fichier (cookie ou Bearer ; CSP sandbox, nosniff, no-store) |
+
+`AttachmentDto = { id, commentId, nodeId, fileName, mimeType, size, uploadedByName, createdAt, url }`.
+Documents de projet : `text/html` désormais accepté.

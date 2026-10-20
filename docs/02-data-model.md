@@ -168,6 +168,7 @@ sont calculés à la lecture (pistes d'audit, `updatedAt`).
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
+| `Attachment` | `id`, `commentId?` (cascade), `nodeId?` (cascade), `uploadedById?` (SetNull), `fileName`, `mimeType`, `size`, `storagePath`, `createdAt` | pièce jointe d'un commentaire de tâche ou d'un nœud ; 20 par cible ; migration `20261020150000_attachments` ; non synchronisé |
 | `ItemOrder` | `userId` + `kind` (`PinKind`) + `targetId` (clé), `rank` | ordre personnel des projets / cartes (listes, épingles) ; remplacé en bloc ; éléments inaccessibles ignorés ; migration `20261020090000_icons_item_order` ; non synchronisé |
 | `UserIcon` | `id`, `userId`, `url` (`/media/…` image ; unique par utilisateur), `createdAt` | icônes personnalisées importées (200 max) ; non synchronisé |
 | `Pin` | `userId` + `kind` (`PROJECT` · `MINDMAP`) + `targetId` (clé), `createdAt` | projet accessible ou carte accessible — possédée ou partagée (vérifié à l'épinglage ; supprimée quand le partage est retiré ou quitté) ; épingles orphelines ignorées et purgées à la lecture ; 30 max par utilisateur (la plus ancienne cède) ; non synchronisé |

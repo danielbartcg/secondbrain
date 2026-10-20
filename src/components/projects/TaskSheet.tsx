@@ -1,10 +1,12 @@
 "use client";
 
 import { RichDescription } from "@/components/RichDescription";
+import { AttachButton, AttachmentList, PendingFiles } from "@/components/Attachments";
+import type { AttachmentDto } from "@/lib/attachments";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { editorHtml } from "@/lib/shared/rich-text";
 import { hasHtmlContent } from "@/lib/shared/project-model";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CalendarDays, CalendarPlus, Check, Circle, CircleDot, CornerDownRight, Eye, Flag, FolderKanban, Gauge, Layers, Link2, Lock, MessageSquare, Plus, Send, Trash2, Unlink, User, Users, Workflow, X } from "lucide-react";
@@ -592,6 +594,10 @@ function CommentBody({ body, members }: { body: string; members: MemberDto[] }) 
   return <div className="prose prose-sm max-w-none text-ink-2 [&_p]:my-1" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+/** Pièces jointes des commentaires de la tâche (chargées une fois, en ligne). */
+type AttachmentsCtx = { list: AttachmentDto[]; set: (l: AttachmentDto[]) => void; reload: () => Promise<void> };
+const CommentAttachments = createContext<AttachmentsCtx>({ list: [], set: () => undefined, reload: async () => undefined });
+
 type CommentTree = TaskCommentDto & { replies: CommentTree[] };
 
 function buildTree(comments: TaskCommentDto[]): CommentTree[] {
@@ -623,23 +629,42 @@ function CommentComposer({
 }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const attachments = useContext(CommentAttachments);
   // Change à chaque envoi : l'éditeur repart vide.
   const [round, setRound] = useState(0);
   const bodyRef = useRef(body);
   bodyRef.current = body;
   const members = task.project?.members ?? [];
-  const empty = !hasHtmlContent(body);
+  const empty = !hasHtmlContent(body) && files.length === 0;
 
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
-    const html = bodyRef.current;
-    if (!hasHtmlContent(html) || busy) return;
+    const typed = bodyRef.current;
+    if ((!hasHtmlContent(typed) && !files.length) || busy) return;
+    // Pièces jointes seules : un court texte accompagne le commentaire.
+    const html = hasHtmlContent(typed) ? typed : `<p>📎 ${files.length > 1 ? `${files.length} pièces jointes` : "Pièce jointe"}</p>`;
+    const before = new Set(task.comments.map((c) => c.id));
     setBusy(true);
     try {
       const { task: updated } = await api.post<TaskResp>(`/tasks/${task.id}/comments`, { body: html, parentId: parentId ?? null });
       onPosted(updated);
       setBody("");
       setRound((r) => r + 1);
+      // Fichiers joints au commentaire créé (le plus récent, à moi).
+      const created = updated.comments.filter((c) => !before.has(c.id)).at(-1);
+      if (created && files.length) {
+        for (const file of files) {
+          const form = new FormData();
+          form.append("file", file);
+          try {
+            attachments.set((await api.post<{ attachments: AttachmentDto[] }>(`/comments/${created.id}/attachments`, form)).attachments);
+          } catch (err) {
+            toast(`« ${file.name} » : ${errorMessage(err, "envoi impossible")}`, "error");
+          }
+        }
+        setFiles([]);
+      }
     } catch (err) {
       toast(errorMessage(err, "Envoi impossible."), "error");
     } finally {
@@ -660,7 +685,11 @@ function CommentComposer({
         onChange={setBody}
         onSubmit={() => void submit()}
       />
+      <PendingFiles files={files} onRemove={(i) => setFiles((fs) => fs.filter((_, j) => j !== i))} />
       <div className="mt-2 flex items-center justify-end gap-2">
+        <div className="mr-auto">
+          <AttachButton onFiles={(add) => setFiles((fs) => [...fs, ...add].slice(0, 20))} disabled={busy} />
+        </div>
         {onCancel && (
           <Button type="button" variant="ghost" size={parentId ? "sm" : "md"} onClick={onCancel}>
             Annuler
@@ -724,6 +753,7 @@ function CommentNode({
             </div>
             <div className="mt-1">
               <CommentBody body={node.body} members={(task.project?.members ?? [])} />
+              <NodeAttachments commentId={node.id} canDelete={node.authorId === currentUserId || isOwner} />
             </div>
           </div>
           <div className="mt-1 flex items-center gap-3 pl-2 text-xs">
@@ -770,8 +800,42 @@ function countReplies(n: CommentTree): number {
   return n.replies.reduce((a, r) => a + 1 + countReplies(r), 0);
 }
 
+/** Pièces jointes d'un commentaire (retrait : auteur du commentaire ou propriétaire ; le serveur tranche). */
+function NodeAttachments({ commentId, canDelete }: { commentId: string; canDelete: boolean }) {
+  const { list, set } = useContext(CommentAttachments);
+  const items = list.filter((a) => a.commentId === commentId);
+  return (
+    <AttachmentList
+      items={items}
+      onDelete={
+        canDelete
+          ? (a) => {
+              if (!confirm(`Retirer la pièce jointe « ${a.fileName} » ?`)) return;
+              api
+                .delete<{ attachments: AttachmentDto[] }>(`/attachments/${a.id}`)
+                .then((r) => set(r.attachments))
+                .catch((e) => toast(errorMessage(e), "error"));
+            }
+          : undefined
+      }
+    />
+  );
+}
+
 function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetailDto; currentUserId: string; isOwner: boolean; onChange: (t: TaskDetailDto) => void }) {
   const tree = useMemo(() => buildTree(task.comments), [task.comments]);
+  const [attachments, setAttachments] = useState<AttachmentDto[]>([]);
+  const reload = useCallback(async () => {
+    try {
+      setAttachments((await api.get<{ attachments: AttachmentDto[] }>(`/tasks/${task.id}/attachments`)).attachments);
+    } catch {
+      /* hors ligne : pièces jointes indisponibles */
+    }
+  }, [task.id]);
+  useEffect(() => {
+    void reload();
+  }, [reload, task.comments.length]);
+  const ctx = useMemo(() => ({ list: attachments, set: setAttachments, reload }), [attachments, reload]);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
   // Lien depuis une notification : #comment-<id> → défilement et mise en évidence.
@@ -786,6 +850,7 @@ function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetail
   }, []);
 
   return (
+    <CommentAttachments.Provider value={ctx}>
     <section className="mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <h2 className="flex items-center gap-2 font-semibold">
         <MessageSquare className="h-5 w-5 text-brand-600" /> Échanges
@@ -806,5 +871,6 @@ function Comments({ task, currentUserId, isOwner, onChange }: { task: TaskDetail
         <CommentComposer task={task} onPosted={onChange} />
       </div>
     </section>
+    </CommentAttachments.Provider>
   );
 }

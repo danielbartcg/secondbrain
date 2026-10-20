@@ -43,6 +43,7 @@
     "test:journal": "tsx scripts/journal-test.ts",
     "test:project-types": "tsx scripts/project-types-test.ts",
     "test:personalization": "tsx scripts/personalization-test.ts",
+    "test:attachments": "tsx scripts/attachments-test.ts",
     "icons:build": "node scripts/build-icons.mjs",
     "test:knowledge": "tsx scripts/knowledge-test.ts",
     "test:knowledge-e2e": "tsx scripts/knowledge-e2e.ts",

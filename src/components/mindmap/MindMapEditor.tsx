@@ -1,6 +1,7 @@
 "use client";
 
 import { IconButton } from "@/components/icons/IconButton";
+import { NodeAttachments } from "./NodeAttachments";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -1061,6 +1062,8 @@ function Editor({ initial }: { initial: MindMapDto }) {
                   />
                 )}
               </div>
+
+              {!selected.id.startsWith("tmp-") && <NodeAttachments key={`att-${selected.id}`} mapId={map.id} nodeId={real(selected.id)} readOnly={readOnly} />}
 
               {!selected.id.startsWith("tmp-") && <Backlinks key={selected.id} objectRef={selected.parentId ? `node:${real(selected.id)}` : `mindmap:${map.id}`} className="mt-4 !p-3" />}
 

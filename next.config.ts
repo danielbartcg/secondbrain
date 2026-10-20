@@ -3,8 +3,9 @@ import type { NextConfig } from "next";
 /**
  * En-têtes de sécurité. La CSP des **pages** (avec nonce) est posée par
  * src/middleware.ts ; ici, une CSP stricte pour l'API (JSON) et les fichiers
- * servis (/media, /downloads). Les téléchargements de documents
- * (/api/v1/documents/…/download) posent leur propre CSP (route handler).
+ * servis (/media, /downloads). Les téléchargements de documents et de pièces
+ * jointes (/api/v1/documents/…/download, /api/v1/attachments/…/download)
+ * posent leur propre CSP « sandbox » (route handler).
  */
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -28,7 +29,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/api/:path((?!v1/documents/).*)",
+        source: "/api/:path((?!v1/documents/|v1/attachments/[^/]+/download).*)",
         headers: [{ key: "Content-Security-Policy", value: "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" }],
       },
       {

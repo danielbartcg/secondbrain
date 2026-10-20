@@ -850,3 +850,20 @@ après assainissement est refusé (400).
   20 fois plus lente). Bibliothèque personnelle d'icônes importées :
   `UserIcon` (`/me/icons`). Changer l'icône d'une carte est tracé
   (`MapEvent` « icon »). Colonnes synchronisées : `LOCAL_DATA_VERSION` = 3.
+
+## Pièces jointes (`src/lib/attachments.ts`)
+
+Commentaires de tâche et nœuds de carte peuvent porter des pièces jointes
+(`Attachment`, exactement un parent). Mêmes garanties que les documents :
+allowlist (`DOCUMENT_TYPES`, **HTML compris** depuis le 20/10/2026, jamais
+de SVG), 25 Mo, nom aléatoire, chemin borné ; fichiers rangés dans
+`documents/<projectId>` (ou `task_<id>` pour une tâche sans projet) et
+`documents/map_<mapId>` (dossier effacé avec la carte ; fichiers d'un
+commentaire effacés avec lui). Téléchargement authentifié
+`/api/v1/attachments/:id/download` (comme les documents : `attachment`, ou
+`?inline=1` pour un aperçu, CSP **sandbox** sans script — d'où l'exception
+dans `next.config.ts`, relais Bearer de la coque Electron). Droits :
+commentaire = lecture de la fiche, ajout par l'auteur du commentaire,
+retrait par l'auteur, le déposant ou le propriétaire ; nœud = carte lisible /
+modifiable. Ajouts et retraits tracés (TaskEvent « comment », MapEvent
+« node_attachment »). En ligne uniquement (relayé dans l'application).

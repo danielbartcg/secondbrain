@@ -27,6 +27,7 @@ export type MapEventKind =
   | "node_color"
   | "node_moved"
   | "node_deleted"
+  | "node_attachment"
   | "task_linked"
   | "task_unlinked"
   | "shared"

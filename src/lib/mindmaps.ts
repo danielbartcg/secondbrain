@@ -9,6 +9,7 @@ import { mapAccessWhere, requireMapAccess } from "@/lib/map-access";
 import { mapAccessOf, type MapAccess, type MapOwnerRef } from "@/lib/shared/map-access";
 import { NODE_STATUS_LABEL, q, recordMapEvents, type MapEventInput } from "@/lib/map-events";
 import { actorDisplayName } from "@/lib/task-events";
+import { deleteProjectDocumentsDir } from "@/lib/uploads";
 
 export { mapAccessWhere, mapWriteWhere, requireMapAccess } from "@/lib/map-access";
 export type { MapAccess, MapOwnerRef } from "@/lib/shared/map-access";
@@ -245,6 +246,8 @@ export async function updateMindMap(userId: string, mapId: string, data: { title
 export async function deleteMindMap(userId: string, mapId: string): Promise<void> {
   await requireMapAccess(userId, mapId, "owner");
   await prisma.mindMap.delete({ where: { id: mapId } });
+  // Pièces jointes des nœuds : fichiers rangés dans documents/map_<id>.
+  await deleteProjectDocumentsDir(`map_${mapId}`).catch(() => undefined);
 }
 
 /** Renumérote les enfants d'un parent de 0 à n-1, en insérant éventuellement `insertId` à `index`. */

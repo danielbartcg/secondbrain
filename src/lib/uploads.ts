@@ -27,6 +27,8 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const DOCUMENT_TYPES: Record<string, string> = {
   ...IMAGE_TYPES,
   "application/pdf": "pdf",
+  // HTML : servi en téléchargement ou, en aperçu, dans un document « sandbox » sans script (route de téléchargement).
+  "text/html": "html",
   "text/plain": "txt",
   "text/csv": "csv",
   "text/markdown": "md",
