@@ -33,8 +33,9 @@ layout racine).
 
 ## Coque (`AppShell`)
 
-Bouton **Actualiser** (icône flèches, à côté des notifications, barre
-latérale et barre mobile) : recharge la page sur le site ; dans
+Bouton **Actualiser** (barre latérale et tiroir : sous le profil, au-dessus de
+« Se déconnecter », pour laisser le titre entier ; barre mobile : icône à côté
+des notifications) : recharge la page sur le site ; dans
 l'application, synchronise puis réaffiche l'écran. Épingles : icône du
 projet / de la carte (sinon pastille de couleur), dans l'ordre personnel.
 

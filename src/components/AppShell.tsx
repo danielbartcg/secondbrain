@@ -223,10 +223,19 @@ export function AppShell({
           <span className="block truncate text-xs text-muted">{user.email}</span>
         </span>
       </Link>
+      {/* Actualiser (barre latérale et tiroir mobile) : sous le profil, le titre garde toute sa place. */}
+      <button
+        type="button"
+        onClick={() => void doRefresh()}
+        disabled={refreshing}
+        className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-2 hover:bg-surface-2 disabled:opacity-60"
+      >
+        <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Actualiser
+      </button>
       <button
         type="button"
         onClick={logout}
-        className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-2 hover:bg-surface-2"
+        className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-2 hover:bg-surface-2"
       >
         <LogOut className="h-4 w-4" /> Se déconnecter
       </button>
@@ -245,7 +254,6 @@ export function AppShell({
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-base text-on-brand">🧠</span>
             <span className="truncate">Second Brain</span>
           </Link>
-          {refreshButton("rounded-lg p-1.5 text-ink-2 hover:bg-surface-2 disabled:opacity-60")}
           <NotificationsBell align="left" />
         </div>
         {statusSlot}
