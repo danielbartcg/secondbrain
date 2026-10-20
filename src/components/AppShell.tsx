@@ -3,12 +3,13 @@
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, BookHeart, MessagesSquare, Brain, Network, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
+import { Activity, BookHeart, MessagesSquare, RefreshCw, Brain, Network, CalendarCheck2, FolderKanban, LayoutDashboard, LogOut, Menu, NotebookPen, Settings, ShieldCheck, UsersRound, X } from "lucide-react";
 import { Avatar } from "@/components/ui";
 import { api, ApiClientError } from "@/lib/client";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { useUnreadMessages } from "@/lib/messages-store";
 import { seedPins, usePins } from "@/lib/pins-store";
+import { EntityIcon } from "@/components/icons/EntityIcon";
 import { seedProjectTypes, useProjectTypes } from "@/lib/project-types-store";
 import { PIN_GROUP_THRESHOLD, groupByType, type ProjectTypesDto } from "@/lib/shared/project-types";
 import type { PinsDto } from "@/lib/pins";
@@ -51,12 +52,15 @@ export function AppShell({
   statusSlot,
   pins: initialPins,
   projectTypes: initialTypes,
+  onRefresh,
 }: {
   user: ShellUser;
   children: React.ReactNode;
   statusSlot?: React.ReactNode;
   pins?: PinsDto;
   projectTypes?: ProjectTypesDto;
+  /** Actualisation à la demande (application : synchronisation puis réaffichage) ; défaut : rechargement de la page. */
+  onRefresh?: () => Promise<void> | void;
 }) {
   seedPins(initialPins);
   seedProjectTypes(initialTypes);
@@ -66,6 +70,23 @@ export function AppShell({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const unreadMessages = useUnreadMessages();
+  const [refreshing, setRefreshing] = useState(false);
+  // Bouton « Actualiser » : utile dans l'application installée (PWA, desktop), sans bouton de rechargement.
+  const doRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      if (onRefresh) await onRefresh();
+      else window.location.reload();
+    } finally {
+      setTimeout(() => setRefreshing(false), 400);
+    }
+  };
+  const refreshButton = (cls: string) => (
+    <button type="button" onClick={() => void doRefresh()} disabled={refreshing} title="Actualiser" aria-label="Actualiser" className={cls}>
+      <RefreshCw className={`h-5 w-5 ${refreshing ? "animate-spin" : ""}`} />
+    </button>
+  );
 
   // Liens entre objets (`[[…]]`, data-ref) dans les notes affichées : navigation
   // interne sans rechargement (et dans l'application native). Dans un éditeur,
@@ -124,9 +145,9 @@ export function AppShell({
         // Éléments épinglés, indentés sous « Projets » et « Cartes mentales ».
         const pinned =
           href === "/projects"
-            ? pins.projects.map((p) => ({ href: `/projects/${p.id}`, label: p.name, color: p.color }))
+            ? pins.projects.map((p) => ({ href: `/projects/${p.id}`, label: p.name, color: p.color, icon: p.icon ?? null }))
             : href === "/mindmaps"
-              ? pins.mindmaps.map((m) => ({ href: `/mindmaps/${m.id}`, label: m.title, color: null as string | null }))
+              ? pins.mindmaps.map((m) => ({ href: `/mindmaps/${m.id}`, label: m.title, color: null as string | null, icon: m.icon ?? null }))
               : [];
         const onPinned = pinned.some((p) => pathname === p.href || pathname.startsWith(p.href + "/"));
         // Plus de 5 projets épinglés : groupés par type de projet (sans type d'abord).
@@ -134,7 +155,7 @@ export function AppShell({
           href === "/projects" && pins.projects.length > PIN_GROUP_THRESHOLD && projectTypes.types.length
             ? groupByType(pins.projects, projectTypes)
                 .filter((g) => g.items.length)
-                .map((g) => ({ label: g.type?.name ?? null, items: g.items.map((p) => ({ href: `/projects/${p.id}`, label: p.name, color: p.color })) }))
+                .map((g) => ({ label: g.type?.name ?? null, items: g.items.map((p) => ({ href: `/projects/${p.id}`, label: p.name, color: p.color, icon: p.icon ?? null })) }))
             : [{ label: null as string | null, items: pinned }];
         const active = !onPinned && (pathname === href || pathname.startsWith(href + "/"));
         return (
@@ -172,7 +193,13 @@ export function AppShell({
                       title={p.label}
                       className={`flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors md:py-1 ${on ? "bg-brand-50 font-medium text-brand-700" : "text-ink-2 hover:bg-surface-2"}`}
                     >
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? "var(--color-line-strong)" }} aria-hidden />
+                      {p.icon ? (
+                        <span className="flex shrink-0" style={{ color: p.color ?? "var(--color-brand-600)" }}>
+                          <EntityIcon icon={p.icon} fallback={FolderKanban} className="h-3.5 w-3.5" />
+                        </span>
+                      ) : (
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? "var(--color-line-strong)" }} aria-hidden />
+                      )}
                       <span className="truncate">{p.label}</span>
                     </Link>
                   </li>
@@ -218,6 +245,7 @@ export function AppShell({
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-base text-on-brand">🧠</span>
             <span className="truncate">Second Brain</span>
           </Link>
+          {refreshButton("rounded-lg p-1.5 text-ink-2 hover:bg-surface-2 disabled:opacity-60")}
           <NotificationsBell align="left" />
         </div>
         {statusSlot}
@@ -237,6 +265,7 @@ export function AppShell({
               <MessagesSquare className="h-5 w-5" />
               <UnreadBadge count={unreadMessages} className="absolute -right-0.5 -top-0.5" />
             </Link>
+            {refreshButton("rounded-lg p-2 text-ink-2 hover:bg-surface-2 disabled:opacity-60")}
             <NotificationsBell align="right" />
             <button type="button" onClick={() => setOpen(true)} aria-label="Menu" aria-expanded={open} aria-controls="app-drawer" className="rounded-lg p-2 hover:bg-surface-2">
               <Menu className="h-5 w-5" />

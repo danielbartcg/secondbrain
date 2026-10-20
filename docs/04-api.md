@@ -48,6 +48,11 @@ Contrat consommé par le client web et, demain, par l'application mobile.
 | POST | `/me/email` | `{ email, currentPassword }` | `{ email, verificationSent }` ; adresse non validée ensuite ; `400 BAD_PASSWORD`, `409 EMAIL_TAKEN` |
 | POST | `/me/email/verification` | — | `{ ok, to }` (renvoi du lien) ; `409 ALREADY_VERIFIED`, `503 MAIL_DISABLED` |
 | GET | `/me/pins` | — | `{ pins: { projects: { id, name, color }[], mindmaps: { id, title }[] } }` |
+| GET | `/me/order?kind=PROJECT\|MINDMAP` | — | `{ kind, ids }` (ordre personnel, rang croissant) |
+| PUT | `/me/order` | `{ kind, ids }` (ordre complet, 2 000 max) | `{ kind, ids }` (éléments inaccessibles ignorés) ; les épingles suivent |
+| GET | `/me/icons` | — | `{ icons: { id, url, createdAt }[] }` (mes icônes importées) |
+| POST | `/me/icons` | `{ url }` (image `/media/…` issue de `/uploads`, pas de SVG) | `201 { icons }` ; 200 max |
+| DELETE | `/me/icons/:id` | — | `{ icons }` (les projets / cartes qui l'utilisent la gardent) |
 | GET | `/me/project-types` | — | `{ projectTypes: { types: { id, name }[] (ordre choisi), assignments: { [projectId]: typeId } } }` (projets accessibles seulement) |
 | POST | `/me/project-types` | `{ name (1–60) }` | `201 { projectTypes }` ; nom en double (casse ignorée) ou plus de 50 types → 400 |
 | PATCH | `/me/project-types/:id` | `{ name }` | `{ projectTypes }` ; type d'autrui → 404 |
@@ -623,3 +628,14 @@ Liens dans le HTML des notes : `<a href="/tasks/…" data-ref="task:…">` ;
 lien **interne** (chemin commençant par `/`, sans `target`), jamais sur un lien
 externe. Connecteur MCP : `api_request` refuse `/me/calendar` et
 `/calendar/*`.
+
+### Icônes, description et commentaires riches (20/10/2026)
+
+- `PATCH /projects/:id` et `POST /projects` : `icon?: "lucide:<nom>" | "/media/….png|jpg|gif|webp" | null` ;
+  `PATCH /mindmaps/:id` : `icon?` (même format ; tracé dans l'historique de la carte). Champ `icon` dans
+  `ProjectSummary` / `ProjectDto`, `MindMapSummary` / `MindMapDto`, épingles (`/me/pins`) et arborescence des notes.
+- Tâches : `description` en HTML (assaini ; texte brut accepté et converti), 200 000 caractères max.
+- Commentaires (`POST /tasks/:id/comments`) : `body` en HTML (assaini ; texte brut accepté), 100 000 caractères
+  max ; vide après assainissement → 400 ; mentions `@[Nom]` résolues. `TaskDetailDto.comments[].body` : HTML assaini.
+- Arborescence des notes : `parent=section:projects` renvoie d'abord les types de projet (`kind: "ptype"`),
+  `parent=ptype:<id>` leurs projets ; `GET /notes/ptype/:id` : document (non éditable).

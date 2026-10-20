@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { listProjectTypes } from "@/lib/project-types";
 import { badRequest, notFound } from "@/lib/api";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { hasHtmlContent, projectAccessWhere, projectEditWhere, taskAccessWhere, taskEditWhere, taskHref } from "@/lib/projects";
@@ -26,7 +27,8 @@ import { updateNode } from "@/lib/mindmaps";
  * Références : `kind:id` ; sections : `section:<name>` ; racine : `root`.
  */
 
-export type NoteKind = "root" | "section" | "mindmap" | "node" | "project" | "stage" | "activity" | "task";
+/** `ptype` : type de projet personnel (dossier sous « Projets », avant les projets sans type). */
+export type NoteKind = "root" | "section" | "ptype" | "mindmap" | "node" | "project" | "stage" | "activity" | "task";
 
 export type TreeItem = {
   ref: string;
@@ -36,6 +38,8 @@ export type TreeItem = {
   /** Sous-titre léger (statut, compteur…). */
   hint?: string;
   color?: string | null;
+  /** Icône du projet / de la carte (« lucide:<nom> » ou « /media/… »). */
+  icon?: string | null;
   hasChildren: boolean;
   hasNotes: boolean;
 };
@@ -68,10 +72,22 @@ export function parseRef(ref: string): { kind: NoteKind; id: string } {
   if (i <= 0) throw badRequest("Référence invalide.");
   const kind = ref.slice(0, i) as NoteKind;
   const id = ref.slice(i + 1);
-  if (!["section", "mindmap", "node", "project", "stage", "activity", "task"].includes(kind) || !id) throw badRequest("Référence invalide.");
+  if (!["section", "ptype", "mindmap", "node", "project", "stage", "activity", "task"].includes(kind) || !id) throw badRequest("Référence invalide.");
   if (kind === "section" && !(id in SECTIONS)) throw badRequest("Section inconnue.");
   return { kind, id };
 }
+
+const projectItem = (p: { id: string; name: string; color: string | null; icon: string | null; status: string; notes: string; _count: { stages: number; tasks: number } }): TreeItem => ({
+  ref: `project:${p.id}`,
+  kind: "project",
+  id: p.id,
+  title: p.name,
+  hint: p.status === "ARCHIVED" ? "archivé" : p.status === "DONE" ? "terminé" : p.status === "ON_HOLD" ? "en pause" : undefined,
+  color: p.color,
+  icon: p.icon,
+  hasChildren: p._count.stages + p._count.tasks > 0,
+  hasNotes: hasHtmlContent(p.notes),
+});
 
 const taskItem = (t: { id: string; name: string; status: string; notes: string }): TreeItem => ({
   ref: `task:${t.id}`,
@@ -98,13 +114,14 @@ export async function children(userId: string, parentRef: string): Promise<TreeI
         const maps = await prisma.mindMap.findMany({
           where: mapAccessWhere(userId),
           orderBy: { updatedAt: "desc" },
-          select: { id: true, title: true, ownerId: true, owner: { select: { name: true } }, _count: { select: { nodes: true } }, nodes: { where: { parentId: null }, select: { notes: true } } },
+          select: { id: true, title: true, icon: true, ownerId: true, owner: { select: { name: true } }, _count: { select: { nodes: true } }, nodes: { where: { parentId: null }, select: { notes: true } } },
         });
         return maps.map((m) => ({
           ref: `mindmap:${m.id}`,
           kind: "mindmap",
           id: m.id,
           title: m.title,
+          icon: m.icon,
           hint: `${m._count.nodes} nœud${m._count.nodes > 1 ? "s" : ""}${m.ownerId !== userId ? ` · partagée par ${m.owner.name}` : ""}`,
           hasChildren: m._count.nodes > 1,
           hasNotes: hasHtmlContent(m.nodes[0]?.notes ?? ""),
@@ -115,25 +132,35 @@ export async function children(userId: string, parentRef: string): Promise<TreeI
           prisma.project.findMany({
             where: projectAccessWhere(userId),
             orderBy: { updatedAt: "desc" },
-            select: { id: true, name: true, color: true, status: true, notes: true, _count: { select: { stages: true, tasks: true } } },
+            select: { id: true, name: true, color: true, icon: true, status: true, notes: true, _count: { select: { stages: true, tasks: true } } },
           }),
           prisma.task.count({ where: { ownerId: userId, projectId: null } }),
         ]);
-        const items: TreeItem[] = projects.map((p) => ({
-          ref: `project:${p.id}`,
-          kind: "project",
-          id: p.id,
-          title: p.name,
-          hint: p.status === "ARCHIVED" ? "archivé" : p.status === "DONE" ? "terminé" : p.status === "ON_HOLD" ? "en pause" : undefined,
-          color: p.color,
-          hasChildren: p._count.stages + p._count.tasks > 0,
-          hasNotes: hasHtmlContent(p.notes),
-        }));
+        // Types de projet (s'il y en a) d'abord, puis les projets sans type, puis « Sans projet ».
+        const types = await listProjectTypes(userId);
+        const typed = new Set(Object.keys(types.assignments));
+        const items: TreeItem[] = [
+          ...types.types.map((t): TreeItem => {
+            const n = projects.filter((p) => types.assignments[p.id] === t.id).length;
+            return { ref: `ptype:${t.id}`, kind: "ptype", id: t.id, title: t.name, hint: `${n} projet${n > 1 ? "s" : ""}`, hasChildren: n > 0, hasNotes: false };
+          }),
+          ...projects.filter((p) => !typed.has(p.id) || !types.types.some((t) => t.id === types.assignments[p.id])).map(projectItem),
+        ];
         items.push({ ref: "section:orphans", kind: "section", id: "orphans", title: SECTIONS.orphans, hint: `${orphanCount} tâche${orphanCount > 1 ? "s" : ""}`, hasChildren: orphanCount > 0, hasNotes: false });
         return items;
       }
       const orphans = await prisma.task.findMany({ where: { ownerId: userId, projectId: null }, orderBy: [{ order: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, status: true, notes: true } });
       return orphans.map(taskItem);
+    }
+    case "ptype": {
+      const t = await prisma.projectType.findFirst({ where: { id, userId }, select: { id: true } });
+      if (!t) throw notFound("Type de projet");
+      const projects = await prisma.project.findMany({
+        where: { ...projectAccessWhere(userId), typeLinks: { some: { userId, typeId: id } } },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, name: true, color: true, icon: true, status: true, notes: true, _count: { select: { stages: true, tasks: true } } },
+      });
+      return projects.map(projectItem);
     }
     case "mindmap": {
       await requireMapAccess(userId, id, "read");
@@ -229,6 +256,11 @@ export async function getDocument(userId: string, ref: string): Promise<NoteDocu
   switch (kind) {
     case "root":
       return { ...base, title: "Prise de notes", breadcrumb: [], href: null, notes: "", editable: false, updatedAt: null };
+    case "ptype": {
+      const t = await prisma.projectType.findFirst({ where: { id, userId }, select: { name: true } });
+      if (!t) throw notFound("Type de projet");
+      return { ...base, title: t.name, breadcrumb: [SECTION_CRUMB.projects], href: "/projects", notes: "", editable: false, updatedAt: null };
+    }
     case "section":
       return { ...base, title: SECTIONS[id as SectionName], breadcrumb: id === "orphans" ? [SECTION_CRUMB.projects] : [], href: id === "mindmaps" ? "/mindmaps" : id === "projects" ? "/projects" : "/projects/sans-projet", notes: "", editable: false, updatedAt: null };
     case "mindmap": {

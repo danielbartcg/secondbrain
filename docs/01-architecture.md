@@ -812,3 +812,40 @@ requêtes côté serveur. Les fonctions `seed…` ne font donc rien côté serve
 et les hooks reçoivent la valeur de la requête (`usePins(initial)`,
 `useProjectTypes(initial)`) utilisée pour le rendu serveur et l'hydratation —
 jamais l'état du module.
+
+## Texte riche des tâches et des commentaires (`src/lib/rich-text.ts`, règles pures `src/lib/shared/rich-text.ts`)
+
+La **description d'une tâche** et les **commentaires** sont en HTML (éditeur
+compact `RichTextEditor`), assainis par `sanitizeNotes` à l'écriture
+(`richDescription` dans `createTask` / `updateTask` / `addComment`) et à la
+lecture (`richHtml` : `getTaskDetail`, modèle local de l'application). Les
+anciennes valeurs en texte brut (ne commençant pas par une balise,
+`looksLikeHtml`) sont échappées et converties en paragraphes. Exports
+(Excel), connecteur MCP, extraits de piste d'audit et notifications utilisent
+le texte (`richText`). Mentions : taper « @ » dans l'éditeur
+(`components/MentionMenu.tsx`) insère `@[Nom]`, résolu par le serveur en
+`@[Nom](memberId)` dans le HTML ; affichage en pastille. Un commentaire vide
+après assainissement est refusé (400).
+
+## Ordre personnel, actualisation, icônes
+
+- **Ordre personnel** (`src/lib/item-order.ts`, `ItemOrder`) des projets et
+  des cartes : rang par élément et par utilisateur ; listes (`sortByOrder` :
+  éléments rangés d'abord, puis du plus récent au plus ancien) et épingles du
+  menu (`listPins`). « Trier » (A → Z, mise à jour) réécrit l'ordre ; le
+  glisser-déposer l'ajuste. État client `src/lib/item-order-store.ts`
+  (jamais d'état de module au rendu serveur) ; application : dernière valeur
+  en cache (`meta.itemOrder`).
+- **Actualiser** : bouton de la coque (barre latérale et barre mobile) —
+  site : rechargement de la page ; application : synchronisation, épingles et
+  types rechargés, réaffichage de l'écran (`AppShell.onRefresh`).
+- **Icônes** (`src/lib/shared/icons.ts`) : `Project.icon` / `MindMap.icon` =
+  « lucide:<nom> » (bibliothèque Lucide, ≈ 1 900 icônes) ou « /media/… »
+  (image téléversée, PNG / JPEG / GIF / WebP, jamais de SVG), validées par
+  `ICON_RE`. Les données des icônes sont **un seul module JSON**
+  (`src/lib/generated/lucide-icons.json`, `npm run icons:build`, ≈ 90 Ko
+  compressés) chargé à la demande (`components/icons/lucide-data.tsx`) :
+  surtout pas `lucide-react/dynamic` (un module par icône : compilation
+  20 fois plus lente). Bibliothèque personnelle d'icônes importées :
+  `UserIcon` (`/me/icons`). Changer l'icône d'une carte est tracé
+  (`MapEvent` « icon »). Colonnes synchronisées : `LOCAL_DATA_VERSION` = 3.

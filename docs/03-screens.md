@@ -33,6 +33,11 @@ layout racine).
 
 ## Coque (`AppShell`)
 
+Bouton **Actualiser** (icône flèches, à côté des notifications, barre
+latérale et barre mobile) : recharge la page sur le site ; dans
+l'application, synchronise puis réaffiche l'écran. Épingles : icône du
+projet / de la carte (sinon pastille de couleur), dans l'ordre personnel.
+
 Menu complet : Tableau de bord, Cartes mentales, Projets, Mes tâches, Prise de
 notes, **Mon équipe** (si l'on a des N-1), **Préférences**, puis
 **Administration** en dernier (administrateurs et super administrateur). Le
@@ -48,6 +53,10 @@ ouvre l'endroit concerné (fiche tâche, commentaire ciblé) ; au survol :
 bascule lue / non lue, suppression ; « Tout lu » ; lien « Voir toutes ».
 
 ## Prise de notes (`notes/NotesWorkspace`)
+
+Sous « Projets » : mes **types de projet** d'abord (dossiers `ptype:<id>`,
+icône étiquettes, nombre de projets), puis les projets sans type, puis
+« Sans projet ». Projets et cartes avec leur icône.
 
 - **Arborescence** (colonne à gauche, tiroir sur mobile) : Cartes mentales ›
   carte › nœuds › sous-nœuds… ; Projets › projet › étapes › activités › tâches,
@@ -120,6 +129,13 @@ réponse recalculée, recharge en cas d'erreur.
 
 ## Fiche tâche (`TaskSheet`)
 
+**Description** riche (`RichDescription` : éditeur compact, enregistrement
+automatique 800 ms, consultation seule sans droit d'écriture) — aussi dans
+les détails rapides du plan (`ProjectBoard`). **Commentaires** riches :
+éditeur compact avec mentions « @ » (menu des membres, ↑ ↓ Entrée), emoji,
+images collées, Ctrl+Entrée pour envoyer ; corps affiché en HTML assaini avec
+pastilles « @Nom ».
+
 - Fil d'Ariane : projet (ou « Sans projet ») › étape › activité.
 - **Consultation** (administrateur, manager d'un N-1, `canEdit: false`) :
   bandeau « Consultation en lecture seule », tout le contenu désactivé.
@@ -160,6 +176,10 @@ réponse recalculée, recharge en cas d'erreur.
   affiche `@Nom` en surbrillance. Ctrl+Entrée envoie.
 
 ## Éditeur de carte (`MindMapEditor`)
+
+Nœuds plus hauts (54 px, racine 68 px) : le titre tient sur **deux lignes**
+(points de suspension au-delà ; largeur estimée par `estimateWidth`). Icône
+de la carte à gauche du titre (cliquable : bibliothèque d'icônes).
 
 Voir docs/01-architecture.md § Cartes mentales. Raccourcis : Tab enfant,
 Entrée frère, Suppr, F2 renommer, Espace replier, Échap. Panneau latéral
@@ -580,3 +600,18 @@ Menu « Journal quotidien » (icône livre-cœur), sous « Prise de notes ».
   de la période (ou l'activité par jour), la plus récente d'abord.
 - Aucun bloc activé : lien vers Préférences → Personnalisation du journal.
 - Application native : même écran (`/journal` dans `App.tsx`), **en ligne**.
+
+## Ordre des listes et icônes (`ProjectList`, `MindMapList`, `components/icons/*`, `SortMenu`)
+
+- **Trier** (`SortMenu`) : « Par ordre alphabétique » ou « Par date de mise à
+  jour » (la plus récente d'abord) ; devient l'ordre personnel, appliqué aux
+  épingles du menu. **Glisser-déposer** (souris) une carte de projet ou de
+  carte mentale sur une autre : placée juste avant (et, pour un projet, rangée
+  dans le type de la cible).
+- **Icônes** : la pastille de chaque projet / carte (listes, en-tête du projet,
+  en-tête de l'éditeur de carte) ouvre la **bibliothèque** (`IconPicker`,
+  chargé à la demande) : onglet « Bibliothèque » (≈ 1 900 icônes, recherche
+  en anglais ou en français — fusée, client, argent…), onglet « Mes icônes »
+  (importer une image PNG / JPEG / GIF / WebP, réutiliser, retirer de la
+  bibliothèque), « Retirer l'icône ». Affichage : `EntityIcon` (repli sur
+  l'icône par défaut pendant le chargement).

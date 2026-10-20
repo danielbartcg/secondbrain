@@ -19,6 +19,7 @@ type Db = Prisma.TransactionClient | typeof prisma;
 export type MapEventKind =
   | "created"
   | "renamed"
+  | "icon"
   | "node_created"
   | "node_renamed"
   | "node_notes"

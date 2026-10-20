@@ -1,9 +1,10 @@
 "use client";
 
+import { EntityIcon } from "@/components/icons/EntityIcon";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Brain, ChevronDown, ChevronRight, ExternalLink, FolderKanban, Inbox, Layers, ListChecks, ListTodo, Loader2, NotebookPen, PanelLeft, Workflow, X } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, ExternalLink, FolderKanban, Inbox, Layers, ListChecks, ListTodo, Loader2, NotebookPen, PanelLeft, Workflow, X, Tags } from "lucide-react";
 import { api } from "@/lib/client";
 import type { NoteDocument, NoteKind, TreeItem } from "@/lib/notes";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -22,6 +23,7 @@ import { toast } from "@/components/ui";
 const KIND_ICON: Record<NoteKind, typeof Brain> = {
   root: NotebookPen,
   section: FolderKanban,
+  ptype: Tags,
   mindmap: Brain,
   node: Workflow,
   project: FolderKanban,
@@ -29,10 +31,16 @@ const KIND_ICON: Record<NoteKind, typeof Brain> = {
   activity: ListChecks,
   task: ListTodo,
 };
-const KIND_LABEL: Record<NoteKind, string> = { root: "", section: "Section", mindmap: "Carte mentale", node: "Nœud", project: "Projet", stage: "Étape", activity: "Activité", task: "Tâche" };
+const KIND_LABEL: Record<NoteKind, string> = { root: "", section: "Section", ptype: "Type de projet", mindmap: "Carte mentale", node: "Nœud", project: "Projet", stage: "Étape", activity: "Activité", task: "Tâche" };
 
-function ItemIcon({ item, className = "h-4 w-4" }: { item: Pick<TreeItem, "kind" | "id" | "color">; className?: string }) {
+function ItemIcon({ item, className = "h-4 w-4" }: { item: Pick<TreeItem, "kind" | "id" | "color" | "icon">; className?: string }) {
   const Icon = item.kind === "section" && item.id === "orphans" ? Inbox : KIND_ICON[item.kind];
+  if (item.icon)
+    return (
+      <span className="flex shrink-0" style={item.color ? { color: item.color } : undefined}>
+        <EntityIcon icon={item.icon} fallback={Icon} className={className} />
+      </span>
+    );
   return <Icon className={`${className} shrink-0`} style={item.color ? { color: item.color } : undefined} />;
 }
 

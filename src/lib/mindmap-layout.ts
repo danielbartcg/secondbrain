@@ -44,15 +44,22 @@ export type Positioned = {
 
 export type LayoutEdge = { source: string; target: string; side: Side };
 
-export const NODE_H = 40;
-export const ROOT_H = 56;
+/** Hauteur d'un nœud : le titre tient sur deux lignes (au-delà : points de suspension). */
+export const NODE_H = 54;
+export const ROOT_H = 68;
 const GAP_X = 72;
-const GAP_Y = 16;
+const GAP_Y = 14;
+/** Au-delà de cette largeur sur une ligne, le titre passe sur deux lignes. */
+const ONE_LINE_MAX = 230;
 
 export function estimateWidth(title: string, isRoot: boolean, extra = 0): number {
   const chars = Math.max(4, title.length);
-  const w = Math.min(260, chars * 7.4 + 36);
-  return (isRoot ? Math.min(300, w + 24) : w) + Math.max(0, extra);
+  const perChar = isRoot ? 8.6 : 7.4;
+  const pad = isRoot ? 60 : 36;
+  const oneLine = chars * perChar + pad;
+  // Deux lignes : environ la moitié des caractères par ligne (+ marge pour les coupures de mots).
+  const w = oneLine <= ONE_LINE_MAX ? oneLine : Math.min(isRoot ? 320 : 270, Math.max(170, Math.ceil(chars / 2 + 3) * perChar + pad));
+  return w + Math.max(0, extra);
 }
 
 type H = { id: string; kids: H[] };

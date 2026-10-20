@@ -58,6 +58,8 @@ export type MindMapSharing = {
 export type MindMapSummary = {
   id: string;
   title: string;
+  /** Icône : « lucide:<nom> » ou « /media/… » ; null = icône par défaut. */
+  icon: string | null;
   /** Carte type (modèle, Administration → Modèles). */
   isTemplate: boolean;
   nodeCount: number;
@@ -68,6 +70,7 @@ export type MindMapSummary = {
 export type MindMapDto = {
   id: string;
   title: string;
+  icon: string | null;
   isTemplate: boolean;
   createdAt: string;
   updatedAt: string;
@@ -167,6 +170,7 @@ export async function listMindMaps(userId: string): Promise<MindMapSummary[]> {
   return maps.map((m) => ({
     id: m.id,
     title: m.title,
+    icon: m.icon,
     isTemplate: m.isTemplate,
     nodeCount: m._count.nodes,
     createdAt: m.createdAt.toISOString(),
@@ -205,6 +209,7 @@ export async function getMindMap(userId: string, mapId: string): Promise<MindMap
   return {
     id: map.id,
     title: map.title,
+    icon: map.icon,
     isTemplate: map.isTemplate,
     createdAt: map.createdAt.toISOString(),
     updatedAt: map.updatedAt.toISOString(),
@@ -214,8 +219,16 @@ export async function getMindMap(userId: string, mapId: string): Promise<MindMap
   };
 }
 
-export async function updateMindMap(userId: string, mapId: string, data: { title?: string }): Promise<void> {
+export async function updateMindMap(userId: string, mapId: string, data: { title?: string; icon?: string | null }): Promise<void> {
   await mutateMap(userId, mapId, async (tx) => {
+    if (data.icon !== undefined) {
+      const before = await tx.mindMap.findUniqueOrThrow({ where: { id: mapId }, select: { icon: true } });
+      if (before.icon !== data.icon) {
+        await tx.mindMap.update({ where: { id: mapId }, data: { icon: data.icon } });
+        const actor = await actorDisplayName(tx, userId);
+        await recordMapEvents(tx, [{ mapId, actorId: userId, actorName: actor, kind: "icon", oldValue: before.icon, newValue: data.icon, message: data.icon ? `${actor} a changé l'icône de la carte` : `${actor} a retiré l'icône de la carte` }]);
+      }
+    }
     if (data.title) {
       const before = await tx.mindMap.findUniqueOrThrow({ where: { id: mapId }, select: { title: true } });
       await tx.mindMap.update({ where: { id: mapId }, data: { title: data.title } });

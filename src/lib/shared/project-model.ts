@@ -121,6 +121,8 @@ export type ProjectSummary = {
   id: string;
   ownerId: string;
   name: string;
+  /** Icône : « lucide:<nom> » ou « /media/… » ; null = icône par défaut. */
+  icon: string | null;
   description: string;
   color: string | null;
   status: ProjectStatus;
@@ -283,6 +285,7 @@ export function toProjectDto(p: ProjectRow): ProjectDto {
     id: p.id,
     ownerId: p.ownerId,
     name: p.name,
+    icon: (p as { icon?: string | null }).icon ?? null,
     description: p.description,
     color: p.color,
     status: p.status,

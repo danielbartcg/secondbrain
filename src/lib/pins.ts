@@ -13,8 +13,8 @@ import { mapAccessWhere } from "@/lib/map-access";
  */
 
 export type PinsDto = {
-  projects: { id: string; name: string; color: string | null }[];
-  mindmaps: { id: string; title: string }[];
+  projects: { id: string; name: string; color: string | null; icon?: string | null }[];
+  mindmaps: { id: string; title: string; icon?: string | null }[];
 };
 
 const MAX_PINS = 30;
@@ -25,16 +25,20 @@ export async function listPins(userId: string): Promise<PinsDto> {
   const mapIds = pins.filter((p) => p.kind === "MINDMAP").map((p) => p.targetId);
   const [projects, maps] = await Promise.all([
     projectIds.length
-      ? prisma.project.findMany({ where: { id: { in: projectIds }, ...projectAccessWhere(userId) }, select: { id: true, name: true, color: true } })
+      ? prisma.project.findMany({ where: { id: { in: projectIds }, ...projectAccessWhere(userId) }, select: { id: true, name: true, color: true, icon: true } })
       : Promise.resolve([]),
-    mapIds.length ? prisma.mindMap.findMany({ where: { AND: [{ id: { in: mapIds } }, mapAccessWhere(userId)] }, select: { id: true, title: true } }) : Promise.resolve([]),
+    mapIds.length ? prisma.mindMap.findMany({ where: { AND: [{ id: { in: mapIds } }, mapAccessWhere(userId)] }, select: { id: true, title: true, icon: true } }) : Promise.resolve([]),
   ]);
   // Purge des épingles qui ne pointent plus vers un élément accessible.
   const stale = pins.filter((p) => (p.kind === "PROJECT" ? !projects.some((x) => x.id === p.targetId) : !maps.some((x) => x.id === p.targetId)));
   if (stale.length) {
     await prisma.pin.deleteMany({ where: { userId, OR: stale.map((p) => ({ kind: p.kind, targetId: p.targetId })) } });
   }
-  const order = new Map(pins.map((p, i) => [`${p.kind}:${p.targetId}`, i]));
+  // Ordre : mon ordre personnel (listes) d'abord, puis l'ordre d'épinglage.
+  const ranks = new Map(
+    (await prisma.itemOrder.findMany({ where: { userId, targetId: { in: pins.map((p) => p.targetId) } }, select: { kind: true, targetId: true, rank: true } })).map((r) => [`${r.kind}:${r.targetId}`, r.rank]),
+  );
+  const order = new Map(pins.map((p, i) => [`${p.kind}:${p.targetId}`, (ranks.get(`${p.kind}:${p.targetId}`) ?? 1_000_000) * 1000 + i]));
   return {
     projects: projects.sort((a, b) => order.get(`PROJECT:${a.id}`)! - order.get(`PROJECT:${b.id}`)!),
     mindmaps: maps.sort((a, b) => order.get(`MINDMAP:${a.id}`)! - order.get(`MINDMAP:${b.id}`)!),

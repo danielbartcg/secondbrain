@@ -100,7 +100,7 @@ async function main() {
   check("règles métier appliquées localement (en cours → 50 %)", rt.model.task(taskId)!.progress === 50 && rt.model.task(taskId)!.status === "IN_PROGRESS");
   void nameBase;
   const c = await api("POST", `/tasks/${taskId}/comments`, { body: "Commentaire hors ligne" });
-  check("commentaire visible localement", c.task.comments.some((x: Any) => x.body === "Commentaire hors ligne"));
+  check("commentaire visible localement", c.task.comments.some((x: Any) => x.body === "<p>Commentaire hors ligne</p>"));
   const s = await api("POST", `/tasks/${taskId}/sessions`, { date: "2026-12-20" });
   check("session de travail locale", s.sessions.length === 1);
   const png = new Blob([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64")], { type: "image/png" });
@@ -142,9 +142,9 @@ async function main() {
   const conf = rt.store.conflicts.find((x) => x.entityId === taskId && x.field === "name");
   check("conflit sur le nom : la valeur du serveur l'emporte et est historisée", !!conf && conf.serverValue === "Nom par B (web)" && conf.localValue === "Nom par l'appli" && rt.model.task(taskId)!.name === "Nom par B (web)", rt.store.conflicts);
   const srvTask = (await http<Any>("GET", `/tasks/${taskId}`, A.token)).data.task;
-  check("les autres champs sont passés (échéance, statut, commentaire, session)", String(srvTask.dueDate).startsWith("2026-12-24") && srvTask.status === "IN_PROGRESS" && srvTask.comments.some((x: Any) => x.body === "Commentaire hors ligne") && srvTask.workSessions.length === 1, srvTask);
+  check("les autres champs sont passés (échéance, statut, commentaire, session)", String(srvTask.dueDate).startsWith("2026-12-24") && srvTask.status === "IN_PROGRESS" && srvTask.comments.some((x: Any) => x.body === "<p>Commentaire hors ligne</p>") && srvTask.workSessions.length === 1, srvTask);
   const srvOff = await http<Any>("GET", `/tasks/${offId}`, A.token);
-  check("la tâche créée hors ligne existe sur le serveur, avec ses modifications", srvOff.status === 200 && srvOff.data.task.priority === "CRITICAL" && srvOff.data.task.description === "détails hors ligne", srvOff.data);
+  check("la tâche créée hors ligne existe sur le serveur, avec ses modifications", srvOff.status === 200 && srvOff.data.task.priority === "CRITICAL" && srvOff.data.task.description === "<p>détails hors ligne</p>", srvOff.data);
   const srvNode = (await http<Any>("GET", `/mindmaps/${mapId}`, A.token)).data.mindmap.nodes.find((n: Any) => n.id === node.id);
   check("image hors ligne téléversée et remplacée par /media/… (serveur et local)", /src="\/media\/[^"]+\.png"/.test(srvNode.notes) && /\/media\//.test(rt.store.get("MindNode", node.id)!.notes), srvNode.notes);
   const srvProj = (await http<Any>("GET", `/projects/${pid}`, A.token)).data.project;
@@ -177,7 +177,7 @@ async function main() {
   await http("PATCH", `/tasks/${keep.task.id}`, B.token, { description: "modifiée par B" });
   setForcedOffline(false);
   await rt.sync.syncNow();
-  check("suppression refusée : l'objet est restauré", rt.store.get("Task", keep.task.id)?.description === "modifiée par B" && rt.store.conflicts.some((x) => x.entityId === keep.task.id && x.kind === "delete-refused"), rt.store.conflicts.slice(0, 3));
+  check("suppression refusée : l'objet est restauré", rt.store.get("Task", keep.task.id)?.description === "<p>modifiée par B</p>" && rt.store.conflicts.some((x) => x.entityId === keep.task.id && x.kind === "delete-refused"), rt.store.conflicts.slice(0, 3));
 
   console.log("\n8. Changements du web récupérés et périmètre");
   const bProj = await http<Any>("POST", "/projects", B.token, { name: "Projet de B" });
@@ -249,7 +249,7 @@ async function main() {
     // B commente : nom de l'auteur fourni par le serveur.
     await http("POST", `/tasks/${bTask.data.task.id}/comments`, B.token, { body: "Vu par B" });
     await rt.sync.syncNow();
-    const cm = rt.store.where("TaskComment", (x) => x.body === "Vu par B")[0];
+    const cm = rt.store.where("TaskComment", (x) => x.body === "<p>Vu par B</p>")[0];
     const detail = await api("GET", `/tasks/${bTask.data.task.id}`);
     check("commentaire d'autrui : nom du compte joint par le serveur", cm?.authorName === "NativeB Test" && detail.task.comments.some((x: Any) => x.authorName === "NativeB Test"), cm);
 

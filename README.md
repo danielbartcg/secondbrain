@@ -126,6 +126,8 @@ npm run user:create -- --email=moi@exemple.fr --password=motdepasse --name=Danie
 | `npm run ios:sync` / `ios:open` | application iPhone : build de l'interface + mise à jour du projet Xcode `native/ios` / ouverture dans Xcode (Mac) ; envoi TestFlight par le workflow GitHub « iOS TestFlight » |
 | `npm run test:pptx` | tests de bout en bout de l'export PowerPoint « état des lieux » (contenu des diapositives, graphiques, accès, projet vide) — serveur lancé (`BASE_URL`, `SAVE_PPTX=fichier.pptx` pour conserver la présentation de démonstration) |
 | `npm run test:journal` | tests de bout en bout du journal quotidien (saisie, ajout, effacement, activité, calendrier, rapport, préférences, confidentialité, outils MCP) et des risques à une date (voyage dans le temps) — serveur de dev lancé |
+| `npm run test:personalization` | tests de bout en bout de la personnalisation (description et commentaires riches, ordre personnel, icônes, bibliothèque d'icônes, types dans la prise de notes) — serveur de dev lancé |
+| `npm run icons:build` | régénère `src/lib/generated/lucide-icons.json` (données des icônes Lucide) après une mise à jour de lucide-react |
 | `npm run test:project-types` | tests de bout en bout des types de projet personnels (création, ordre, rangement, droits, classement propre à chacun, nettoyage) — serveur de dev lancé |
 | `npm run test:mcp-query` | tests de bout en bout des requêtes MCP sur tous les objets (`query_objects` : auteur, dates, tri, texte, périmètre ; `list_recent_tasks`, `list_meetings`, `get_meeting`) — serveur de dev lancé |
 | `npm run test:knowledge` | tests purs des liens `[[…]]` (assainissement, extraction), de la répétition espacée, de l'iCalendar et du voyage dans le temps — sans serveur |

@@ -43,6 +43,8 @@ import type { OrganizerDto, OverviewTask, TaskDetailDto } from "@/lib/tasks";
 import type { TreeItem } from "@/lib/notes";
 import type { AdminUserDto, ProfileDto } from "@/lib/users";
 import { getLocation, navigate, refresh, subscribe } from "./shims/router";
+import { refreshPins } from "@/lib/pins-store";
+import { refreshProjectTypes } from "@/lib/project-types-store";
 import type { Runtime } from "./local/runtime";
 import { SyncPanel, useSyncStatus } from "./ui/SyncPanel";
 import { UpdateBanner } from "./ui/UpdateBanner";
@@ -107,6 +109,13 @@ export function App({ runtime }: { runtime: Runtime }) {
     <AppShell
       user={{ id: user!.id, name: user!.name, email: user!.email, avatarUrl: user!.avatarUrl, isAdmin: user!.isAdmin, reportCount: user!.reportCount }}
       statusSlot={<SyncPanel sync={runtime.sync} />}
+      onRefresh={async () => {
+        // Actualiser : synchroniser (si en ligne), recharger épingles et types, puis réafficher l'écran.
+        await runtime.sync.syncNow().catch(() => undefined);
+        await Promise.all([refreshPins(), refreshProjectTypes()]);
+        runtime.sync.ackRemoteChanges();
+        refresh();
+      }}
     >
       <UpdateBanner runtime={runtime} />
       {status.remoteChanges > 0 && !PASSIVE.some((re) => re.test(path)) && (

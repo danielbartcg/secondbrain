@@ -5,6 +5,7 @@ import { applyCustomPatch, readCustomValues } from "@/lib/shared/custom-fields";
 import { recordMapEvents } from "@/lib/map-events";
 import type { DeliverableStatus, Prisma, ProjectStatus, TaskComplexity, TaskPriority, TaskStatus, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { richDescription } from "@/lib/rich-text";
 import { ApiError, badRequest, forbidden, notFound } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { sanitizeNotes } from "@/lib/sanitize";
@@ -252,6 +253,7 @@ async function projectSummaries(where: Prisma.ProjectWhereInput): Promise<Projec
       id: true,
       ownerId: true,
       name: true,
+      icon: true,
       description: true,
       color: true,
       status: true,
@@ -279,6 +281,7 @@ async function projectSummaries(where: Prisma.ProjectWhereInput): Promise<Projec
       id: p.id,
       ownerId: p.ownerId,
       name: p.name,
+      icon: p.icon,
       description: p.description,
       color: p.color,
       status: p.status,
@@ -341,6 +344,7 @@ export async function createProject(userId: string, input: CreateProjectInput, i
       id,
       ownerId: userId,
       name: input.name,
+      icon: input.icon ?? null,
       description: input.description,
       color: input.color ?? null,
       status: input.status ?? "ACTIVE",
@@ -373,6 +377,7 @@ export async function updateProject(userId: string, projectId: string, input: Up
       where: { id: projectId },
       data: {
         name: input.name,
+        icon: input.icon,
         description: input.description,
         color: input.color,
         status: input.status,
@@ -641,7 +646,7 @@ export async function createTask(
         supervisorId: input.supervisorId ?? null,
         ...(contributorIds.length ? { contributors: { create: contributorIds.map((memberId) => ({ memberId })) } } : {}),
         name: input.name,
-        description: input.description,
+        description: richDescription(input.description) ?? "",
         status,
         progress,
         priority: input.priority ?? "MEDIUM",
@@ -757,7 +762,7 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
       where: { id: taskId },
       data: {
         name: input.name,
-        description: input.description,
+        description: richDescription(input.description),
         status,
         progress,
         priority: input.priority,

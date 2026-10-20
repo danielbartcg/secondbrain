@@ -9,6 +9,9 @@ import type { ProjectDto, ProjectSummary } from "@/lib/projects";
 import type { StaleOverview } from "@/lib/freshness";
 import { Button, EmptyState, InlineEdit, PageHeader, ProgressBar, errorMessage, formatDate, toast } from "@/components/ui";
 import { mutateProjectTypes, useProjectTypes } from "@/lib/project-types-store";
+import { saveItemOrder, sortByOrder, sortedIds, useItemOrder } from "@/lib/item-order-store";
+import { SortMenu } from "@/components/SortMenu";
+import { IconButton } from "@/components/icons/IconButton";
 import { groupByType, moveId, type ProjectTypeDto, type ProjectTypesDto } from "@/lib/shared/project-types";
 import { PinButton } from "@/components/PinButton";
 import { CustomFieldChips } from "./ProjectCustomFields";
@@ -36,9 +39,12 @@ type PT = { projectTypes: ProjectTypesDto };
 
 /**
  * Liste des projets, groupée par **type de projet** personnel : projets sans
- * type en haut, puis une carte par type (ordre choisi). Glisser-déposer
- * (souris) : un projet vers un autre type (ou vers le haut pour retirer le
- * type), un type (poignée) avant un autre ; au clavier et au doigt :
+ * type en haut, puis une carte par type (ordre choisi) ; dans chaque groupe,
+ * l'**ordre personnel** (`useItemOrder`, aussi celui des épingles du menu),
+ * réglable par « Trier » (A → Z, mise à jour) puis glisser-déposer.
+ * Glisser-déposer (souris) : un projet sur un autre (placé avant lui, rangé
+ * dans son type), vers un autre type (ou vers le haut pour retirer le type),
+ * un type (poignée) avant un autre ; au clavier et au doigt :
  * sélecteur « Type » sur chaque projet, flèches monter / descendre sur chaque
  * type. « Sans projet » ne se range pas. Classement propre à chacun
  * (`/api/v1/me/project-types`).
@@ -52,11 +58,14 @@ export function ProjectList({
   orphanCount = 0,
   currentUserId,
   projectTypes: initialTypes,
+  order: initialOrder,
 }: {
   initial: ProjectSummary[];
   orphanCount?: number;
   currentUserId?: string;
   projectTypes?: ProjectTypesDto;
+  /** Ordre personnel (identifiants), fourni par la page. */
+  order?: string[];
 }) {
   const router = useRouter();
   const [projects, setProjects] = useState(initial);
@@ -67,6 +76,7 @@ export function ProjectList({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const types = useProjectTypes(initialTypes);
+  const order = useItemOrder("PROJECT", initialOrder);
   const [newType, setNewType] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragKind, setDragKind] = useState<"project" | "type" | null>(null);
@@ -99,6 +109,17 @@ export function ProjectList({
     }
   }
 
+  async function setIcon(p: ProjectSummary, icon: string | null) {
+    const previous = projects;
+    setProjects((ps) => ps.map((x) => (x.id === p.id ? { ...x, icon } : x)));
+    try {
+      await api.patch(`/projects/${p.id}`, { icon });
+    } catch (err) {
+      setProjects(previous);
+      toast(errorMessage(err, "Icône non enregistrée."), "error");
+    }
+  }
+
   async function remove(p: ProjectSummary) {
     if (!confirm(`Supprimer le projet « ${p.name} » (étapes, activités et tâches comprises) ?`)) return;
     const previous = projects;
@@ -113,7 +134,26 @@ export function ProjectList({
   }
 
   const visible = projects.filter((p) => (filter === "ALL" ? p.status !== "ARCHIVED" : p.status === filter));
-  const groups = groupByType(visible, types, true);
+  const groups = groupByType(sortByOrder(visible, order), types, true);
+
+  /** Trie toute la liste (A → Z ou mise à jour) : devient l'ordre personnel, glisser-déposer pour ajuster. */
+  function sortAll(by: "alpha" | "updated") {
+    return saveItemOrder("PROJECT", sortedIds(projects, by, (p) => p.name)).catch(fail);
+  }
+  /** Projet déposé sur un autre : placé juste avant lui (et rangé dans son type). */
+  function dropOnProject(e: React.DragEvent, target: ProjectSummary) {
+    const projectId = e.dataTransfer.getData(PROJECT_DRAG);
+    if (!projectId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOver(null);
+    endDrag();
+    if (projectId === target.id) return;
+    const ids = sortByOrder(projects, order).map((p) => p.id);
+    void saveItemOrder("PROJECT", moveId(ids, projectId, target.id)).catch(fail);
+    const targetType = typeOf(target.id);
+    if (typeOf(projectId) !== targetType) void assign(projectId, targetType);
+  }
   const typeOf = (id: string) => (types.types.some((t) => t.id === types.assignments[id]) ? types.assignments[id] : null);
 
   const fail = (e: unknown) => toast(errorMessage(e), "error");
@@ -266,7 +306,8 @@ export function ProjectList({
         </p>
       )}
 
-      <div className="scrollbar-none mb-4 flex gap-1 overflow-x-auto">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto">
         {(["ALL", "ACTIVE", "ON_HOLD", "DONE", "ARCHIVED"] as Filter[]).map((f) => (
           <button
             key={f}
@@ -278,6 +319,8 @@ export function ProjectList({
             {f === "ALL" ? "Tous" : STATUS_LABEL[f]}
           </button>
         ))}
+      </div>
+      <SortMenu onSort={sortAll} />
       </div>
 
       {/* Projet virtuel : tâches sans projet */}
@@ -389,12 +432,24 @@ export function ProjectList({
           setDragKind("project");
         }}
         onDragEnd={endDrag}
-        className={`group relative cursor-grab rounded-2xl border border-line bg-surface p-4 transition-shadow hover:shadow-md active:cursor-grabbing ${dragging === p.id ? "opacity-50" : ""}`}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes(PROJECT_DRAG)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (over !== `p:${p.id}`) setOver(`p:${p.id}`);
+        }}
+        onDrop={(e) => dropOnProject(e, p)}
+        className={`group relative cursor-grab rounded-2xl border bg-surface p-4 transition-shadow hover:shadow-md active:cursor-grabbing ${dragging === p.id ? "opacity-50" : ""} ${over === `p:${p.id}` && dragging !== p.id ? "border-brand-500 shadow-[-4px_0_0_0_var(--color-brand-500)]" : "border-line"}`}
       >
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white" style={{ backgroundColor: p.color ?? "var(--color-brand-600)" }}>
-            <FolderKanban className="h-5 w-5" />
-          </div>
+          <IconButton
+            icon={p.icon}
+            fallback={FolderKanban}
+            title={p.name}
+            onChange={(icon) => setIcon(p, icon)}
+            boxClassName="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl text-white"
+            style={{ backgroundColor: p.color ?? "var(--color-brand-600)" }}
+          />
           <div className="min-w-0 flex-1">
             <Link href={`/projects/${p.id}`} draggable={false} className="block truncate font-semibold hover:text-brand-700">
               {p.name}

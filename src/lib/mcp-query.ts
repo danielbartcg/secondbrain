@@ -8,6 +8,7 @@ import { mapAccessWhere } from "@/lib/map-access";
 import { meetingStatus } from "@/lib/meetings";
 import { fileTypeLabel } from "@/lib/shared/file-types";
 import { JOURNAL_BLOCK_LABEL, JOURNAL_WRITTEN_BLOCKS, isWrittenBlock, resolveJournalBlock } from "@/lib/shared/journal";
+import { richText } from "@/lib/rich-text";
 import { STRATEGY_LABEL } from "@/lib/shared/risks";
 
 /**
@@ -164,7 +165,7 @@ export async function queryObjects(user: Pick<User, "id" | "name">, a: QueryArgs
           progress: t.progress,
           createdBy: t.owner.name,
           assignee: t.assignee?.name ?? undefined,
-          description: t.description || undefined,
+          description: richText(t.description) || undefined,
           notes: content(t.notes, full),
           startDate: iso(t.startDate),
           dueDate: iso(t.dueDate),

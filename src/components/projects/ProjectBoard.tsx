@@ -1,5 +1,6 @@
 "use client";
 
+import { RichDescription } from "@/components/RichDescription";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Circle, CircleDot, ExternalLink, Inbox, Layers, Lock, MessageSquare, Moon, NotebookPen, Plus, Trash2 } from "lucide-react";
@@ -396,14 +397,7 @@ function TaskRow({ task, index, count, project, run }: { task: TaskDto; index: n
 
       {open && (
         <div className="mt-2 space-y-2 pl-7 text-sm">
-          <InlineEdit
-            value={task.description}
-            onSave={(description) => patch({ description })}
-            as="div"
-            multiline
-            placeholder="Ajouter une description…"
-            className="-mx-1.5 block whitespace-pre-wrap text-ink-2"
-          />
+          <RichDescription value={task.description} documentKey={task.id} onSave={(description) => patch({ description })} placeholder="Ajouter une description…" minHeight={56} />
           <div className="flex flex-wrap items-center gap-3">
             {!tpl && (
             <label className="flex items-center gap-2 text-xs text-muted">

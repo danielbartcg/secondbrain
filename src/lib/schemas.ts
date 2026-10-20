@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { JOURNAL_BLOCKS } from "@/lib/shared/journal";
+import { ICON_RE } from "@/lib/shared/icons";
 
 /**
  * Schémas de validation de l'API /api/v1 (zod). Partagés entre les route
@@ -97,7 +98,7 @@ export const createMindMapFromTemplateSchema = z.object({ templateId: templateId
 export const applyTemplateSchema = z.object({ templateId });
 export const createProjectTemplateSchema = z.object({ name: z.string().trim().min(1, "Nom requis").max(200), fromProjectId: templateId.nullable().optional() });
 export const createMapTemplateSchema = z.object({ title: z.string().trim().min(1, "Titre requis").max(200), fromMapId: templateId.nullable().optional() });
-export const updateMindMapSchema = z.object({ title: title.optional() });
+export const updateMindMapSchema = z.object({ title: title.optional(), icon: z.string().regex(ICON_RE, "Icône invalide").nullable().optional() });
 
 export const createNodeSchema = z.object({
   parentId: shortId,
@@ -136,10 +137,14 @@ export const customValuesPatchSchema = z
   .record(z.string().min(1).max(64), z.string().max(500).nullable())
   .refine((r) => Object.keys(r).length <= 50, "50 champs au plus");
 
+/** Icône : « lucide:<nom> » ou image « /media/… » ; null = icône par défaut. */
+export const iconSchema = z.string().regex(ICON_RE, "Icône invalide").nullable();
+
 export const createProjectSchema = z.object({
   name: title,
   description: longText,
   color,
+  icon: iconSchema.optional(),
   status: projectStatusSchema.optional(),
   startDate: isoDate,
   dueDate: isoDate,
@@ -182,7 +187,8 @@ export const updateActivitySchema = createActivitySchema.partial().extend({
 
 export const createTaskSchema = z.object({
   name: title,
-  description: longText,
+  /** Description riche (HTML, assaini par le serveur) ; texte brut accepté (anciennes données, connecteur). */
+  description: z.string().max(200_000).default(""),
   status: taskStatusSchema.optional(),
   progress: z.number().int().min(0).max(100).optional(),
   priority: taskPrioritySchema.optional(),
@@ -269,7 +275,8 @@ export const updateDocumentSchema = z.object({
 // --- Commentaires ------------------------------------------------------------
 export const createCommentSchema = z.object({
   /** Texte avec mentions `@[Nom]` ou `@[Nom](memberId)`. */
-  body: z.string().trim().min(1, "Commentaire vide").max(10_000),
+  /** HTML (éditeur riche, assaini par le serveur) ou texte brut. */
+  body: z.string().trim().min(1, "Commentaire vide").max(100_000),
   /** Commentaire auquel on répond (fil) ; absent = commentaire racine. */
   parentId: nullableId,
 });

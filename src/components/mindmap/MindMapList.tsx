@@ -6,9 +6,15 @@ import { useRouter } from "next/navigation";
 import { Brain, LogOut, Plus, Share2, Trash2, Users } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindMapSummary } from "@/lib/mindmaps";
-import { Avatar, Badge, Button, EmptyState, InlineEdit, PageHeader, errorMessage, formatDate } from "@/components/ui";
+import { Avatar, Badge, Button, EmptyState, InlineEdit, PageHeader, errorMessage, formatDate, toast } from "@/components/ui";
 import { PinButton } from "@/components/PinButton";
 import { TemplateSelect } from "@/components/templates/TemplatePicker";
+import { SortMenu } from "@/components/SortMenu";
+import { IconButton } from "@/components/icons/IconButton";
+import { saveItemOrder, sortByOrder, sortedIds, useItemOrder } from "@/lib/item-order-store";
+import { moveId } from "@/lib/shared/project-types";
+
+const MAP_DRAG = "application/x-sb-mindmap";
 
 type Filter = "all" | "mine" | "shared";
 const FILTERS: Array<{ id: Filter; label: string }> = [
@@ -20,11 +26,26 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
 /**
  * Liste des cartes : les miennes et celles qu'on m'a partagées (icône de
  * partage, « Partagée par … », droit Lecture / Écriture). Supprimer : mes
- * cartes seulement ; une carte partagée se « quitte ».
+ * cartes seulement ; une carte partagée se « quitte ». Ordre personnel
+ * (`useItemOrder`, aussi celui des épingles du menu) : « Trier » (A → Z, mise
+ * à jour) puis glisser-déposer une carte sur une autre (placée avant elle).
  */
-export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
+export function MindMapList({ initial, order: initialOrder }: { initial: MindMapSummary[]; order?: string[] }) {
   const router = useRouter();
   const [maps, setMaps] = useState(initial);
+  const order = useItemOrder("MINDMAP", initialOrder);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const fail = (e: unknown) => toast(errorMessage(e), "error");
+  const sortAll = (by: "alpha" | "updated") => saveItemOrder("MINDMAP", sortedIds(maps, by, (m) => m.title)).catch(fail);
+  function dropOn(e: React.DragEvent, targetId: string) {
+    const id = e.dataTransfer.getData(MAP_DRAG);
+    setOver(null);
+    setDragging(null);
+    if (!id || id === targetId) return;
+    e.preventDefault();
+    void saveItemOrder("MINDMAP", moveId(sortByOrder(maps, order).map((m) => m.id), id, targetId)).catch(fail);
+  }
   const [filter, setFilter] = useState<Filter>("all");
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -59,6 +80,17 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
     }
   }
 
+  async function setIcon(m: MindMapSummary, icon: string | null) {
+    const previous = maps;
+    setMaps((ms) => ms.map((x) => (x.id === m.id ? { ...x, icon } : x)));
+    try {
+      await api.patch(`/mindmaps/${m.id}`, { icon });
+    } catch (err) {
+      setMaps(previous);
+      toast(errorMessage(err, "Icône non enregistrée."), "error");
+    }
+  }
+
   async function leave(m: MindMapSummary) {
     if (!confirm(`Quitter la carte « ${m.title} » partagée par ${m.owner?.name ?? "son propriétaire"} ? Vous n'y aurez plus accès.`)) return;
     const previous = maps;
@@ -74,7 +106,7 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
   }
 
   const sharedCount = maps.filter((m) => m.access !== "owner").length;
-  const visible = maps.filter((m) => (filter === "all" ? true : filter === "mine" ? m.access === "owner" : m.access !== "owner"));
+  const visible = sortByOrder(maps, order).filter((m) => (filter === "all" ? true : filter === "mine" ? m.access === "owner" : m.access !== "owner"));
 
   async function remove(id: string, t: string) {
     if (!confirm(`Supprimer la carte « ${t} » et tous ses nœuds ?`)) return;
@@ -128,8 +160,9 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
         </p>
       )}
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
       {sharedCount > 0 && (
-        <div role="tablist" aria-label="Filtrer les cartes" className="-mx-1 mb-4 flex gap-1 overflow-x-auto px-1">
+        <div role="tablist" aria-label="Filtrer les cartes" className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1">
           {FILTERS.map((f) => (
             <button
               key={f.id}
@@ -145,6 +178,12 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
           ))}
         </div>
       )}
+      {maps.length > 1 && (
+        <div className="ml-auto">
+          <SortMenu onSort={sortAll} />
+        </div>
+      )}
+      </div>
 
       {visible.length === 0 && maps.length > 0 ? (
         <p className="rounded-2xl border border-dashed border-line-strong px-4 py-6 text-center text-sm text-muted">
@@ -159,10 +198,37 @@ export function MindMapList({ initial }: { initial: MindMapSummary[] }) {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((m) => (
-            <li key={m.id} className="group relative rounded-2xl border border-line bg-surface p-4 transition-shadow hover:shadow-md">
+            <li
+              key={m.id}
+              draggable
+              onDragStart={(e) => {
+                if ((e.target as Element).closest("a,button,input,[contenteditable]")) return;
+                e.dataTransfer.setData(MAP_DRAG, m.id);
+                e.dataTransfer.effectAllowed = "move";
+                setDragging(m.id);
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                setOver(null);
+              }}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes(MAP_DRAG)) return;
+                e.preventDefault();
+                if (over !== m.id) setOver(m.id);
+              }}
+              onDragLeave={() => setOver(null)}
+              onDrop={(e) => dropOn(e, m.id)}
+              className={`group relative cursor-grab rounded-2xl border bg-surface p-4 transition-shadow hover:shadow-md active:cursor-grabbing ${dragging === m.id ? "opacity-50" : ""} ${over === m.id && dragging !== m.id ? "border-brand-500 shadow-[-4px_0_0_0_var(--color-brand-500)]" : "border-line"}`}
+            >
               <div className="mb-3 flex items-start justify-between gap-2">
-                <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-                  <Brain className="h-5 w-5" />
+                <div className="relative shrink-0">
+                  <IconButton
+                    icon={m.icon}
+                    fallback={Brain}
+                    title={m.title}
+                    onChange={m.access === "read" ? undefined : (icon) => setIcon(m, icon)}
+                    boxClassName="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-brand-50 text-brand-600"
+                  />
                   {m.owner && (
                     <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-white ring-2 ring-[var(--color-surface)]" title={`Partagée par ${m.owner.name}`} aria-label={`Partagée par ${m.owner.name}`}>
                       <Users className="h-3 w-3" />

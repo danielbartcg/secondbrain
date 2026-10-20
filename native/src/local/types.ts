@@ -109,6 +109,8 @@ export type Meta = {
   pins: { projects: { id: string; name: string; color: string | null }[]; mindmaps: { id: string; title: string }[] } | null;
   /** Types de projet personnels (dernière valeur connue, pour l'affichage hors ligne). */
   projectTypes?: import("@/lib/shared/project-types").ProjectTypesDto | null;
+  /** Ordre personnel des projets / cartes (dernière valeur connue). */
+  itemOrder?: { PROJECT?: string[]; MINDMAP?: string[] } | null;
 };
 
 /**
@@ -116,7 +118,7 @@ export type Meta = {
  * photos des comptes…). L'incrémenter force un instantané complet au premier
  * démarrage de la nouvelle version, sans changer le protocole.
  */
-export const LOCAL_DATA_VERSION = 2;
+export const LOCAL_DATA_VERSION = 3;
 
 export type SyncStatus = {
   online: boolean;

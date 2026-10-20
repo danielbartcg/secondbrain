@@ -11,6 +11,7 @@ import { mapAccessWhere } from "@/lib/map-access";
 import { MEMBER_INCLUDE, TASK_PEOPLE_SELECT, accessibleTask, checkNode, isMyTask, taskAccessWhere, taskEditWhere, taskHref, toMemberDto, toTaskDto, type MemberDto, type TaskDto } from "@/lib/projects";
 import { sanitizeNotes } from "@/lib/sanitize";
 import { mentionExcerpt, plainMentions } from "@/lib/shared/mentions";
+import { richDescription, richHtml, richText } from "@/lib/rich-text";
 import { NO_PROJECT_LABEL, dayString, resolveMentions } from "@/lib/shared/task-model";
 export { NO_PROJECT_LABEL, dayString, resolveMentions };
 
@@ -117,8 +118,8 @@ export async function getTaskHistory(userId: string, taskId: string): Promise<Ta
   return listTaskEventsRaw(taskId);
 }
 
-/** Extrait de commentaire pour la piste d'audit : mentions structurées conservées (affichées « @Nom »). */
-const commentExcerpt = (s: string, n = 120) => mentionExcerpt(s, n);
+/** Extrait de commentaire pour la piste d'audit : texte, mentions structurées conservées (affichées « @Nom »). */
+const commentExcerpt = (s: string, n = 120) => mentionExcerpt(richText(s, 50_000), n);
 
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDto> {
   const canEdit = (await prisma.task.count({ where: { id: taskId, ...(await taskEditWhere(userId)) } })) > 0;
@@ -157,7 +158,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
       authorId: c.authorId,
       authorName: c.author.name,
       authorAvatarUrl: c.author.avatarUrl,
-      body: c.body,
+      body: richHtml(c.body),
       mentions: c.mentions,
       createdAt: c.createdAt.toISOString(),
     })),
@@ -182,7 +183,10 @@ export async function addComment(userId: string, taskId: string, body: string, p
   }
   // Seules les mentions de membres du projet sont retenues ; `@[Nom]` est résolu par nom.
   const members = t.projectId ? await prisma.projectMember.findMany({ where: { projectId: t.projectId }, select: { id: true, name: true, userId: true } }) : [];
-  const resolved = resolveMentions(body, members);
+  // Corps riche (HTML assaini ; texte brut converti) ; vide après assainissement → refusé.
+  const html = richDescription(body) ?? "";
+  if (!html) throw badRequest("Commentaire vide.");
+  const resolved = resolveMentions(html, members);
   const author = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
 
   await prisma.$transaction(async (tx) => {
@@ -202,7 +206,7 @@ export async function addComment(userId: string, taskId: string, body: string, p
     ]);
 
     const href = `${taskHref(taskId)}#comment-${comment.id}`;
-    const plain = plainMentions(body);
+    const plain = plainMentions(richText(resolved.body, 2000));
     const excerpt = plain.length > 140 ? plain.slice(0, 137) + "…" : plain;
     const common = { actorId: userId, actorName: author.name, href, taskId, projectId: t.projectId };
     const items = [];

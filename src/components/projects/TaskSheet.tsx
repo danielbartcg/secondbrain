@@ -1,5 +1,9 @@
 "use client";
 
+import { RichDescription } from "@/components/RichDescription";
+import { RichTextEditor } from "@/components/RichTextEditor";
+import { editorHtml } from "@/lib/shared/rich-text";
+import { hasHtmlContent } from "@/lib/shared/project-model";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -35,7 +39,6 @@ import {
 import { PrerequisitesField } from "@/components/projects/PrerequisitesField";
 import { MemberMultiSelect } from "@/components/projects/MemberMultiSelect";
 import { TaskHistory } from "@/components/projects/TaskHistory";
-import { EmojiButton } from "@/components/EmojiPicker";
 
 /**
  * Fiche tâche : champs mis en forme (statut, avancement, priorité, complexité,
@@ -304,14 +307,7 @@ export function TaskSheet({ initial, currentUserId }: { initial: TaskDetailDto; 
 
           <div className="mt-6">
             <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Description</h2>
-            <InlineEdit
-              value={task.description}
-              onSave={(description) => patch({ description })}
-              as="div"
-              multiline
-              placeholder="Décrire la tâche, le résultat attendu, les points d'attention…"
-              className="-mx-1.5 block min-h-12 whitespace-pre-wrap text-sm leading-relaxed text-ink-2"
-            />
+            <RichDescription value={task.description} documentKey={task.id} editable={task.canEdit} onSave={(description) => patch({ description })} />
           </div>
 
           {/* Liens [[…]] entrants */}
@@ -579,31 +575,21 @@ function WorkSessions({ task, onChange }: { task: TaskDetailDto; onChange: (sess
 
 // --- Commentaires et mentions ------------------------------------------------
 
-/** `@[Nom](memberId)` (forme stockée) ou `@[Nom]` (forme saisie). */
-const MENTION_RE = /@\[([^\]]+)\](?:\(([A-Za-z0-9_-]+)\))?/g;
 
-/** Rend un corps de commentaire en surlignant les mentions. */
+const escapeText = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * Corps d'un commentaire : HTML assaini (serveur / modèle local ; anciens
+ * commentaires en texte brut convertis) dont les mentions `@[Nom](id)`
+ * deviennent des pastilles « @Nom ».
+ */
 function CommentBody({ body, members }: { body: string; members: MemberDto[] }) {
-  const parts: React.ReactNode[] = [];
-  let last = 0;
-  for (const m of body.matchAll(MENTION_RE)) {
-    const idx = m.index ?? 0;
-    if (idx > last) parts.push(body.slice(last, idx));
-    const member = members.find((x) => x.id === m[2]) ?? members.find((x) => x.name.toLowerCase() === m[1].toLowerCase());
-    parts.push(
-      member ? (
-        <span key={idx} className="rounded bg-brand-50 px-1 font-medium text-brand-700" title={member.role ?? undefined}>
-          @{member.name}
-        </span>
-      ) : (
-        // Mention sans membre correspondant : texte simple, pas de lien.
-        <span key={idx}>@{m[1]}</span>
-      ),
-    );
-    last = idx + m[0].length;
-  }
-  if (last < body.length) parts.push(body.slice(last));
-  return <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{parts}</p>;
+  const html = editorHtml(body).replace(/@\[([^\]<\n]+)\](?:\(([A-Za-z0-9_-]+)\))?/g, (_w, name: string, id?: string) => {
+    const member = members.find((x) => x.id === id) ?? members.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    return member ? `<span class="rounded bg-brand-50 px-1 font-medium text-brand-700">@${escapeText(member.name)}</span>` : `@${name}`;
+  });
+  // Contenu assaini par le serveur (sanitizeNotes, richHtml) et par le modèle local de l'application.
+  return <div className="prose prose-sm max-w-none text-ink-2 [&_p]:my-1" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 type CommentTree = TaskCommentDto & { replies: CommentTree[] };
@@ -619,7 +605,7 @@ function buildTree(comments: TaskCommentDto[]): CommentTree[] {
   return roots;
 }
 
-/** Zone de saisie avec mentions « @ » ; sert au commentaire racine comme aux réponses. */
+/** Zone de saisie riche avec mentions « @ » ; sert au commentaire racine comme aux réponses. */
 function CommentComposer({
   task,
   parentId,
@@ -637,68 +623,23 @@ function CommentComposer({
 }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
-  const [highlight, setHighlight] = useState(0);
-
-  const candidates = useMemo(() => {
-    if (!mention) return [];
-    const q = mention.query.toLowerCase();
-    return (task.project?.members ?? []).filter((m) => m.name.toLowerCase().includes(q)).slice(0, 6);
-  }, [mention, (task.project?.members ?? [])]);
-
-  /** Détecte un « @mot » en cours de saisie avant le curseur. */
-  function detectMention(value: string, caret: number) {
-    const before = value.slice(0, caret);
-    const m = /(^|\s)@([^\s@\[\]]*)$/.exec(before);
-    if (m) {
-      setMention({ start: caret - m[2].length - 1, query: m[2] });
-      setHighlight(0);
-    } else setMention(null);
-  }
-
-  function insertMention(member: MemberDto) {
-    if (!mention) return;
-    const el = textareaRef.current;
-    const caret = el?.selectionStart ?? body.length;
-    // Dans la zone de saisie, seule la forme lisible `@[Nom]` apparaît ;
-    // le serveur résout l'identifiant du membre à l'envoi.
-    const token = `@[${member.name}] `;
-    const next = body.slice(0, mention.start) + token + body.slice(caret);
-    setBody(next);
-    setMention(null);
-    requestAnimationFrame(() => {
-      if (el) {
-        el.focus();
-        const pos = mention.start + token.length;
-        el.setSelectionRange(pos, pos);
-      }
-    });
-  }
-
-  /** Emoji inséré à la position du curseur. */
-  function insertEmoji(emoji: string) {
-    const el = textareaRef.current;
-    const start = el?.selectionStart ?? body.length;
-    const end = el?.selectionEnd ?? body.length;
-    setBody(body.slice(0, start) + emoji + body.slice(end));
-    requestAnimationFrame(() => {
-      if (el) {
-        el.focus();
-        el.setSelectionRange(start + emoji.length, start + emoji.length);
-      }
-    });
-  }
+  // Change à chaque envoi : l'éditeur repart vide.
+  const [round, setRound] = useState(0);
+  const bodyRef = useRef(body);
+  bodyRef.current = body;
+  const members = task.project?.members ?? [];
+  const empty = !hasHtmlContent(body);
 
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
-    const text = body.trim();
-    if (!text) return;
+    const html = bodyRef.current;
+    if (!hasHtmlContent(html) || busy) return;
     setBusy(true);
     try {
-      const { task: updated } = await api.post<TaskResp>(`/tasks/${task.id}/comments`, { body: text, parentId: parentId ?? null });
+      const { task: updated } = await api.post<TaskResp>(`/tasks/${task.id}/comments`, { body: html, parentId: parentId ?? null });
       onPosted(updated);
       setBody("");
+      setRound((r) => r + 1);
     } catch (err) {
       toast(errorMessage(err, "Envoi impossible."), "error");
     } finally {
@@ -708,75 +649,24 @@ function CommentComposer({
 
   return (
     <form onSubmit={submit} className="relative">
-      <textarea
-        ref={textareaRef}
+      <RichTextEditor
+        initialHtml=""
+        documentKey={`${task.id}:${parentId ?? "root"}:${round}`}
+        variant="compact"
+        minHeight={parentId ? 48 : 72}
         autoFocus={autoFocus}
-        value={body}
-        rows={parentId ? 2 : 3}
+        mentions={members.map((m) => ({ id: m.id, name: m.name, color: m.color, avatarUrl: m.avatarUrl }))}
         placeholder={placeholder ?? "Écrire un commentaire… « @ » pour mentionner quelqu'un, Ctrl+Entrée pour envoyer."}
-        onChange={(e) => {
-          setBody(e.target.value);
-          detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
-        }}
-        onKeyDown={(e) => {
-          if (mention && candidates.length > 0) {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setHighlight((h) => (h + 1) % candidates.length);
-              return;
-            }
-            if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setHighlight((h) => (h - 1 + candidates.length) % candidates.length);
-              return;
-            }
-            if (e.key === "Enter" || e.key === "Tab") {
-              e.preventDefault();
-              insertMention(candidates[highlight]);
-              return;
-            }
-            if (e.key === "Escape") {
-              setMention(null);
-              return;
-            }
-          }
-          if (e.key === "Escape" && onCancel) onCancel();
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            void submit();
-          }
-        }}
-        onClick={(e) => detectMention(body, (e.target as HTMLTextAreaElement).selectionStart ?? body.length)}
-        className="w-full resize-y rounded-xl border border-line-strong bg-surface px-4 py-3 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm"
+        onChange={setBody}
+        onSubmit={() => void submit()}
       />
-      {mention && candidates.length > 0 && (
-        <ul className="absolute bottom-full left-0 z-10 mb-1 w-72 overflow-hidden rounded-xl border border-line bg-surface shadow-lg">
-          {candidates.map((m, i) => (
-            <li key={m.id}>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => insertMention(m)}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${i === highlight ? "bg-brand-50" : "hover:bg-surface-2"}`}
-              >
-                <Avatar id={m.id} name={m.name} color={m.color} src={m.avatarUrl} size={24} />
-                <span className="font-medium">{m.name}</span>
-                {m.role && <span className="text-xs text-muted">{m.role}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
       <div className="mt-2 flex items-center justify-end gap-2">
-        <div className="mr-auto">
-          <EmojiButton onSelect={insertEmoji} />
-        </div>
         {onCancel && (
           <Button type="button" variant="ghost" size={parentId ? "sm" : "md"} onClick={onCancel}>
             Annuler
           </Button>
         )}
-        <Button type="submit" size={parentId ? "sm" : "md"} disabled={busy || !body.trim()}>
+        <Button type="submit" size={parentId ? "sm" : "md"} disabled={busy || empty}>
           <Send className="h-4 w-4" /> {parentId ? "Répondre" : "Envoyer"}
         </Button>
       </div>

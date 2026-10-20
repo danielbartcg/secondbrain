@@ -75,6 +75,8 @@ model User {
   journalEntries       JournalEntry[]
   projectTypes         ProjectType[]
   projectTypeLinks     ProjectTypeLink[]
+  itemOrders           ItemOrder[]
+  customIcons          UserIcon[]
 
   @@index([managerId])
 }
@@ -104,6 +106,8 @@ model MindMap {
   ownerId    String
   owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title      String
+  /// Icône : « lucide:<nom> » ou « /media/… » ; null = icône par défaut.
+  icon       String?
   /// Carte type (modèle, Administration → Modèles).
   isTemplate Boolean  @default(false)
   createdAt  DateTime @default(now())
@@ -245,6 +249,8 @@ model Project {
   ownerId      String
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name         String
+  /// Icône : « lucide:<nom> » (bibliothèque) ou « /media/… » (icône personnalisée) ; null = icône par défaut.
+  icon         String?
   description  String        @default("")
   /// Notes riches (HTML assaini) prises depuis « Prise de notes ».
   notes        String        @default("")
@@ -1041,4 +1047,28 @@ model ProjectTypeLink {
 
   @@id([userId, projectId])
   @@index([typeId])
+}
+
+/// Ordre personnel des projets et des cartes (listes, épingles du menu) :
+/// rang par élément ; les éléments sans rang suivent, du plus récent au plus ancien.
+model ItemOrder {
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind     PinKind
+  targetId String
+  rank     Int
+
+  @@id([userId, kind, targetId])
+}
+
+/// Icônes personnalisées téléversées par un utilisateur (réutilisables sur ses projets et cartes).
+model UserIcon {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Image téléversée (/media/…, allowlist des images).
+  url       String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, url])
 }

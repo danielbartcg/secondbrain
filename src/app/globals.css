@@ -317,9 +317,16 @@ a[data-ref]:hover {
   border-style: dashed;
   color: var(--color-muted);
 }
-/* Le titre garde toujours quelques caractères visibles, même à côté de pastilles. */
+/* Le titre garde toujours quelques caractères visibles, même à côté de pastilles ;
+   deux lignes au plus (points de suspension au-delà). */
 .mind-node .mind-title {
   min-width: 3em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 .mind-node.is-closed .mind-title {
   text-decoration: line-through;

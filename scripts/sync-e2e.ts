@@ -177,7 +177,7 @@ async function main() {
     check("PATCH web ok", r.status === 200, r);
     const inc = await A.sync();
     const ch = inc.changes.find((c) => c.entity === "Task" && c.id === taskId);
-    check("A reçoit la modification au curseur suivant", !!ch && ch.data?.description === "écrit depuis le web" && A.cursor > before, inc);
+    check("A reçoit la modification au curseur suivant", !!ch && ch.data?.description === "<p>écrit depuis le web</p>" && A.cursor > before, inc);
     check("seule la version du champ modifié avance", (ch?.seqs?.description ?? 0) > (ch?.seqs?.name ?? 0), ch?.seqs);
   }
 

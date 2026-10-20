@@ -1,5 +1,6 @@
 "use client";
 
+import { IconButton } from "@/components/icons/IconButton";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -19,7 +20,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, History, LayoutTemplate, ListTodo, Lock, PanelRightOpen, Plus, Share2, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronsDownUp, ChevronsUpDown, Circle, CornerDownRight, Eye, EyeOff, Focus, GitBranchPlus, History, LayoutTemplate, ListTodo, Lock, PanelRightOpen, Plus, Share2, Trash2, Users, X, Brain } from "lucide-react";
 import type { NodeStatus } from "@prisma/client";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindNodeDto } from "@/lib/mindmaps";
@@ -146,7 +147,7 @@ const MindNodeView = memo(function MindNodeView({ id, data, selected }: NodeProp
       ) : (
         <div className="flex items-center gap-1.5">
           {watch && <Eye className="h-3.5 w-3.5 shrink-0 text-warn" />}
-          <span className="mind-title truncate" title={data.title}>
+          <span className="mind-title" title={data.title}>
             {data.title}
           </span>
           {data.hasNotes && <span className="text-[10px] text-muted" title="Contient des notes">📝</span>}
@@ -496,6 +497,15 @@ function Editor({ initial }: { initial: MindMapDto }) {
     [map.id, map.rootId, patchLocal, run, readOnly],
   );
 
+  const setMapIcon = useCallback(
+    (icon: string | null) => {
+      if (readOnly) return;
+      setMap((m) => ({ ...m, icon }));
+      void run(() => api.patch(`/mindmaps/${map.id}`, { icon }));
+    },
+    [map.id, run, readOnly],
+  );
+
   const expandAll = useCallback(
     (collapsed: boolean) => {
       const targets = nodes.filter(
@@ -742,6 +752,14 @@ function Editor({ initial }: { initial: MindMapDto }) {
         <Link href={map.isTemplate ? "/admin/templates" : "/mindmaps"} className="shrink-0 rounded-lg p-1.5 text-ink-2 hover:bg-surface-2" title={map.isTemplate ? "Retour aux modèles" : "Retour aux cartes"} aria-label={map.isTemplate ? "Retour aux modèles" : "Retour aux cartes"}>
           <ArrowLeft className="h-5 w-5" />
         </Link>
+        <IconButton
+          icon={map.icon}
+          fallback={Brain}
+          title={map.title}
+          onChange={readOnly ? undefined : setMapIcon}
+          boxClassName="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-brand-50 text-brand-600"
+          iconClassName="h-4.5 w-4.5"
+        />
         {readOnly ? (
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold sm:text-lg" title={map.title}>
             {map.title}

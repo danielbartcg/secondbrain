@@ -487,7 +487,7 @@ async function applyUpdate(userId: string, entity: SyncEntity, id: string, field
   const rest = drop(fields, ["notes"]);
   switch (entity) {
     case "MindMap":
-      await updateMindMap(userId, id, updateMindMapSchema.parse(take(rest, ["title"])));
+      await updateMindMap(userId, id, updateMindMapSchema.parse(take(rest, ["title", "icon"])));
       return;
     case "MindNode": {
       const mapId = String(current.mapId);

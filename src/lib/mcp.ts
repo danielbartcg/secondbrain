@@ -23,6 +23,7 @@ import { QUERY_ENTITIES, queryObjects, type QueryArgs } from "@/lib/mcp-query";
 import { ACTIVITY_PRESETS, addDays, parisYmd } from "@/lib/shared/activity-period";
 import { getJournalReport, listJournalEntries } from "@/lib/journal";
 import { plainMentions } from "@/lib/shared/mentions";
+import { richText } from "@/lib/rich-text";
 import { JOURNAL_BLOCKS, JOURNAL_BLOCK_LABEL, formatJournalDay, isWrittenBlock, resolveJournalBlock, type JournalBlockKey, type JournalWrittenBlock } from "@/lib/shared/journal";
 
 /**
@@ -107,7 +108,7 @@ function taskForAi(t: TaskDto, members: ProjectDto["members"]) {
     assignee: nameOf(members, t.assigneeId),
     supervisor: nameOf(members, t.supervisorId),
     contributors: t.contributorIds.map((id) => nameOf(members, id)).filter(Boolean),
-    description: t.description || undefined,
+    description: richText(t.description) || undefined,
     comments: t.commentCount,
     hasNotes: t.hasNotes,
     createdAt: t.createdAt,
@@ -630,9 +631,9 @@ export const TOOLS: Tool[] = [
         assignee: t.assignee?.name ?? null,
         supervisor: t.supervisor?.name ?? null,
         contributors: t.contributors.map((c) => c.name),
-        description: t.description || undefined,
+        description: richText(t.description) || undefined,
         notes: text(t.notes) || undefined,
-        comments: t.comments.map((c) => ({ author: c.authorName, date: c.createdAt, text: c.body, replies: (c as { replies?: { authorName: string; createdAt: string; body: string }[] }).replies?.map((r) => ({ author: r.authorName, date: r.createdAt, text: r.body })) })),
+        comments: t.comments.map((c) => ({ author: c.authorName, date: c.createdAt, text: richText(c.body), replies: (c as { replies?: { authorName: string; createdAt: string; body: string }[] }).replies?.map((r) => ({ author: r.authorName, date: r.createdAt, text: richText(r.body) })) })),
         workSessions: t.workSessions.map((s) => ({ date: s.date, user: s.userName })),
         mindMapNodes: t.nodes,
       };

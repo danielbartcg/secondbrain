@@ -1,8 +1,9 @@
 "use client";
 
+import { IconButton } from "@/components/icons/IconButton";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, Presentation, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users, LayoutTemplate, History } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarDays, CalendarRange, FileSpreadsheet, Presentation, ShieldAlert, FileText, LayoutDashboard, ListTree, Package, SquareKanban, Users, LayoutTemplate, History, FolderKanban } from "lucide-react";
 import { api } from "@/lib/client";
 import type { ProjectDto } from "@/lib/projects";
 import { InlineEdit, ProgressBar, errorMessage, toInputDate, toast } from "@/components/ui";
@@ -178,7 +179,18 @@ export function ProjectWorkspace({ initial, currentUserId }: { initial: ProjectD
           </select>
           )}
         </div>
-        <InlineEdit value={project.name} onSave={(name) => patchProject({ name })} as="h1" className="-mx-1.5 mt-2 block text-2xl font-semibold tracking-tight" />
+        <div className="mt-2 flex items-center gap-3">
+          <IconButton
+            icon={project.icon}
+            fallback={FolderKanban}
+            title={project.name}
+            onChange={(icon) => patchProject({ icon })}
+            boxClassName="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl text-white"
+            iconClassName="h-6 w-6"
+            style={{ backgroundColor: project.color ?? "var(--color-brand-600)" }}
+          />
+          <InlineEdit value={project.name} onSave={(name) => patchProject({ name })} as="h1" className="-mx-1.5 block min-w-0 flex-1 text-2xl font-semibold tracking-tight" />
+        </div>
         <InlineEdit
           value={project.description}
           onSave={(description) => patchProject({ description })}

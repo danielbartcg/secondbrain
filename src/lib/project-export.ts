@@ -1,4 +1,5 @@
 import "server-only";
+import { richText } from "@/lib/rich-text";
 import { fileTypeLabel } from "@/lib/shared/file-types";
 import { allCustomFields } from "@/lib/custom-fields";
 import { customEntries } from "@/lib/shared/custom-fields";
@@ -915,7 +916,7 @@ export async function renderProjectWorkbook(data: ProjectExportData): Promise<{ 
         prereq: (t.prerequisiteIds ?? []).map((id) => `${taskRef.get(id) ?? ""} ${taskName.get(id) ?? ""}`.trim()).join(", "),
         risks: (risksByTask.get(t.id) ?? []).join(", "),
         comments: t.commentCount,
-        description: t.description,
+        description: richText(t.description, 30_000),
         notes: text(notes.get(t.id)),
         updated: new Date(t.updatedAt),
       };

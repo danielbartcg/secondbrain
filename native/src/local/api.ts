@@ -156,6 +156,10 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
       for (const root of store.where("MindNode", (n) => n.mapId === mapId && !n.parentId)) store.patch("MindNode", root.id, { title: input.title });
       enqueue("MindMap", mapId, "update", { title: input.title });
     }
+    if (input.icon !== undefined) {
+      store.patch("MindMap", mapId, { icon: input.icon });
+      enqueue("MindMap", mapId, "update", { icon: input.icon });
+    }
     return mapResp(mapId);
   }
 
@@ -301,7 +305,7 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
     const input = parse(updateProjectSchema, body);
     const p = must("Project", pid, "Projet");
     const custom = input.customFields ? customValues(readCustomValues(p.customFields), input.customFields) : null;
-    const fields = defined({ name: input.name, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate, customFields: custom?.send });
+    const fields = defined({ name: input.name, icon: input.icon, description: input.description, color: input.color, status: input.status, startDate: input.startDate, dueDate: input.dueDate, customFields: custom?.send });
     store.patch("Project", pid, { ...fields, ...defined({ startDate: toDay(input.startDate), dueDate: toDay(input.dueDate), customFields: custom?.values }) });
     if (Object.keys(fields).length) enqueue("Project", pid, "update", fields);
     return projectResp(pid);
@@ -815,6 +819,30 @@ export function createLocalApi(store: Store, sync: SyncEngine, model: LocalModel
         return r;
       } catch (e) {
         if (e instanceof ApiClientError && e.status === 503 && store.meta.projectTypes) return { projectTypes: store.meta.projectTypes };
+        throw e;
+      }
+    }],
+    // Modifications des types (relayées) : la réponse met aussi le cache à jour.
+    ...(["POST", "PUT", "PATCH", "DELETE"] as const).map(
+      (method): [string, RegExp, Handler] => [
+        method,
+        /^\/me\/project-types(\/[^?]*)?$/,
+        async ({ params, body }) => {
+          const r = (await online(method, `/me/project-types${params[0] ?? ""}`, body)) as { projectTypes: NonNullable<typeof store.meta.projectTypes> };
+          if (r?.projectTypes) store.setMeta("projectTypes", r.projectTypes);
+          return r;
+        },
+      ],
+    ),
+    // Ordre personnel des projets / cartes : serveur, dernière valeur connue hors ligne.
+    ["GET", /^\/me\/order$/, async ({ query }) => {
+      const kind = query.get("kind") === "MINDMAP" ? "MINDMAP" : "PROJECT";
+      try {
+        const r = (await online("GET", `/me/order?kind=${kind}`)) as { kind: string; ids: string[] };
+        store.setMeta("itemOrder", { ...(store.meta.itemOrder ?? {}), [kind]: r.ids });
+        return r;
+      } catch (e) {
+        if (e instanceof ApiClientError && e.status === 503 && store.meta.itemOrder?.[kind]) return { kind, ids: store.meta.itemOrder[kind] };
         throw e;
       }
     }],

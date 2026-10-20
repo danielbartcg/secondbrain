@@ -15,6 +15,7 @@ import {
 } from "@/lib/shared/project-model";
 import { NO_PROJECT_LABEL, dayString } from "@/lib/shared/task-model";
 import { sanitizeNotes } from "@/lib/sanitize";
+import { richHtml } from "@/lib/rich-text";
 import type { MindMapDto, MindMapSharing, MindMapSummary, MindNodeDto } from "@/lib/mindmaps";
 import { mapAccessOf, type MapAccess } from "@/lib/shared/map-access";
 import type { NodeTaskDto, NodeTasksResult, OrganizerDto, OrganizerTask, TaskCommentDto, TaskDetailDto, WorkSessionDto } from "@/lib/tasks";
@@ -173,7 +174,7 @@ export class LocalModel {
     const comments: TaskCommentDto[] = this.store
       .where("TaskComment", (c) => c.taskId === taskId)
       .sort(byCreated)
-      .map((c) => ({ id: c.id, parentId: c.parentId ?? null, authorId: c.authorId, authorName: c.authorName ?? this.userName(c.authorId), authorAvatarUrl: c.authorAvatarUrl !== undefined ? c.authorAvatarUrl : this.userAvatar(c.authorId), body: c.body, mentions: c.mentions ?? [], createdAt: c.createdAt }));
+      .map((c) => ({ id: c.id, parentId: c.parentId ?? null, authorId: c.authorId, authorName: c.authorName ?? this.userName(c.authorId), authorAvatarUrl: c.authorAvatarUrl !== undefined ? c.authorAvatarUrl : this.userAvatar(c.authorId), body: richHtml(c.body), mentions: c.mentions ?? [], createdAt: c.createdAt }));
     const nodes = this.store
       .where("MindNodeTask", (l) => l.taskId === taskId)
       .map((l) => this.store.get("MindNode", l.nodeId))
@@ -369,7 +370,7 @@ export class LocalModel {
     return this.store
       .all("MindMap")
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
-      .map((m) => ({ id: m.id, title: m.title, isTemplate: false, nodeCount: this.store.where("MindNode", (n) => n.mapId === m.id).length, createdAt: m.createdAt, updatedAt: m.updatedAt, ...this.mapSharing(m) }));
+      .map((m) => ({ id: m.id, title: m.title, icon: m.icon ?? null, isTemplate: false, nodeCount: this.store.where("MindNode", (n) => n.mapId === m.id).length, createdAt: m.createdAt, updatedAt: m.updatedAt, ...this.mapSharing(m) }));
   }
 
   mindmap(mapId: string): MindMapDto | null {
@@ -378,7 +379,7 @@ export class LocalModel {
     const nodes = this.store.where("MindNode", (n) => n.mapId === mapId).sort(byOrder);
     const root = nodes.find((n) => !n.parentId);
     if (!root) return null;
-    return { id: m.id, title: m.title, isTemplate: false, createdAt: m.createdAt, updatedAt: m.updatedAt, rootId: root.id, nodes: nodes.map((n) => this.nodeDto(n)), ...this.mapSharing(m) };
+    return { id: m.id, title: m.title, icon: m.icon ?? null, isTemplate: false, createdAt: m.createdAt, updatedAt: m.updatedAt, rootId: root.id, nodes: nodes.map((n) => this.nodeDto(n)), ...this.mapSharing(m) };
   }
 
   nodeTasks(nodeId: string): NodeTasksResult {
@@ -398,6 +399,30 @@ export class LocalModel {
   // --- Prise de notes (même arborescence que src/lib/notes.ts) ------------------------------
   private taskItem(t: Row): TreeItem {
     return { ref: `task:${t.id}`, kind: "task", id: t.id, title: t.name, hint: t.status === "DONE" ? "terminée" : t.status === "CLOSED" ? "clôturée" : t.status === "IN_PROGRESS" ? "en cours" : undefined, hasChildren: false, hasNotes: hasHtmlContent(t.notes ?? "") };
+  }
+
+  /** Type de projet personnel d'un projet (dernière valeur connue), null sinon. */
+  private projectTypeOf(projectId: string): string | null {
+    const pt = this.store.meta.projectTypes;
+    const t = pt?.assignments[projectId];
+    return t && pt!.types.some((x) => x.id === t) ? t : null;
+  }
+
+  /** Projets de l'arborescence « Prise de notes » (plus récents d'abord). */
+  private projectItems(projects: ReturnType<Store["all"]>): TreeItem[] {
+    return [...projects]
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map((p) => ({
+        ref: `project:${p.id}`,
+        kind: "project" as const,
+        id: p.id,
+        title: p.name,
+        hint: p.status === "ARCHIVED" ? "archivé" : p.status === "DONE" ? "terminé" : p.status === "ON_HOLD" ? "en pause" : undefined,
+        color: p.color ?? null,
+        icon: p.icon ?? null,
+        hasChildren: this.store.where("Stage", (s) => s.projectId === p.id).length + this.store.where("Task", (t) => t.projectId === p.id).length > 0,
+        hasNotes: hasHtmlContent(p.notes ?? ""),
+      }));
   }
 
   private nodeChildren(nodeId: string): TreeItem[] {
@@ -424,28 +449,27 @@ export class LocalModel {
               const nodes = this.store.where("MindNode", (n) => n.mapId === m.id);
               const root = nodes.find((n) => !n.parentId);
               const shared = m.ownerId !== this.store.meta.user?.id ? ` · partagée par ${m.ownerName ?? this.userName(m.ownerId)}` : "";
-              return { ref: `mindmap:${m.id}`, kind: "mindmap" as const, id: m.id, title: m.title, hint: `${nodes.length} nœud${nodes.length > 1 ? "s" : ""}${shared}`, hasChildren: nodes.length > 1, hasNotes: hasHtmlContent(root?.notes ?? "") };
+              return { ref: `mindmap:${m.id}`, kind: "mindmap" as const, id: m.id, title: m.title, icon: m.icon ?? null, hint: `${nodes.length} nœud${nodes.length > 1 ? "s" : ""}${shared}`, hasChildren: nodes.length > 1, hasNotes: hasHtmlContent(root?.notes ?? "") };
             });
         }
         if (id === "projects") {
           const orphans = this.store.where("Task", (t) => !t.projectId && t.ownerId === this.me.id).length;
-          const items: TreeItem[] = this.store
-            .all("Project")
-            .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
-            .map((p) => ({
-              ref: `project:${p.id}`,
-              kind: "project" as const,
-              id: p.id,
-              title: p.name,
-              hint: p.status === "ARCHIVED" ? "archivé" : p.status === "DONE" ? "terminé" : p.status === "ON_HOLD" ? "en pause" : undefined,
-              color: p.color ?? null,
-              hasChildren: this.store.where("Stage", (s) => s.projectId === p.id).length + this.store.where("Task", (t) => t.projectId === p.id).length > 0,
-              hasNotes: hasHtmlContent(p.notes ?? ""),
-            }));
+          // Types de projet (dernière valeur connue) d'abord, puis les projets sans type.
+          const all = this.store.all("Project");
+          const types = this.store.meta.projectTypes?.types ?? [];
+          const items: TreeItem[] = [
+            ...types.map((t): TreeItem => {
+              const n = all.filter((p) => this.projectTypeOf(p.id) === t.id).length;
+              return { ref: `ptype:${t.id}`, kind: "ptype", id: t.id, title: t.name, hint: `${n} projet${n > 1 ? "s" : ""}`, hasChildren: n > 0, hasNotes: false };
+            }),
+            ...this.projectItems(all.filter((p) => !this.projectTypeOf(p.id))),
+          ];
           items.push({ ref: "section:orphans", kind: "section", id: "orphans", title: NO_PROJECT_LABEL, hint: `${orphans} tâche${orphans > 1 ? "s" : ""}`, hasChildren: orphans > 0, hasNotes: false });
           return items;
         }
         return this.store.where("Task", (t) => !t.projectId && t.ownerId === this.me.id).sort(byOrder).map((t) => this.taskItem(t));
+      case "ptype":
+        return this.projectItems(this.store.all("Project").filter((p) => this.projectTypeOf(p.id) === id));
       case "mindmap": {
         const root = this.store.where("MindNode", (n) => n.mapId === id && !n.parentId)[0];
         return root ? this.nodeChildren(root.id) : [];
@@ -486,6 +510,10 @@ export class LocalModel {
     switch (kind) {
       case "root":
         return { ...base, title: "Prise de notes", breadcrumb: [], href: null, notes: "", editable: false, updatedAt: null };
+      case "ptype": {
+        const t = this.store.meta.projectTypes?.types.find((x) => x.id === id);
+        return t ? { ...base, title: t.name, breadcrumb: [crumbProjects], href: "/projects", notes: "", editable: false, updatedAt: null } : null;
+      }
       case "section":
         return { ...base, title: SECTIONS[id] ?? id, breadcrumb: id === "orphans" ? [crumbProjects] : [], href: id === "mindmaps" ? "/mindmaps" : id === "projects" ? "/projects" : "/projects/sans-projet", notes: "", editable: false, updatedAt: null };
       case "mindmap": {

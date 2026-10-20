@@ -168,6 +168,8 @@ sont calculés à la lecture (pistes d'audit, `updatedAt`).
 
 | Modèle | Champs | Notes |
 | --- | --- | --- |
+| `ItemOrder` | `userId` + `kind` (`PinKind`) + `targetId` (clé), `rank` | ordre personnel des projets / cartes (listes, épingles) ; remplacé en bloc ; éléments inaccessibles ignorés ; migration `20261020090000_icons_item_order` ; non synchronisé |
+| `UserIcon` | `id`, `userId`, `url` (`/media/…` image ; unique par utilisateur), `createdAt` | icônes personnalisées importées (200 max) ; non synchronisé |
 | `Pin` | `userId` + `kind` (`PROJECT` · `MINDMAP`) + `targetId` (clé), `createdAt` | projet accessible ou carte accessible — possédée ou partagée (vérifié à l'épinglage ; supprimée quand le partage est retiré ou quitté) ; épingles orphelines ignorées et purgées à la lecture ; 30 max par utilisateur (la plus ancienne cède) ; non synchronisé |
 
 ## Messagerie
@@ -219,3 +221,10 @@ Développement : `npx prisma migrate dev`. Production : `npm run prod:deploy`
 exécute `prisma migrate deploy` dans le conteneur `tools` **avant** de
 démarrer la nouvelle version. Une migration de données s'écrit avec
 `prisma migrate dev --create-only` puis en éditant le SQL généré.
+
+`Project.icon` et `MindMap.icon` (`String?`, migration
+`20261020090000_icons_item_order`) : « lucide:<nom> » ou « /media/… » ; null
+= icône par défaut (synchronisés, `LOCAL_DATA_VERSION` = 3). La description
+des tâches (`Task.description`) et le corps des commentaires
+(`TaskComment.body`) sont désormais en HTML assaini (anciennes valeurs en
+texte brut converties à la lecture).

@@ -256,6 +256,14 @@ connexion ; l'application ajoute synchro, conflits et mises à jour.
   (`native/src/local/types.ts`) : l'incrémenter force un instantané complet au
   premier démarrage d'une version qui ajoute de tels champs, sans changer le
   protocole.
+- **Icônes, ordre personnel, texte riche** (20/10/2026) : colonnes `icon` sur
+  `Project` et `MindMap` (synchronisées, modifiables hors ligne ;
+  `LOCAL_DATA_VERSION` = 3 pour recharger les lignes existantes) ; ordre
+  personnel (`/me/order`) et types de projet relayés en ligne avec dernière
+  valeur en cache (`meta.itemOrder`, `meta.projectTypes`, mis à jour aussi
+  après chaque modification) ; description et commentaires en HTML, assainis
+  à la lecture par le modèle local (`richHtml`). Bouton « Actualiser » :
+  synchronisation puis réaffichage.
 - **Mêmes règles locales** : détacher une tâche de son projet réservé à son
   créateur ou au propriétaire (403) ; supprimer une étape ou une activité
   retire ses tâches des prérequis (aussi corrigé côté serveur).

@@ -14,6 +14,7 @@ import TableCell from "@tiptap/extension-table-cell";
 import { uploadImage } from "@/lib/client";
 import { EmojiButton } from "@/components/EmojiPicker";
 import { ObjectLink, useWikiLinks } from "@/components/WikiLinks";
+import { useMentions, type MentionCandidate } from "@/components/MentionMenu";
 
 /**
  * Éditeur WYSIWYG des notes (repris du template boutique).
@@ -30,8 +31,10 @@ import { ObjectLink, useWikiLinks } from "@/components/WikiLinks";
  * Emoji : bouton de la barre d'outils (sélecteur emoji-mart).
  * Liens entre objets : taper `[[` ouvre la liste des objets à lier
  * (`WikiLinks.tsx`) ; Ctrl/⌘ + clic sur un lien interne l'ouvre.
- * `variant="compact"` (messagerie) : barre réduite ; `onSubmit` est appelé par
- * Ctrl/⌘ + Entrée.
+ * `variant="compact"` (messagerie, commentaires, descriptions) : barre
+ * réduite ; `onSubmit` est appelé par Ctrl/⌘ + Entrée. `mentions` : taper
+ * « @ » propose ces membres (`MentionMenu.tsx`). `editable={false}` :
+ * consultation seule (sans barre d'outils).
  */
 
 /** Remplace (ou retire) le nœud image dont le src correspond à `blobUrl`. */
@@ -74,6 +77,8 @@ export function RichTextEditor({
   variant = "full",
   onSubmit,
   autoFocus = false,
+  editable = true,
+  mentions,
 }: {
   initialHtml: string;
   onChange: (html: string) => void;
@@ -83,6 +88,8 @@ export function RichTextEditor({
   variant?: "full" | "compact";
   onSubmit?: () => void;
   autoFocus?: boolean;
+  editable?: boolean;
+  mentions?: MentionCandidate[];
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const onChangeRef = useRef(onChange);
@@ -91,6 +98,7 @@ export function RichTextEditor({
   onSubmitRef.current = onSubmit;
   const compact = variant === "compact";
   const wikiKeyRef = useRef<(e: KeyboardEvent) => boolean>(() => false);
+  const mentionKeyRef = useRef<(e: KeyboardEvent) => boolean>(() => false);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -107,6 +115,7 @@ export function RichTextEditor({
       TableCell,
     ],
     content: initialHtml,
+    editable,
     autofocus: autoFocus ? "end" : false,
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
@@ -116,7 +125,7 @@ export function RichTextEditor({
       // 16 px minimum sur mobile : évite le zoom automatique d'iOS à la saisie.
       attributes: { class: "prose max-w-none", "aria-label": placeholder },
       handleKeyDown: (_view, event) => {
-        if (wikiKeyRef.current(event)) {
+        if (mentionKeyRef.current(event) || wikiKeyRef.current(event)) {
           event.preventDefault();
           return true;
         }
@@ -150,6 +159,12 @@ export function RichTextEditor({
 
   const wiki = useWikiLinks(editor);
   wikiKeyRef.current = wiki.onKeyDown;
+  const mention = useMentions(editor, mentions);
+  mentionKeyRef.current = mention.onKeyDown;
+
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable);
+  }, [editor, editable]);
 
   // Changement de document (autre nœud sélectionné) : on recharge le contenu
   // sans déclencher onChange.
@@ -175,7 +190,8 @@ export function RichTextEditor({
           <EditorContent editor={editor} />
         </div>
         {wiki.menu}
-        {editor && (
+        {mention.menu}
+        {editor && editable && (
           <div className="flex flex-wrap items-center gap-1 border-t border-line p-1">
             <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive("bold")} label="G" title="Gras" className="font-bold" />
             <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive("italic")} label="I" title="Italique" className="italic" />
