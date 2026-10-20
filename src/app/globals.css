@@ -425,3 +425,41 @@ body {
 .fixed.bottom-0 {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* Réordonnancement au pointeur (usePointerReorder) : repère d'insertion. */
+.reorder-before,
+.reorder-after {
+  position: relative;
+}
+.reorder-before::before,
+.reorder-after::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 9999px;
+  background: var(--color-brand-500);
+}
+.reorder-before::before {
+  left: -8px;
+}
+.reorder-after::after {
+  right: -8px;
+}
+/* Colonne unique (mobile, types) : repère horizontal au-dessus / en dessous. */
+.reorder-y.reorder-before::before,
+.reorder-y.reorder-after::after {
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 4px;
+}
+.reorder-y.reorder-before::before {
+  top: -8px;
+  bottom: auto;
+}
+.reorder-y.reorder-after::after {
+  top: auto;
+  bottom: -8px;
+}

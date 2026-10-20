@@ -605,9 +605,14 @@ Menu « Journal quotidien » (icône livre-cœur), sous « Prise de notes ».
 
 - **Trier** (`SortMenu`) : « Par ordre alphabétique » ou « Par date de mise à
   jour » (la plus récente d'abord) ; devient l'ordre personnel, appliqué aux
-  épingles du menu. **Glisser-déposer** (souris) une carte de projet ou de
-  carte mentale sur une autre : placée juste avant (et, pour un projet, rangée
-  dans le type de la cible).
+  épingles du menu. **Glisser-déposer au pointeur** (souris et doigt,
+  `components/usePointerReorder.tsx`) par la **poignée** (points à gauche de
+  chaque carte) : repère avant / après la carte visée (moitié gauche / droite
+  en grille, haut / bas en colonne), étiquette qui suit le pointeur, Échap
+  annule. Projet : déposé sur un projet d'un autre type, il change de type ;
+  déposé dans le cadre d'un type (ou en haut), il va en fin de ce groupe.
+  Types : poignée de l'en-tête. Le glisser-déposer HTML5 n'est plus utilisé
+  (inopérant au doigt, peu fiable sur les cartes).
 - **Icônes** : la pastille de chaque projet / carte (listes, en-tête du projet,
   en-tête de l'éditeur de carte) ouvre la **bibliothèque** (`IconPicker`,
   chargé à la demande) : onglet « Bibliothèque » (≈ 1 900 icônes, recherche

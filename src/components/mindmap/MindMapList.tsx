@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Brain, LogOut, Plus, Share2, Trash2, Users } from "lucide-react";
+import { Brain, LogOut, Plus, Share2, Trash2, Users, GripVertical } from "lucide-react";
 import { api } from "@/lib/client";
 import type { MindMapDto, MindMapSummary } from "@/lib/mindmaps";
 import { Avatar, Badge, Button, EmptyState, InlineEdit, PageHeader, errorMessage, formatDate, toast } from "@/components/ui";
@@ -12,9 +12,9 @@ import { TemplateSelect } from "@/components/templates/TemplatePicker";
 import { SortMenu } from "@/components/SortMenu";
 import { IconButton } from "@/components/icons/IconButton";
 import { saveItemOrder, sortByOrder, sortedIds, useItemOrder } from "@/lib/item-order-store";
-import { moveId } from "@/lib/shared/project-types";
+import { moveRelative } from "@/lib/shared/project-types";
+import { usePointerReorder } from "@/components/usePointerReorder";
 
-const MAP_DRAG = "application/x-sb-mindmap";
 
 type Filter = "all" | "mine" | "shared";
 const FILTERS: Array<{ id: Filter; label: string }> = [
@@ -28,24 +28,20 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
  * partage, « Partagée par … », droit Lecture / Écriture). Supprimer : mes
  * cartes seulement ; une carte partagée se « quitte ». Ordre personnel
  * (`useItemOrder`, aussi celui des épingles du menu) : « Trier » (A → Z, mise
- * à jour) puis glisser-déposer une carte sur une autre (placée avant elle).
+ * à jour) puis glisser-déposer (poignée, souris ou doigt) une carte avant /
+ * après une autre.
  */
 export function MindMapList({ initial, order: initialOrder }: { initial: MindMapSummary[]; order?: string[] }) {
   const router = useRouter();
   const [maps, setMaps] = useState(initial);
   const order = useItemOrder("MINDMAP", initialOrder);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<string | null>(null);
   const fail = (e: unknown) => toast(errorMessage(e), "error");
   const sortAll = (by: "alpha" | "updated") => saveItemOrder("MINDMAP", sortedIds(maps, by, (m) => m.title)).catch(fail);
-  function dropOn(e: React.DragEvent, targetId: string) {
-    const id = e.dataTransfer.getData(MAP_DRAG);
-    setOver(null);
-    setDragging(null);
-    if (!id || id === targetId) return;
-    e.preventDefault();
-    void saveItemOrder("MINDMAP", moveId(sortByOrder(maps, order).map((m) => m.id), id, targetId)).catch(fail);
-  }
+  /** Carte déposée (poignée) avant / après une autre. */
+  const dnd = usePointerReorder("mindmaps", (id, target) => {
+    if (target.kind !== "item") return;
+    void saveItemOrder("MINDMAP", moveRelative(sortByOrder(maps, order).map((m) => m.id), id, target.id, target.position)).catch(fail);
+  });
   const [filter, setFilter] = useState<Filter>("all");
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -197,29 +193,23 @@ export function MindMapList({ initial, order: initialOrder }: { initial: MindMap
         </EmptyState>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {dnd.ghost}
           {visible.map((m) => (
             <li
               key={m.id}
-              draggable
-              onDragStart={(e) => {
-                if ((e.target as Element).closest("a,button,input,[contenteditable]")) return;
-                e.dataTransfer.setData(MAP_DRAG, m.id);
-                e.dataTransfer.effectAllowed = "move";
-                setDragging(m.id);
-              }}
-              onDragEnd={() => {
-                setDragging(null);
-                setOver(null);
-              }}
-              onDragOver={(e) => {
-                if (!e.dataTransfer.types.includes(MAP_DRAG)) return;
-                e.preventDefault();
-                if (over !== m.id) setOver(m.id);
-              }}
-              onDragLeave={() => setOver(null)}
-              onDrop={(e) => dropOn(e, m.id)}
-              className={`group relative cursor-grab rounded-2xl border bg-surface p-4 transition-shadow hover:shadow-md active:cursor-grabbing ${dragging === m.id ? "opacity-50" : ""} ${over === m.id && dragging !== m.id ? "border-brand-500 shadow-[-4px_0_0_0_var(--color-brand-500)]" : "border-line"}`}
+              data-reorder-group="mindmaps"
+              data-reorder-item={m.id}
+              className={`group relative rounded-2xl border border-line bg-surface py-4 pl-6 pr-4 transition-shadow hover:shadow-md ${dnd.itemClass(m.id)}`}
             >
+              <button
+                type="button"
+                {...dnd.handle(m.id, m.title)}
+                className="absolute -left-0.5 top-1/2 z-10 flex h-8 w-5 -translate-y-1/2 cursor-grab items-center justify-center rounded text-faint opacity-60 hover:bg-surface-2 hover:text-ink hover:opacity-100 active:cursor-grabbing group-hover:opacity-100"
+                title="Glisser pour réordonner"
+                aria-label={`Déplacer « ${m.title} »`}
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
               <div className="mb-3 flex items-start justify-between gap-2">
                 <div className="relative shrink-0">
                   <IconButton

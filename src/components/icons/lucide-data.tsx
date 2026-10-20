@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect, useState } from "react";
+import { createElement, useSyncExternalStore } from "react";
 
 /**
  * Données des icônes Lucide (nom → éléments SVG), générées par
@@ -26,18 +26,21 @@ export function loadIconData(): Promise<IconData> {
   return pending;
 }
 
-/** Données des icônes (null tant qu'elles se chargent). */
+function subscribe(l: () => void) {
+  const fn = () => l();
+  listeners.add(fn);
+  if (!cache) void loadIconData();
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+/**
+ * Données des icônes (null tant qu'elles se chargent). Toujours null au rendu
+ * serveur et à l'hydratation (pas de décalage serveur / client), puis le cache.
+ */
 export function useIconData(): IconData | null {
-  const [data, setData] = useState<IconData | null>(cache);
-  useEffect(() => {
-    if (cache) return setData(cache);
-    listeners.add(setData);
-    void loadIconData();
-    return () => {
-      listeners.delete(setData);
-    };
-  }, []);
-  return data;
+  return useSyncExternalStore(subscribe, () => cache, () => null);
 }
 
 /** Icône Lucide dessinée depuis ses éléments (mêmes attributs que lucide-react). */

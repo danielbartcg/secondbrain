@@ -833,7 +833,8 @@ après assainissement est refusé (400).
   des cartes : rang par élément et par utilisateur ; listes (`sortByOrder` :
   éléments rangés d'abord, puis du plus récent au plus ancien) et épingles du
   menu (`listPins`). « Trier » (A → Z, mise à jour) réécrit l'ordre ; le
-  glisser-déposer l'ajuste. État client `src/lib/item-order-store.ts`
+  glisser-déposer au pointeur (`usePointerReorder` : poignée, souris et
+  doigt) l'ajuste. État client `src/lib/item-order-store.ts`
   (jamais d'état de module au rendu serveur) ; application : dernière valeur
   en cache (`meta.itemOrder`).
 - **Actualiser** : bouton de la coque (barre latérale et barre mobile) —

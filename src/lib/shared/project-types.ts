@@ -36,3 +36,12 @@ export function moveId(ids: string[], id: string, beforeId: string | null): stri
   if (at < 0) return [...rest, id];
   return [...rest.slice(0, at), id, ...rest.slice(at)];
 }
+
+/** Déplace `id` juste avant ou juste après `targetId` (glisser-déposer). */
+export function moveRelative(ids: string[], id: string, targetId: string, position: "before" | "after"): string[] {
+  const rest = ids.filter((x) => x !== id);
+  const at = rest.indexOf(targetId);
+  if (at < 0) return [...rest, id];
+  const i = position === "before" ? at : at + 1;
+  return [...rest.slice(0, i), id, ...rest.slice(i)];
+}

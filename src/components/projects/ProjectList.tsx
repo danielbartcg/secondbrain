@@ -11,8 +11,9 @@ import { Button, EmptyState, InlineEdit, PageHeader, ProgressBar, errorMessage, 
 import { mutateProjectTypes, useProjectTypes } from "@/lib/project-types-store";
 import { saveItemOrder, sortByOrder, sortedIds, useItemOrder } from "@/lib/item-order-store";
 import { SortMenu } from "@/components/SortMenu";
+import { usePointerReorder, type ReorderTarget } from "@/components/usePointerReorder";
 import { IconButton } from "@/components/icons/IconButton";
-import { groupByType, moveId, type ProjectTypeDto, type ProjectTypesDto } from "@/lib/shared/project-types";
+import { groupByType, moveRelative, type ProjectTypeDto, type ProjectTypesDto } from "@/lib/shared/project-types";
 import { PinButton } from "@/components/PinButton";
 import { CustomFieldChips } from "./ProjectCustomFields";
 import { TemplateSelect } from "@/components/templates/TemplatePicker";
@@ -33,8 +34,6 @@ const STATUS_CLASS: Record<ProjectSummary["status"], string> = {
 
 type Filter = "ALL" | ProjectSummary["status"];
 
-const PROJECT_DRAG = "application/x-sb-project";
-const TYPE_DRAG = "application/x-sb-project-type";
 type PT = { projectTypes: ProjectTypesDto };
 
 /**
@@ -78,9 +77,6 @@ export function ProjectList({
   const types = useProjectTypes(initialTypes);
   const order = useItemOrder("PROJECT", initialOrder);
   const [newType, setNewType] = useState<string | null>(null);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dragKind, setDragKind] = useState<"project" | "type" | null>(null);
-  const [over, setOver] = useState<string | null>(null);
   // Fraîcheur : projets actifs sans activité depuis N jours (en ligne, silencieux sinon).
   const [stale, setStale] = useState<Map<string, number>>(() => new Map());
   useEffect(() => {
@@ -140,20 +136,32 @@ export function ProjectList({
   function sortAll(by: "alpha" | "updated") {
     return saveItemOrder("PROJECT", sortedIds(projects, by, (p) => p.name)).catch(fail);
   }
-  /** Projet déposé sur un autre : placé juste avant lui (et rangé dans son type). */
-  function dropOnProject(e: React.DragEvent, target: ProjectSummary) {
-    const projectId = e.dataTransfer.getData(PROJECT_DRAG);
-    if (!projectId) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setOver(null);
-    endDrag();
-    if (projectId === target.id) return;
+  /**
+   * Projet déposé (poignée) : avant / après un autre projet (rangé dans le type
+   * de celui-ci), ou dans la zone d'un type / du haut (fin de ce groupe).
+   */
+  function dropProject(projectId: string, target: ReorderTarget) {
     const ids = sortByOrder(projects, order).map((p) => p.id);
-    void saveItemOrder("PROJECT", moveId(ids, projectId, target.id)).catch(fail);
-    const targetType = typeOf(target.id);
-    if (typeOf(projectId) !== targetType) void assign(projectId, targetType);
+    let typeId: string | null;
+    let next: string[];
+    if (target.kind === "item") {
+      typeId = typeOf(target.id);
+      next = moveRelative(ids, projectId, target.id, target.position);
+    } else {
+      typeId = target.id === "untyped" ? null : target.id;
+      const last = [...ids].reverse().find((id) => id !== projectId && typeOf(id) === typeId);
+      next = last ? moveRelative(ids, projectId, last, "after") : ids;
+    }
+    if (next.join() !== ids.join()) void saveItemOrder("PROJECT", next).catch(fail);
+    if (typeOf(projectId) !== typeId) void assign(projectId, typeId);
   }
+  /** Type déposé (poignée de son en-tête) avant / après un autre type. */
+  function dropType(typeId: string, target: ReorderTarget) {
+    if (target.kind !== "item") return;
+    void reorder(moveRelative(types.types.map((t) => t.id), typeId, target.id, target.position));
+  }
+  const projectDnd = usePointerReorder("projects", dropProject);
+  const typeDnd = usePointerReorder("project-types", dropType);
   const typeOf = (id: string) => (types.types.some((t) => t.id === types.assignments[id]) ? types.assignments[id] : null);
 
   const fail = (e: unknown) => toast(errorMessage(e), "error");
@@ -204,36 +212,6 @@ export function ProjectList({
     if (!confirm(`Supprimer le type « ${t.name} » ?${count ? ` Ses ${count} projet${count > 1 ? "s" : ""} redeviendront sans type.` : ""}`)) return;
     const assignments = Object.fromEntries(Object.entries(types.assignments).filter(([, v]) => v !== t.id));
     return mutateProjectTypes({ types: types.types.filter((x) => x.id !== t.id), assignments }, () => api.delete<PT>(`/me/project-types/${t.id}`)).catch(fail);
-  }
-
-  // --- Glisser-déposer (souris) ---
-  function allowDrop(e: React.DragEvent, target: string, isType: boolean) {
-    const kinds = e.dataTransfer.types;
-    if (kinds.includes(PROJECT_DRAG) || (isType && kinds.includes(TYPE_DRAG))) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (over !== target) setOver(target);
-    }
-  }
-  function drop(e: React.DragEvent, typeId: string | null) {
-    e.preventDefault();
-    setOver(null);
-    const projectId = e.dataTransfer.getData(PROJECT_DRAG);
-    const draggedType = e.dataTransfer.getData(TYPE_DRAG);
-    if (projectId) void assign(projectId, typeId);
-    else if (draggedType && typeId && draggedType !== typeId) {
-      const ids = types.types.map((t) => t.id);
-      // Déposé sur un type placé après : se range après lui ; avant : avant lui.
-      const after = ids.indexOf(draggedType) < ids.indexOf(typeId);
-      const target = after ? (ids[ids.indexOf(typeId) + 1] ?? null) : typeId;
-      void reorder(moveId(ids, draggedType, target));
-    }
-    endDrag();
-  }
-  function endDrag() {
-    setDragging(null);
-    setDragKind(null);
-    setOver(null);
   }
 
   return (
@@ -339,6 +317,8 @@ export function ProjectList({
         </Link>
       )}
 
+      {projectDnd.ghost}
+      {typeDnd.ghost}
       {visible.length === 0 && types.types.length === 0 ? (
         <EmptyState title="Aucun projet ici" hint="Créez un projet, puis découpez-le en étapes et en tâches.">
           <Button onClick={() => setCreating(true)}>
@@ -352,42 +332,34 @@ export function ProjectList({
               // Projets sans type : tout en haut, sans cadre (zone de dépôt pendant un glisser).
               <div
                 key="untyped"
-                onDragOver={(e) => allowDrop(e, "untyped", false)}
-                onDragLeave={() => setOver(null)}
-                onDrop={(e) => drop(e, null)}
-                className={over === "untyped" ? "rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-canvas" : undefined}
+                data-reorder-group="projects"
+                data-reorder-zone="untyped"
+                className={projectDnd.zoneActive("untyped") ? "rounded-2xl ring-2 ring-brand-500 ring-offset-2 ring-offset-canvas" : undefined}
               >
                 {g.items.length > 0 ? (
                   <ul className="grid gap-3 sm:grid-cols-2">{g.items.map(card)}</ul>
-                ) : dragKind === "project" ? (
+                ) : projectDnd.dragging ? (
                   <p className="rounded-2xl border border-dashed border-line-strong p-4 text-center text-sm text-muted">Déposer ici pour retirer le type</p>
                 ) : null}
               </div>
             ) : (
               <section
                 key={g.type.id}
-                onDragOver={(e) => allowDrop(e, g.type!.id, true)}
-                onDragLeave={() => setOver(null)}
-                onDrop={(e) => drop(e, g.type!.id)}
+                data-reorder-group="projects"
+                data-reorder-zone={g.type.id}
                 aria-label={`Type de projet ${g.type.name}`}
-                className={`rounded-2xl border bg-surface-2/50 p-3 transition sm:p-4 ${over === g.type.id ? "border-brand-500 ring-2 ring-brand-500" : "border-line"} ${dragging === g.type.id ? "opacity-50" : ""}`}
+                className={`rounded-2xl border bg-surface-2/50 p-3 transition sm:p-4 ${projectDnd.zoneActive(g.type.id) ? "border-brand-500 ring-2 ring-brand-500" : "border-line"}`}
               >
-                <header className="mb-3 flex items-center gap-2">
-                  <span
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData(TYPE_DRAG, g.type!.id);
-                      e.dataTransfer.effectAllowed = "move";
-                      setDragging(g.type!.id);
-                      setDragKind("type");
-                    }}
-                    onDragEnd={endDrag}
-                    className="cursor-grab rounded p-1 text-faint hover:bg-surface-3 hover:text-ink active:cursor-grabbing max-md:hidden"
+                <header data-reorder-group="project-types" data-reorder-item={g.type.id} className={`mb-3 flex items-center gap-2 rounded-lg ${typeDnd.itemClass(g.type.id)}`}>
+                  <button
+                    type="button"
+                    {...typeDnd.handle(g.type.id, g.type.name)}
+                    className="cursor-grab rounded p-1 text-faint hover:bg-surface-3 hover:text-ink active:cursor-grabbing"
                     title="Glisser pour réordonner les types"
-                    aria-hidden
+                    aria-label={`Déplacer le type ${g.type.name}`}
                   >
                     <GripVertical className="h-4 w-4" />
-                  </span>
+                  </button>
                   <Tags className="h-4 w-4 shrink-0 text-brand-600" aria-hidden />
                   <InlineEdit value={g.type.name} onSave={(name) => void renameType(g.type!.id, name)} className="-mx-1.5 min-w-0 font-semibold" as="h2" />
                   <span className="rounded-full bg-surface-3 px-2 py-0.5 text-xs font-medium text-ink-2">{g.items.length}</span>
@@ -423,24 +395,19 @@ export function ProjectList({
     return (
       <li
         key={p.id}
-        draggable
-        onDragStart={(e) => {
-          if ((e.target as Element).closest("a,button,select,input")) return;
-          e.dataTransfer.setData(PROJECT_DRAG, p.id);
-          e.dataTransfer.effectAllowed = "move";
-          setDragging(p.id);
-          setDragKind("project");
-        }}
-        onDragEnd={endDrag}
-        onDragOver={(e) => {
-          if (!e.dataTransfer.types.includes(PROJECT_DRAG)) return;
-          e.preventDefault();
-          e.stopPropagation();
-          if (over !== `p:${p.id}`) setOver(`p:${p.id}`);
-        }}
-        onDrop={(e) => dropOnProject(e, p)}
-        className={`group relative cursor-grab rounded-2xl border bg-surface p-4 transition-shadow hover:shadow-md active:cursor-grabbing ${dragging === p.id ? "opacity-50" : ""} ${over === `p:${p.id}` && dragging !== p.id ? "border-brand-500 shadow-[-4px_0_0_0_var(--color-brand-500)]" : "border-line"}`}
+        data-reorder-group="projects"
+        data-reorder-item={p.id}
+        className={`group relative rounded-2xl border border-line bg-surface py-4 pl-6 pr-4 transition-shadow hover:shadow-md ${projectDnd.itemClass(p.id)}`}
       >
+        <button
+          type="button"
+          {...projectDnd.handle(p.id, p.name)}
+          className="absolute -left-0.5 top-1/2 z-10 flex h-8 w-5 -translate-y-1/2 cursor-grab items-center justify-center rounded text-faint opacity-60 hover:bg-surface-2 hover:text-ink hover:opacity-100 active:cursor-grabbing group-hover:opacity-100"
+          title="Glisser pour réordonner (ou changer de type)"
+          aria-label={`Déplacer « ${p.name} »`}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
         <div className="flex items-start gap-3">
           <IconButton
             icon={p.icon}
